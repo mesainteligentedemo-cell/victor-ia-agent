@@ -11,14 +11,30 @@ const chromium = require('@sparticuz/chromium');
 class PDFGenerator {
   constructor() {
     this.browser = null;
-    this.isLambda = !!process.env.LAMBDA_TASK_ROOT;
+    // Vercel corre sobre Lambda, pero LAMBDA_TASK_ROOT no siempre está expuesto.
+    // Sin @sparticuz/chromium, puppeteer-core no tiene binario y falla con
+    // "Could not find Chrome". Por eso detectamos varias señales de serverless.
+    this.isLambda = !!(
+      process.env.LAMBDA_TASK_ROOT ||
+      process.env.AWS_LAMBDA_FUNCTION_NAME ||
+      process.env.VERCEL ||
+      process.env.VERCEL_ENV
+    );
   }
 
   /**
    * Inicializar Puppeteer
    */
   async initBrowser() {
-    if (this.browser) return this.browser;
+    // El contenedor Lambda se congela entre invocaciones: el browser cacheado
+    // puede estar muerto. Reusar solo si sigue conectado.
+    if (this.browser) {
+      if (this.browser.connected !== false && this.browser.isConnected?.() !== false) {
+        return this.browser;
+      }
+      console.warn('[PDF] Browser desconectado — relanzando');
+      this.browser = null;
+    }
 
     try {
       console.log('[PDF] Initializing Puppeteer...');
@@ -50,14 +66,18 @@ class PDFGenerator {
    */
   async generateFromHTML(htmlContent, metadata = {}) {
     const browser = await this.initBrowser();
+    let page = null;
 
     try {
       console.log('[PDF] Creating new page...');
-      const page = await browser.newPage();
+      page = await browser.newPage();
 
-      // Set content
+      // Set content. Timeout explícito: si el HTML pide recursos externos
+      // (ApexCharts por CDN) 'networkidle2' puede colgarse hasta el límite
+      // de la función y matar todo el pipeline.
       await page.setContent(htmlContent, {
-        waitUntil: 'networkidle2'
+        waitUntil: 'networkidle2',
+        timeout: 20000
       });
 
       // PDF options
@@ -77,15 +97,20 @@ class PDFGenerator {
       };
 
       console.log('[PDF] Generating PDF...');
-      const pdfBuffer = await page.pdf(pdfOptions);
+      const pdfBuffer = Buffer.from(await page.pdf(pdfOptions));
 
-      await page.close();
       console.log(`[PDF] PDF generated: ${(pdfBuffer.length / 1024).toFixed(2)} KB`);
 
       return pdfBuffer;
     } catch (error) {
       console.error('[PDF] Error generating PDF:', error.message);
       throw error;
+    } finally {
+      // Cerrar siempre la página, incluso si page.pdf() falló (evita fugas
+      // de targets en el contenedor reutilizado por Lambda).
+      if (page) {
+        await page.close().catch((e) => console.warn('[PDF] page.close falló:', e.message));
+      }
     }
   }
 

@@ -15,7 +15,11 @@ export const config = {
   api: {
     bodyParser: false,
     responseLimit: false
-  }
+  },
+  // El pipeline hace: fetch conversación + descarga de audio + render Chromium
+  // + envío con adjuntos. Con el default (10s) se corta a la mitad.
+  // 60s es el máximo del plan Hobby y es válido también en Pro.
+  maxDuration: 60
 };
 
 const MAX_BODY_BYTES = 10 * 1024 * 1024; // 10 MB
