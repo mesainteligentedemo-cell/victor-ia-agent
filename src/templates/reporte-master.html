@@ -1,0 +1,858 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reporte de Entrenamiento VTC</title>
+    <script src="https://cdn.jsdelivr.net/npm/apexcharts@3.45.0/dist/apexcharts.min.js"></script>
+    <style>
+        :root {
+            --navy: #0B1429;
+            --navy-light: #1a2a4a;
+            --navy-dark: #050A15;
+            --gold: #C8A96A;
+            --gold-light: #E8D4B8;
+            --green: #4CAF50;
+            --red-warn: #FF6B6B;
+            --beige: #E8E6E1;
+            --muted: #9A9A9F;
+            --spacing: 30px;
+            --border-radius: 8px;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', sans-serif;
+            background: var(--navy);
+            color: var(--beige);
+            line-height: 1.8;
+            font-size: 12px;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: var(--navy);
+        }
+
+        /* ════════════════════════════════════════════ */
+        /* HEADER */
+        /* ════════════════════════════════════════════ */
+        .header {
+            background: linear-gradient(135deg, var(--navy) 0%, var(--navy-light) 100%);
+            padding: 50px var(--spacing);
+            border-bottom: 3px solid var(--gold);
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        .header-logo {
+            font-size: 11px;
+            letter-spacing: 3px;
+            color: var(--gold);
+            font-weight: bold;
+            margin-bottom: 20px;
+            text-transform: uppercase;
+        }
+
+        .header-title {
+            font-size: 32px;
+            font-weight: 700;
+            letter-spacing: 2px;
+            color: white;
+            margin-bottom: 10px;
+        }
+
+        .header-subtitle {
+            font-size: 13px;
+            color: var(--muted);
+            letter-spacing: 1px;
+        }
+
+        /* ════════════════════════════════════════════ */
+        /* INFO CARDS */
+        /* ════════════════════════════════════════════ */
+        .info-section {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 40px;
+            padding: 0 var(--spacing);
+        }
+
+        .info-card {
+            background: rgba(200, 169, 106, 0.08);
+            padding: 25px;
+            border-left: 3px solid var(--gold);
+            border-radius: var(--border-radius);
+        }
+
+        .info-card-title {
+            font-size: 11px;
+            letter-spacing: 1px;
+            color: var(--gold);
+            text-transform: uppercase;
+            margin-bottom: 15px;
+            font-weight: bold;
+        }
+
+        .info-item {
+            font-size: 13px;
+            margin-bottom: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .info-label {
+            color: var(--muted);
+            font-size: 11px;
+        }
+
+        .info-value {
+            color: var(--beige);
+            font-weight: 600;
+        }
+
+        /* ════════════════════════════════════════════ */
+        /* MODULE CONTAINER */
+        /* ════════════════════════════════════════════ */
+        .module {
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid rgba(200, 169, 106, 0.2);
+            border-radius: var(--border-radius);
+            margin: 0 var(--spacing) 40px var(--spacing);
+            overflow: hidden;
+            transition: all 0.3s ease;
+        }
+
+        .module-header {
+            padding: 20px var(--spacing);
+            border-bottom: 1px solid var(--gold);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(200, 169, 106, 0.08);
+        }
+
+        .module-title {
+            font-size: 14px;
+            font-weight: 700;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            color: var(--gold);
+            margin: 0;
+        }
+
+        .module-icon {
+            font-size: 20px;
+        }
+
+        .module-content {
+            padding: var(--spacing);
+            line-height: 1.8;
+        }
+
+        .module-divider {
+            height: 1px;
+            background: linear-gradient(90deg, transparent, var(--gold), transparent);
+            margin: 20px var(--spacing);
+        }
+
+        /* ════════════════════════════════════════════ */
+        /* PERFORMANCE CIRCLE */
+        /* ════════════════════════════════════════════ */
+        .performance-section {
+            margin: 40px var(--spacing);
+        }
+
+        .performance-container {
+            display: flex;
+            align-items: center;
+            gap: 40px;
+            background: rgba(200, 169, 106, 0.1);
+            padding: 40px;
+            border-radius: var(--border-radius);
+            border-left: 4px solid var(--gold);
+        }
+
+        .score-circle {
+            width: 140px;
+            height: 140px;
+            border-radius: 50%;
+            border: 4px solid var(--green);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            font-size: 32px;
+            font-weight: bold;
+            background: rgba(76, 175, 80, 0.1);
+            flex-shrink: 0;
+            color: var(--green);;
+        }
+
+        .score-circle-sub {
+            font-size: 14px;
+            margin-top: 5px;
+        }
+
+        .performance-text h3 {
+            color: var(--gold);
+            margin-bottom: 12px;
+            font-size: 14px;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+
+        .performance-text p {
+            color: var(--beige);
+            font-size: 13px;
+            line-height: 1.8;
+        }
+
+        /* ════════════════════════════════════════════ */
+        /* METRICS GRID */
+        /* ════════════════════════════════════════════ */
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+            margin: 40px var(--spacing);
+        }
+
+        .metric-card {
+            background: rgba(255, 255, 255, 0.02);
+            padding: 20px;
+            border-left: 3px solid var(--gold);
+            border-radius: var(--border-radius);
+            text-align: center;
+        }
+
+        .metric-label {
+            font-size: 10px;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 10px;
+        }
+
+        .metric-value {
+            font-size: 20px;
+            font-weight: bold;
+            color: var(--beige);
+        }
+
+        .metric-value.green {
+            color: var(--green);
+        }
+
+        .metric-value.gold {
+            color: var(--gold);
+        }
+
+        /* ════════════════════════════════════════════ */
+        /* CHARTS SECTION */
+        /* ════════════════════════════════════════════ */
+        .charts-section {
+            margin: 40px var(--spacing);
+            padding: var(--spacing);
+            background: rgba(200, 169, 106, 0.05);
+            border-radius: var(--border-radius);
+        }
+
+        .charts-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 30px;
+            margin-top: 25px;
+        }
+
+        .chart-container {
+            background: rgba(255, 255, 255, 0.01);
+            padding: 20px;
+            border-radius: var(--border-radius);
+            border: 1px solid rgba(200, 169, 106, 0.15);
+        }
+
+        .chart-title {
+            font-size: 12px;
+            font-weight: bold;
+            color: var(--gold);
+            margin-bottom: 15px;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+
+        #competenciasChart, #timelineChart, #emotionalChart,
+        #speechChart, #objecionesChart, #multiSpeakerChart {
+            min-height: 250px;
+        }
+
+        /* ════════════════════════════════════════════ */
+        /* THREE COLUMN ANALYSIS */
+        /* ════════════════════════════════════════════ */
+        .analysis-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+            margin: 40px var(--spacing);
+        }
+
+        .analysis-box {
+            background: rgba(255, 255, 255, 0.02);
+            padding: 25px;
+            border-radius: var(--border-radius);
+        }
+
+        .analysis-box.success {
+            border-top: 3px solid var(--green);
+        }
+
+        .analysis-box.warning {
+            border-top: 3px solid #FFB81C;
+        }
+
+        .analysis-box.info {
+            border-top: 3px solid #0066CC;
+        }
+
+        .analysis-icon {
+            font-size: 24px;
+            margin-bottom: 10px;
+        }
+
+        .analysis-title {
+            font-weight: bold;
+            color: var(--gold);
+            margin-bottom: 12px;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .analysis-content {
+            font-size: 12px;
+            color: var(--beige);
+            line-height: 1.8;
+        }
+
+        .analysis-content strong {
+            color: var(--gold);
+        }
+
+        /* ════════════════════════════════════════════ */
+        /* NEUROSCIENCE SECTION */
+        /* ════════════════════════════════════════════ */
+        .neuro-section {
+            margin: 40px var(--spacing);
+            padding: var(--spacing);
+            background: rgba(200, 169, 106, 0.08);
+            border-top: 2px solid var(--gold);
+            border-bottom: 2px solid var(--gold);
+            border-radius: var(--border-radius);
+        }
+
+        .neuro-title {
+            text-align: center;
+            font-weight: bold;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            font-size: 13px;
+            color: var(--gold);
+            margin-bottom: 25px;
+        }
+
+        .neuro-list {
+            list-style: none;
+            margin-bottom: 25px;
+        }
+
+        .neuro-list li {
+            margin-bottom: 15px;
+            padding-left: 20px;
+            position: relative;
+            font-size: 12px;
+            color: var(--beige);
+            line-height: 1.7;
+        }
+
+        .neuro-list li:before {
+            content: "●";
+            position: absolute;
+            left: 0;
+            color: var(--gold);
+            font-weight: bold;
+        }
+
+        .neuro-list strong {
+            color: var(--gold);
+        }
+
+        .compliance-box {
+            text-align: center;
+            padding: 20px;
+            background: rgba(76, 175, 80, 0.1);
+            border-radius: var(--border-radius);
+            border-left: 3px solid var(--green);
+        }
+
+        .compliance-label {
+            font-size: 10px;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 8px;
+        }
+
+        .compliance-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: var(--green);
+        }
+
+        /* ════════════════════════════════════════════ */
+        /* CHAT BUBBLES */
+        /* ════════════════════════════════════════════ */
+        .transcription-section {
+            margin: 40px var(--spacing);
+            padding: var(--spacing);
+            background: rgba(200, 169, 106, 0.05);
+            border-radius: var(--border-radius);
+        }
+
+        .transcription-title {
+            text-align: center;
+            font-weight: bold;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            font-size: 13px;
+            color: var(--gold);
+            margin-bottom: 25px;
+        }
+
+        .chat-container {
+            max-height: 500px;
+            overflow-y: auto;
+            padding: 20px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: var(--border-radius);
+        }
+
+        .chat-bubble {
+            margin-bottom: 15px;
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .chat-bubble.user {
+            flex-direction: row-reverse;
+        }
+
+        .bubble-content {
+            max-width: 70%;
+            padding: 12px 15px;
+            border-radius: 12px;
+            font-size: 12px;
+            line-height: 1.6;
+        }
+
+        .bubble-content.agent {
+            background: rgba(200, 169, 106, 0.15);
+            border-left: 3px solid var(--gold);
+        }
+
+        .bubble-content.user {
+            background: rgba(76, 175, 80, 0.15);
+            border-right: 3px solid var(--green);
+        }
+
+        .bubble-speaker {
+            font-weight: bold;
+            color: var(--gold);
+            font-size: 11px;
+            margin-bottom: 4px;
+        }
+
+        .bubble-text {
+            color: var(--beige);
+        }
+
+        .bubble-time {
+            font-size: 10px;
+            color: var(--muted);
+            margin-top: 4px;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        /* ════════════════════════════════════════════ */
+        /* ACTION PLAN */
+        /* ════════════════════════════════════════════ */
+        .plan-section {
+            margin: 40px var(--spacing);
+            padding: var(--spacing);
+            background: rgba(200, 169, 106, 0.05);
+            border-radius: var(--border-radius);
+        }
+
+        .plan-title {
+            font-weight: bold;
+            color: var(--gold);
+            margin-bottom: 20px;
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .plan-item {
+            background: rgba(255, 255, 255, 0.02);
+            padding: 18px;
+            margin-bottom: 15px;
+            border-left: 3px solid var(--gold);
+            border-radius: var(--border-radius);
+        }
+
+        .plan-num {
+            font-weight: bold;
+            color: var(--gold);
+            font-size: 12px;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+        }
+
+        .plan-text {
+            font-size: 12px;
+            color: var(--beige);
+            line-height: 1.7;
+        }
+
+        /* ════════════════════════════════════════════ */
+        /* CTAs */
+        /* ════════════════════════════════════════════ */
+        .cta-section {
+            margin: 40px var(--spacing);
+            text-align: center;
+            padding: 30px;
+            background: rgba(200, 169, 106, 0.1);
+            border-radius: var(--border-radius);
+        }
+
+        .cta-button {
+            display: inline-block;
+            padding: 14px 28px;
+            margin: 0 10px;
+            background: linear-gradient(135deg, var(--gold) 0%, #B89456 100%);
+            color: var(--navy);
+            text-decoration: none;
+            border-radius: var(--border-radius);
+            font-weight: bold;
+            font-size: 12px;
+            letter-spacing: 1px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border: none;
+        }
+
+        .cta-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(200, 169, 106, 0.3);
+        }
+
+        /* ════════════════════════════════════════════ */
+        /* FOOTER */
+        /* ════════════════════════════════════════════ */
+        .footer {
+            background: rgba(0, 0, 0, 0.3);
+            color: var(--muted);
+            text-align: center;
+            padding: 30px var(--spacing);
+            font-size: 10px;
+            margin-top: 40px;
+            border-top: 1px solid var(--gold);
+        }
+
+        /* ════════════════════════════════════════════ */
+        /* RESPONSIVE */
+        /* ════════════════════════════════════════════ */
+        @media (max-width: 768px) {
+            .info-section,
+            .charts-grid,
+            .analysis-grid,
+            .metrics-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .performance-container {
+                flex-direction: column;
+                text-align: center;
+            }
+
+            .container {
+                padding: 0;
+            }
+
+            .header {
+                padding: 30px 20px;
+            }
+
+            .module-content,
+            .neuro-section,
+            .plan-section {
+                padding: 20px;
+            }
+
+            .score-circle {
+                width: 100px;
+                height: 100px;
+                font-size: 24px;
+            }
+        }
+
+        /* ════════════════════════════════════════════ */
+        /* PRINT */
+        /* ════════════════════════════════════════════ */
+        @media print {
+            body {
+                background: white;
+                color: black;
+            }
+
+            .container {
+                background: white;
+                max-width: 100%;
+            }
+
+            .module,
+            .info-card {
+                page-break-inside: avoid;
+            }
+
+            .chat-container {
+                max-height: none;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+
+    <!-- HEADER -->
+    <div class="header">
+        <div class="header-logo">🏆 Victorious Travelers Club</div>
+        <div class="header-title">Reporte de Entrenamiento</div>
+        <div class="header-subtitle">{{fecha_sesion}} • {{hora_sesion}}</div>
+    </div>
+
+    <!-- INFO CARDS -->
+    <div class="info-section">
+        <div class="info-card">
+            <div class="info-card-title">Información de Capacitación</div>
+            <div class="info-item">
+                <span class="info-label">Asesor</span>
+                <span class="info-value">{{nombre}}</span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">ID / Puesto</span>
+                <span class="info-value">{{empleado_id}} • {{puesto}}</span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">Fecha</span>
+                <span class="info-value">{{fecha_sesion}}</span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">Módulo</span>
+                <span class="info-value">{{modulo}}</span>
+            </div>
+        </div>
+
+        <div class="info-card">
+            <div class="info-card-title">Datos de la Sesión</div>
+            <div class="info-item">
+                <span class="info-label">Inicio</span>
+                <span class="info-value">{{hora_sesion}}</span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">Duración</span>
+                <span class="info-value">{{duracion_texto}}</span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">Idioma</span>
+                <span class="info-value">{{idioma}}</span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">Familia</span>
+                <span class="info-value">{{familia_nombre}}</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- PERFORMANCE CIRCLE -->
+    <div class="performance-section">
+        <div class="performance-container">
+            <div class="score-circle">
+                {{score_overall}}/10
+                <div class="score-circle-sub">({{scoreTotal}}%)</div>
+            </div>
+            <div class="performance-text">
+                <h3>Desempeño Global</h3>
+                <p>{{resumen}}</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- METRICS GRID -->
+    <div class="metrics-grid">
+        <div class="metric-card">
+            <div class="metric-label">Duración</div>
+            <div class="metric-value">{{duracion_texto}}</div>
+        </div>
+        <div class="metric-card">
+            <div class="metric-label">Módulo</div>
+            <div class="metric-value" style="font-size: 14px;">{{modulo}}</div>
+        </div>
+        <div class="metric-card">
+            <div class="metric-label">Score Promedio</div>
+            <div class="metric-value green">{{scoreTotal}}%</div>
+        </div>
+        <div class="metric-card">
+            <div class="metric-label">Potencial Mejora</div>
+            <div class="metric-value gold">{{mejora_potencial}}</div>
+        </div>
+    </div>
+
+    <!-- CHARTS SECTION -->
+    <div class="charts-section">
+        <h2 style="text-align: center; font-size: 13px; color: var(--gold); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 30px;">Gráficos Interactivos</h2>
+        <div class="charts-grid">
+            <div class="chart-container">
+                <div class="chart-title">📊 Competencias</div>
+                <div id="competenciasChart"></div>
+            </div>
+            <div class="chart-container">
+                <div class="chart-title">📅 Timeline Hitos</div>
+                <div id="timelineChart"></div>
+            </div>
+            <div class="chart-container">
+                <div class="chart-title">❤️ Emotional Journey</div>
+                <div id="emotionalChart"></div>
+            </div>
+            <div class="chart-container">
+                <div class="chart-title">🎤 Speech Analysis</div>
+                <div id="speechChart"></div>
+            </div>
+            <div class="chart-container">
+                <div class="chart-title">⚠️ Objeciones</div>
+                <div id="objecionesChart"></div>
+            </div>
+            <div class="chart-container">
+                <div class="chart-title">👥 Multi-Speaker</div>
+                <div id="multiSpeakerChart"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- NEUROCIENCIA SECTION -->
+    <div class="neuro-section">
+        <div class="neuro-title">Principios Neurocientíficos Activados</div>
+        <ul class="neuro-list">
+            {{#each principios_neuro}}
+            <li><strong>{{this.titulo}}:</strong> {{this.descripcion}}</li>
+            {{/each}}
+        </ul>
+        <div class="compliance-box">
+            <div class="compliance-label">Cumplimiento Neurocientífico</div>
+            <div class="compliance-value">{{cumplimiento_neuro}}%</div>
+        </div>
+    </div>
+
+    <!-- 3-COLUMN ANALYSIS -->
+    <div class="analysis-grid">
+        <div class="analysis-box success">
+            <div class="analysis-icon">✓</div>
+            <div class="analysis-title">Lo Que Hiciste Bien</div>
+            <div class="analysis-content">{{fortalezas}}</div>
+        </div>
+        <div class="analysis-box warning">
+            <div class="analysis-icon">▲</div>
+            <div class="analysis-title">A Mejorar</div>
+            <div class="analysis-content">{{areas_mejora}}</div>
+        </div>
+        <div class="analysis-box info">
+            <div class="analysis-icon">◆</div>
+            <div class="analysis-title">PNL & Objeciones</div>
+            <div class="analysis-content"><strong>{{analisis_pnl}}</strong><br><br><strong>Objeciones:</strong> {{objeciones_trabajadas}}</div>
+        </div>
+    </div>
+
+    <!-- TRANSCRIPTION CHAT BUBBLES -->
+    {{#if transcription}}
+    <div class="transcription-section">
+        <div class="transcription-title">Transcripción Completa de la Sesión</div>
+        <div class="chat-container">
+            {{#each transcription}}
+            <div class="chat-bubble {{this.side}}">
+                <div class="bubble-content {{this.type}}">
+                    <div class="bubble-speaker">{{this.speaker}}</div>
+                    <div class="bubble-text">{{this.text}}</div>
+                    <div class="bubble-time">{{this.timestamp}}</div>
+                </div>
+            </div>
+            {{/each}}
+        </div>
+    </div>
+    {{/if}}
+
+    <!-- ACTION PLAN -->
+    <div class="plan-section">
+        <div class="plan-title">Plan de Acción para el Gerente</div>
+        <div class="plan-item">
+            <div class="plan-num">1. Diagnóstico & Seguimiento</div>
+            <div class="plan-text">{{plan_1}}</div>
+        </div>
+        <div class="plan-item">
+            <div class="plan-num">2. Plan de Mejora (7 días)</div>
+            <div class="plan-text">{{plan_2}}</div>
+        </div>
+        <div class="plan-item">
+            <div class="plan-num">3. Próximas Acciones</div>
+            <div class="plan-text">{{plan_3}}</div>
+        </div>
+    </div>
+
+    <!-- CTAs -->
+    <div class="cta-section">
+        <a href="{{pop_up_url}}" class="cta-button">🎙️ Escuchar Sesión</a>
+        <a href="{{pdf_download_url}}" class="cta-button">📥 Descargar PDF</a>
+        <a href="{{retrain_url}}" class="cta-button">🔄 Entrenar de Nuevo</a>
+    </div>
+
+    <!-- FOOTER -->
+    <div class="footer">
+        VICTORIOUS TRAVELERS CLUB · VTC ELITE TRAINING v3.0 · {{fecha_sesion}}
+    </div>
+
+</div>
+
+<script>
+    // Charts initialization will be handled by JavaScript file
+    // This is the template structure only
+</script>
+
+</body>
+</html>

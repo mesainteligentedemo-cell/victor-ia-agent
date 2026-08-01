@@ -1,0 +1,127 @@
+{
+  "name": "VTC Agent v3 — Process Call Webhook",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "webhook/elevenlabs-vic",
+        "responseMode": "immediately",
+        "responseData": "anotherObject",
+        "responseObject": "{\n  \"status\": \"received\",\n  \"processing\": true\n}"
+      },
+      "name": "Webhook — ElevenLabs",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "webhookId": "webhook_vic_agent_v3"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.PUBLIC_BASE_URL }}/api/process-call",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "bodyParametersUi": "json",
+        "bodyParameter": "={{ $json }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "name": "POST → Process Call",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [500, 300],
+      "credentials": {
+        "httpHeaderAuth": "generic_auth_vic"
+      }
+    },
+    {
+      "parameters": {
+        "errorOnly": false
+      },
+      "name": "IF — Success?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [750, 300],
+      "conditions": {
+        "pass": "object",
+        "passObject": {
+          "conditions": [
+            {
+              "value1": "={{ $json.success }}",
+              "value2": true,
+              "operation": "equals"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "parameters": {
+        "items": "={\n  \"status\": \"success\",\n  \"conversationId\": \"{{ $json.conversationId }}\",\n  \"duration\": \"{{ $json.duration }}ms\",\n  \"steps\": \"{{ $json.steps.length }}\",\n  \"timestamp\": \"{{ now }}\"\n}"
+      },
+      "name": "Success Response",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.3,
+      "position": [1000, 200]
+    },
+    {
+      "parameters": {
+        "items": "={\n  \"status\": \"error\",\n  \"error\": \"{{ $json.errors[0].message }}\",\n  \"conversationId\": \"{{ $json.conversationId }}\",\n  \"timestamp\": \"{{ now }}\"\n}"
+      },
+      "name": "Error Response",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.3,
+      "position": [1000, 400]
+    }
+  ],
+  "connections": {
+    "Webhook — ElevenLabs": {
+      "main": [
+        [
+          {
+            "node": "POST → Process Call",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "POST → Process Call": {
+      "main": [
+        [
+          {
+            "node": "IF — Success?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF — Success?": {
+      "main": [
+        [
+          {
+            "node": "Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "errorMessage": {
+      "enabled": true
+    },
+    "executionOrder": "v1"
+  }
+}

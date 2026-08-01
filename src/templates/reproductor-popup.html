@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reproductor de Sesión VTC</title>
+    <style>
+        :root {
+            --navy: #0B1429;
+            --navy-light: #1a2a4a;
+            --gold: #C8A96A;
+            --green: #4CAF50;
+            --beige: #E8E6E1;
+            --muted: #9A9A9F;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html, body {
+            width: 100%;
+            height: 100%;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', sans-serif;
+        }
+
+        body {
+            background: linear-gradient(135deg, var(--navy) 0%, var(--navy-light) 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .popup-container {
+            background: linear-gradient(135deg, var(--navy) 0%, var(--navy-light) 100%);
+            border: 2px solid var(--gold);
+            border-radius: 12px;
+            padding: 40px;
+            max-width: 500px;
+            width: 100%;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8);
+            animation: slideIn 0.4s ease;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .logo {
+            font-size: 28px;
+            margin-bottom: 12px;
+        }
+
+        .title {
+            font-size: 20px;
+            font-weight: bold;
+            color: var(--beige);
+            margin-bottom: 8px;
+            letter-spacing: 1px;
+        }
+
+        .subtitle {
+            font-size: 12px;
+            color: var(--muted);
+            margin-bottom: 20px;
+        }
+
+        .divider {
+            height: 2px;
+            background: linear-gradient(90deg, transparent, var(--gold), transparent);
+            margin: 20px 0;
+        }
+
+        .session-info {
+            background: rgba(200, 169, 106, 0.1);
+            padding: 18px;
+            border-left: 3px solid var(--gold);
+            border-radius: 8px;
+            margin-bottom: 25px;
+        }
+
+        .info-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            font-size: 12px;
+        }
+
+        .info-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .info-label {
+            color: var(--muted);
+        }
+
+        .info-value {
+            color: var(--gold);
+            font-weight: bold;
+        }
+
+        .player-section {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 25px;
+            border-radius: 8px;
+            margin-bottom: 25px;
+        }
+
+        .player-title {
+            font-size: 12px;
+            color: var(--gold);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 15px;
+            font-weight: bold;
+        }
+
+        audio {
+            width: 100%;
+            margin-bottom: 15px;
+            height: 40px;
+            accent-color: var(--gold);
+        }
+
+        .controls {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 15px;
+        }
+
+        .control-button {
+            flex: 1;
+            padding: 10px;
+            background: rgba(200, 169, 106, 0.2);
+            border: 1px solid var(--gold);
+            color: var(--gold);
+            border-radius: 6px;
+            font-size: 11px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .control-button:hover {
+            background: var(--gold);
+            color: var(--navy);
+        }
+
+        .control-button.active {
+            background: var(--gold);
+            color: var(--navy);
+        }
+
+        .volume-control {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-top: 12px;
+        }
+
+        .volume-label {
+            font-size: 11px;
+            color: var(--muted);
+            min-width: 50px;
+        }
+
+        input[type="range"] {
+            flex: 1;
+            cursor: pointer;
+            accent-color: var(--gold);
+        }
+
+        .cta-buttons {
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn {
+            flex: 1;
+            padding: 14px;
+            border: none;
+            border-radius: 6px;
+            font-weight: bold;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--gold) 0%, #B89456 100%);
+            color: var(--navy);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(200, 169, 106, 0.4);
+        }
+
+        .btn-secondary {
+            background: transparent;
+            color: var(--gold);
+            border: 2px solid var(--gold);
+        }
+
+        .btn-secondary:hover {
+            background: rgba(200, 169, 106, 0.1);
+        }
+
+        .footer {
+            text-align: center;
+            font-size: 10px;
+            color: var(--muted);
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid rgba(200, 169, 106, 0.2);
+        }
+
+        .loading {
+            text-align: center;
+            color: var(--muted);
+            font-size: 12px;
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 2px solid rgba(200, 169, 106, 0.3);
+            border-top: 2px solid var(--gold);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-right: 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .error {
+            background: rgba(255, 107, 107, 0.2);
+            border: 1px solid #FF6B6B;
+            color: #FF6B6B;
+            padding: 15px;
+            border-radius: 6px;
+            font-size: 12px;
+            margin-bottom: 15px;
+        }
+
+        .success {
+            background: rgba(76, 175, 80, 0.2);
+            border: 1px solid var(--green);
+            color: var(--green);
+            padding: 12px;
+            border-radius: 6px;
+            font-size: 11px;
+            margin-top: 10px;
+            text-align: center;
+        }
+
+        @media (max-width: 480px) {
+            .popup-container {
+                padding: 25px;
+            }
+
+            .title {
+                font-size: 18px;
+            }
+
+            .cta-buttons {
+                flex-direction: column;
+            }
+
+            .btn {
+                width: 100%;
+            }
+        }
+
+        @media print {
+            body {
+                background: white;
+            }
+
+            .popup-container {
+                border: 1px solid #ccc;
+                box-shadow: none;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<div class="popup-container">
+    <div class="header">
+        <div class="logo">🎙️</div>
+        <div class="title">Sesión de Entrenamiento</div>
+        <div class="subtitle">Victorious Travelers Club</div>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="session-info">
+        <div class="info-item">
+            <span class="info-label">Módulo</span>
+            <span class="info-value" id="moduloInfo">Meet & Greet</span>
+        </div>
+        <div class="info-item">
+            <span class="info-label">Asesor</span>
+            <span class="info-value" id="asesorInfo">Cargando...</span>
+        </div>
+        <div class="info-item">
+            <span class="info-label">Fecha</span>
+            <span class="info-value" id="fechaInfo">Cargando...</span>
+        </div>
+        <div class="info-item">
+            <span class="info-label">Duración</span>
+            <span class="info-value" id="duracionInfo">00:00</span>
+        </div>
+        <div class="info-item">
+            <span class="info-label">Score</span>
+            <span class="info-value" id="scoreInfo">-/10</span>
+        </div>
+    </div>
+
+    <div class="player-section">
+        <div class="player-title">🎵 Reproductor de Audio</div>
+
+        <div id="loadingState" class="loading" style="display: none;">
+            <span class="spinner"></span> Cargando audio...
+        </div>
+
+        <div id="errorState" class="error" style="display: none;"></div>
+
+        <div id="playerState" style="display: none;">
+            <audio id="audioPlayer" controls preload="metadata">
+                <source id="audioSource" src="" type="audio/mpeg">
+                Tu navegador no soporta el elemento de audio.
+            </audio>
+
+            <div class="controls">
+                <button class="control-button" id="btn15sBack">⟲ 15s</button>
+                <button class="control-button" id="btnPlayPause">▶️ Play</button>
+                <button class="control-button" id="btn15sForward">⟳ 15s</button>
+            </div>
+
+            <div class="volume-control">
+                <span class="volume-label">Volumen</span>
+                <input type="range" id="volumeControl" min="0" max="100" value="70">
+            </div>
+
+            <div class="success" id="downloadSuccess" style="display: none;">
+                ✓ Audio descargado correctamente
+            </div>
+        </div>
+    </div>
+
+    <div class="cta-buttons">
+        <button class="btn btn-primary" id="btnDownloadMP3">
+            ⬇️ Descargar MP3
+        </button>
+        <button class="btn btn-secondary" id="btnDownloadPDF">
+            📄 Ver PDF
+        </button>
+    </div>
+
+    <div class="footer">
+        VTC ELITE TRAINING v3.0 · © 2026 Victorious Travelers Club
+    </div>
+</div>
+
+<script>
+    // Get conversation ID from URL
+    const params = new URLSearchParams(window.location.search);
+    const conversationId = params.get('conv') || 'demo';
+
+    // DOM Elements
+    const audioPlayer = document.getElementById('audioPlayer');
+    const audioSource = document.getElementById('audioSource');
+    const loadingState = document.getElementById('loadingState');
+    const errorState = document.getElementById('errorState');
+    const playerState = document.getElementById('playerState');
+    const btnPlayPause = document.getElementById('btnPlayPause');
+    const btn15sBack = document.getElementById('btn15sBack');
+    const btn15sForward = document.getElementById('btn15sForward');
+    const volumeControl = document.getElementById('volumeControl');
+    const btnDownloadMP3 = document.getElementById('btnDownloadMP3');
+    const btnDownloadPDF = document.getElementById('btnDownloadPDF');
+    const downloadSuccess = document.getElementById('downloadSuccess');
+
+    // Load session data
+    async function loadSessionData() {
+        try {
+            loadingState.style.display = 'block';
+
+            const response = await fetch(`/api/session/${conversationId}`);
+            if (!response.ok) throw new Error('Session not found');
+
+            const data = await response.json();
+
+            // Populate session info
+            document.getElementById('moduloInfo').textContent = data.modulo || 'N/A';
+            document.getElementById('asesorInfo').textContent = data.nombre || 'N/A';
+            document.getElementById('fechaInfo').textContent = data.fecha_sesion || 'N/A';
+            document.getElementById('duracionInfo').textContent = data.duracion_texto || '00:00';
+            document.getElementById('scoreInfo').textContent = `${data.score_overall || '-'}/10`;
+
+            // Load audio
+            audioSource.src = `/api/audio/${conversationId}`;
+            audioPlayer.load();
+
+            loadingState.style.display = 'none';
+            playerState.style.display = 'block';
+        } catch (error) {
+            loadingState.style.display = 'none';
+            errorState.style.display = 'block';
+            errorState.textContent = '❌ Error: ' + (error.message || 'No se pudo cargar la sesión');
+        }
+    }
+
+    // Audio controls
+    btnPlayPause.addEventListener('click', () => {
+        if (audioPlayer.paused) {
+            audioPlayer.play();
+            btnPlayPause.textContent = '⏸️ Pausar';
+            btnPlayPause.classList.add('active');
+        } else {
+            audioPlayer.pause();
+            btnPlayPause.textContent = '▶️ Play';
+            btnPlayPause.classList.remove('active');
+        }
+    });
+
+    btn15sBack.addEventListener('click', () => {
+        audioPlayer.currentTime = Math.max(0, audioPlayer.currentTime - 15);
+    });
+
+    btn15sForward.addEventListener('click', () => {
+        audioPlayer.currentTime = Math.min(audioPlayer.duration, audioPlayer.currentTime + 15);
+    });
+
+    volumeControl.addEventListener('input', (e) => {
+        audioPlayer.volume = e.target.value / 100;
+    });
+
+    audioPlayer.addEventListener('play', () => {
+        btnPlayPause.textContent = '⏸️ Pausar';
+        btnPlayPause.classList.add('active');
+    });
+
+    audioPlayer.addEventListener('pause', () => {
+        btnPlayPause.textContent = '▶️ Play';
+        btnPlayPause.classList.remove('active');
+    });
+
+    // Download MP3
+    btnDownloadMP3.addEventListener('click', () => {
+        const a = document.createElement('a');
+        a.href = `/api/audio/${conversationId}?download=true`;
+        a.download = `sesion-${conversationId}.mp3`;
+        a.click();
+
+        downloadSuccess.style.display = 'block';
+        setTimeout(() => {
+            downloadSuccess.style.display = 'none';
+        }, 3000);
+    });
+
+    // Download PDF
+    btnDownloadPDF.addEventListener('click', () => {
+        window.open(`/api/pdf/${conversationId}`, '_blank');
+    });
+
+    // Set initial volume
+    audioPlayer.volume = 0.7;
+
+    // Load data on page load
+    loadSessionData();
+</script>
+
+</body>
+</html>
