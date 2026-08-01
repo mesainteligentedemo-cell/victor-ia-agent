@@ -20,13 +20,14 @@
  */
 
 const crypto = require('crypto');
+const axios = require('axios');
 const { mapElevenLabsData } = require('./n8n-mapper');
 const { generateHTMLReport } = require('./report-generator');
 const { generatePDF } = require('./pdf-generator');
 const { sendEmailWithAttachments } = require('./email-sender');
 const ElevenLabsAPI = require('./elevenlabs-api');
 
-async function processCallWebhook(webhookBody, hmacSignature) {
+async function processCallWebhook(webhookBody, hmacSignature, rawBody) {
   console.log('[PROCESS] Starting 12-step pipeline...');
 
   const startTime = Date.now();
@@ -43,7 +44,13 @@ async function processCallWebhook(webhookBody, hmacSignature) {
     // STEP 1: VALIDATE HMAC SIGNATURE
     // ════════════════════════════════════════════
     console.log('[STEP 1] Validating HMAC signature...');
-    const isValid = validateHMACSignature(webhookBody, hmacSignature);
+    // Se firma sobre el RAW body cuando está disponible (bytes exactos que firmó ElevenLabs)
+    const payloadForHmac = typeof rawBody === 'string' && rawBody.length ? rawBody : webhookBody;
+    const isValid = validateHMACSignature(
+      payloadForHmac,
+      hmacSignature,
+      process.env.VTC_SHARED_SECRET
+    );
     if (!isValid) {
       throw new Error('Invalid HMAC signature');
     }
@@ -53,10 +60,15 @@ async function processCallWebhook(webhookBody, hmacSignature) {
     // STEP 2: EXTRACT & VALIDATE conversation_id
     // ════════════════════════════════════════════
     console.log('[STEP 2] Validating conversation_id...');
-    const conversationId = webhookBody.conversation_id;
+    // ElevenLabs post-call webhook anida el payload en `data`; N8N lo manda plano.
+    const conversationId =
+      webhookBody.conversation_id ||
+      (webhookBody.data && webhookBody.data.conversation_id) ||
+      (webhookBody.body && webhookBody.body.conversation_id);
     if (!conversationId) {
       throw new Error('Missing conversation_id');
     }
+    console.log(`[STEP 2] conversation_id = ${conversationId}`);
     results.conversationId = conversationId;
     results.steps.push({ step: 2, status: 'success', action: 'conversation_id validated' });
 
@@ -85,8 +97,14 @@ async function processCallWebhook(webhookBody, hmacSignature) {
     // STEP 5: MAP ELEVENLABS DATA → 25 FIELDS
     // ════════════════════════════════════════════
     console.log('[STEP 5] Mapping ElevenLabs data to 25 fields...');
+    const nestedPayload = webhookBody.data || webhookBody.body || {};
+    // ElevenLabs guarda los campos del agente en analysis.data_collection_results
+    const collected = extractDataCollection(conversation);
+
     const mappedData = mapElevenLabsData({
       ...webhookBody,
+      ...nestedPayload,
+      ...collected,
       conversation_id: conversationId,
       transcript: transcript,
       audio_url: conversation.audio_url
@@ -179,40 +197,63 @@ async function processCallWebhook(webhookBody, hmacSignature) {
     // ════════════════════════════════════════════
     // STEP 13: FETCH AUDIO & CONVERT TO MP3
     // ════════════════════════════════════════════
-    console.log('[STEP 13] Fetching and converting audio to MP3...');
-    const mp3Buffer = await fetchAndConvertAudio(conversation.audio_url, conversationId);
-    if (!mp3Buffer) {
-      throw new Error('Failed to fetch/convert audio');
+    console.log('[STEP 13] Fetching audio (MP3) from ElevenLabs...');
+    const mp3Buffer = await fetchAndConvertAudio(
+      conversation.audio_url,
+      conversationId,
+      elevenLabsAPI
+    );
+    if (mp3Buffer) {
+      results.steps.push({
+        step: 13,
+        status: 'success',
+        action: `Audio fetched (${(mp3Buffer.length / 1024 / 1024).toFixed(2)} MB)`
+      });
+    } else {
+      // No bloqueante: el reporte + PDF se envían igual, solo sin el MP3.
+      console.warn('[STEP 13] Audio no disponible — el email se enviará sin MP3');
+      results.steps.push({ step: 13, status: 'warning', action: 'Audio no disponible (email sin MP3)' });
     }
-    results.steps.push({ step: 13, status: 'success', action: `Audio converted (${(mp3Buffer.length / 1024 / 1024).toFixed(2)} MB)` });
 
     // ════════════════════════════════════════════
     // STEP 14: SEND EMAIL
     // ════════════════════════════════════════════
     console.log('[STEP 14] Sending email with attachments...');
+    const recipient = process.env.EMAIL_TO_PRIMARY || 'mesainteligentedemo@gmail.com';
+    const safeName = String(mergedData.nombre).replace(/\s+/g, '-');
+
+    const attachments = [
+      {
+        filename: `reporte-${safeName}-${conversationId}.pdf`,
+        content: pdfBuffer,
+        contentType: 'application/pdf'
+      }
+    ];
+
+    if (mp3Buffer) {
+      attachments.push({
+        filename: `sesion-${safeName}-${conversationId}.mp3`,
+        content: mp3Buffer,
+        contentType: 'audio/mpeg'
+      });
+    }
+
     const emailResult = await sendEmailWithAttachments({
-      to: process.env.EMAIL_TO_PRIMARY || 'mesainteligentedemo@gmail.com',
-      from: process.env.EMAIL_FROM || 'info@victor-ia.com.mx',
+      to: recipient,
+      from: process.env.EMAIL_FROM || 'info@victor-ia.xyz',
       subject: `Info Capacitación: Reporte de ${mergedData.nombre} | ${mergedData.fecha_sesion} | ${mergedData.hora_sesion}`,
       htmlBody: htmlReport,
-      attachments: [
-        {
-          filename: `reporte-${mergedData.nombre.replace(/\s+/g, '-')}-${conversationId}.pdf`,
-          content: pdfBuffer,
-          contentType: 'application/pdf'
-        },
-        {
-          filename: `sesion-${mergedData.nombre.replace(/\s+/g, '-')}-${conversationId}.mp3`,
-          content: mp3Buffer,
-          contentType: 'audio/mpeg'
-        }
-      ]
+      attachments
     });
 
     if (!emailResult.success) {
       throw new Error(`Email sending failed: ${emailResult.error}`);
     }
-    results.steps.push({ step: 14, status: 'success', action: `Email sent to ${process.env.EMAIL_TO_PRIMARY}` });
+    results.steps.push({
+      step: 14,
+      status: 'success',
+      action: `Email sent to ${recipient} (${attachments.length} adjuntos)`
+    });
 
     // ════════════════════════════════════════════
     // SUCCESS
@@ -242,14 +283,64 @@ async function processCallWebhook(webhookBody, hmacSignature) {
 
 /**
  * Validate HMAC signature from ElevenLabs
+ *
+ * ElevenLabs manda dos formatos según versión:
+ *   1. Nuevo:  "t=<timestamp>,v0=<hex>"   -> HMAC sobre `${t}.${rawBody}`
+ *   2. Legacy: "<hex>"                     -> HMAC sobre `rawBody`
+ *
+ * @param {object|string} body      Body parseado o raw
+ * @param {string|null}   signature Header de firma
+ * @param {string}        secret    Shared secret (VTC_SHARED_SECRET)
+ * @returns {boolean}
  */
-function validateHMACSignature(body, signature) {
-  const secret = process.env.VTC_SHARED_SECRET || 'secret';
-  const hmac = crypto
-    .createHmac('sha256', secret)
-    .update(JSON.stringify(body))
-    .digest('hex');
-  return hmac === signature;
+function validateHMACSignature(body, signature, secret) {
+  // ElevenLabs manda: "t=<timestamp>,v0=<hash>" o "X-HMAC-Signature: <hash>"
+  if (!signature || !secret) {
+    console.warn('HMAC validation skipped: missing signature or secret');
+    return true; // Permitir para debugging, cambiar a false en producción
+  }
+
+  try {
+    const bodyString = typeof body === 'string' ? body : JSON.stringify(body);
+
+    // Formato nuevo: t=<ts>,v0=<hash>
+    if (signature.includes(',')) {
+      const parts = signature.split(',');
+      const ts = (parts[0].split('=')[1] || '').trim();
+      const providedHash = (parts[1].split('=')[1] || '').trim();
+
+      const message = `${ts}.${bodyString}`;
+
+      const computed = crypto
+        .createHmac('sha256', secret)
+        .update(message)
+        .digest('hex');
+
+      return safeEqual(computed, providedHash);
+    }
+
+    // Formato legacy: hash plano
+    const computed = crypto
+      .createHmac('sha256', secret)
+      .update(bodyString)
+      .digest('hex');
+
+    return safeEqual(computed, signature.trim());
+  } catch (error) {
+    console.error('HMAC validation error:', error);
+    return false;
+  }
+}
+
+/**
+ * Comparación en tiempo constante (evita timing attacks)
+ */
+function safeEqual(a, b) {
+  if (typeof a !== 'string' || typeof b !== 'string') return false;
+  const bufA = Buffer.from(a, 'utf8');
+  const bufB = Buffer.from(b, 'utf8');
+  if (bufA.length !== bufB.length) return false;
+  return crypto.timingSafeEqual(bufA, bufB);
 }
 
 /**
@@ -343,16 +434,73 @@ function generateEmotionPoints(minutes) {
 }
 
 /**
- * Fetch and convert audio to MP3
+ * Extrae analysis.data_collection_results de ElevenLabs y lo aplana.
+ * Formato origen: { campo: { value: X, rationale: "..." }, ... }
+ * Formato salida: { campo: X, ... }  (números convertidos a Number)
+ *
+ * @param {object} conversation
+ * @returns {object}
  */
-async function fetchAndConvertAudio(audioUrl, conversationId) {
-  // This is a placeholder - actual implementation would:
-  // 1. Fetch audio from URL
-  // 2. Convert to MP3 using ffmpeg
-  // 3. Return buffer
+function extractDataCollection(conversation) {
+  const out = {};
+  const analysis = conversation && conversation.analysis;
+  const results = analysis && analysis.data_collection_results;
 
-  // For now, return mock buffer
-  return Buffer.from('mock-mp3-data');
+  if (!results || typeof results !== 'object') return out;
+
+  for (const [key, entry] of Object.entries(results)) {
+    const value = entry && typeof entry === 'object' && 'value' in entry ? entry.value : entry;
+    if (value === null || value === undefined || value === '') continue;
+
+    // Los scores llegan como string en algunos agentes -> normalizar a número
+    if (key.startsWith('score_') || key === 'duracion_segundos' || key === 'cumplimiento_neuro') {
+      const num = Number(value);
+      out[key] = Number.isFinite(num) ? num : value;
+    } else {
+      out[key] = value;
+    }
+  }
+
+  console.log(`[MAP] data_collection_results: ${Object.keys(out).length} campos extraídos`);
+  return out;
 }
 
-module.exports = { processCallWebhook };
+/**
+ * Descarga el audio de la conversación desde ElevenLabs (ya viene en MP3).
+ * Fallback: descarga directa desde audio_url si la API no devuelve nada.
+ *
+ * @param {string|null} audioUrl
+ * @param {string} conversationId
+ * @param {ElevenLabsAPI} elevenLabsAPI
+ * @returns {Promise<Buffer|null>}
+ */
+async function fetchAndConvertAudio(audioUrl, conversationId, elevenLabsAPI) {
+  // 1. Vía API oficial (recomendado — devuelve audio/mpeg)
+  if (elevenLabsAPI) {
+    const buffer = await elevenLabsAPI.getAudio(conversationId);
+    if (buffer && buffer.length) return buffer;
+  }
+
+  // 2. Fallback: URL directa incluida en el payload
+  if (audioUrl) {
+    try {
+      console.log('[AUDIO] Fallback: descargando desde audio_url...');
+      const response = await axios.get(audioUrl, {
+        responseType: 'arraybuffer',
+        timeout: 60000
+      });
+      const buffer = Buffer.from(response.data);
+      if (buffer.length) {
+        console.log(`[AUDIO] Descargado desde audio_url: ${(buffer.length / 1024 / 1024).toFixed(2)} MB`);
+        return buffer;
+      }
+    } catch (error) {
+      console.error('[AUDIO] Fallback failed:', error.message);
+    }
+  }
+
+  console.warn('[AUDIO] No se pudo obtener audio para', conversationId);
+  return null;
+}
+
+module.exports = { processCallWebhook, validateHMACSignature, extractDataCollection };

@@ -1,4 +1,4 @@
-﻿node_modules/
+node_modules/
 .next/
 out/
 .env.local
@@ -14,3 +14,7 @@ dist/
 build/
 coverage/
 .cache/
+
+.env.production
+.env
+*SECRETS*

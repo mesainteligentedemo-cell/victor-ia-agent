@@ -33,19 +33,30 @@ function mapElevenLabsData(webhookBody) {
   const hora_sesion = ahora.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
 
   // ===== DURACIÓN =====
-  const duracion_sec = safe(wh, 'duracion_segundos', 570) || 570;
+  const rawDuracion = safe(wh, 'duracion_segundos', null);
+  const parsedDuracion = rawDuracion === null || rawDuracion === '' ? NaN : Number(rawDuracion);
+  const duracion_sec = Number.isFinite(parsedDuracion) && parsedDuracion > 0 ? Math.round(parsedDuracion) : 570;
   const duracion_minutos = Math.floor(duracion_sec / 60);
   const duracion_seg = duracion_sec % 60;
   const duracion_texto = `${duracion_minutos}:${duracion_seg < 10 ? '0' : ''}${duracion_seg}`;
 
   // ===== SCORES (0-10) =====
-  const score_rapport = safe(wh, 'score_rapport', 8) || 8;
-  const score_pnl = safe(wh, 'score_pnl', 8) || 8;
-  const score_postura = safe(wh, 'score_postura', 9) || 9;
-  const score_objecciones = safe(wh, 'score_objecciones', 7) || 7;
-  const score_lectura_sala = safe(wh, 'score_lectura_sala', 9) || 9;
-  const score_cierre = safe(wh, 'score_cierre', 8) || 8;
-  const score_overall = safe(wh, 'score_overall', 8) || 8;
+  // Siempre número finito dentro de [0,10]; si el agente manda string ("9") se convierte.
+  const num = (x, def) => {
+    // OJO: Number(null) === 0, así que hay que descartar vacíos ANTES de convertir.
+    if (x === null || x === undefined || x === '') return def;
+    const n = Number(x);
+    if (!Number.isFinite(n)) return def;
+    return Math.min(10, Math.max(0, n));
+  };
+
+  const score_rapport = num(safe(wh, 'score_rapport', null), 8);
+  const score_pnl = num(safe(wh, 'score_pnl', null), 8);
+  const score_postura = num(safe(wh, 'score_postura', null), 9);
+  const score_objecciones = num(safe(wh, 'score_objecciones', null), 7);
+  const score_lectura_sala = num(safe(wh, 'score_lectura_sala', null), 9);
+  const score_cierre = num(safe(wh, 'score_cierre', null), 8);
+  const score_overall = num(safe(wh, 'score_overall', null), 8);
 
   const scoreTotal = Math.round((score_overall / 10) * 100);
   const mejora_potencial = Math.round(100 - scoreTotal) + '%';
@@ -102,8 +113,9 @@ function mapElevenLabsData(webhookBody) {
   const cumplimiento_neuro = safe(wh, 'cumplimiento_neuro', 85) || 85;
 
   // ===== PLAN DE ACCIÓN =====
-  const comp_baja = competencias.sort((a, b) => a.score - b.score)[0];
-  const comp_alta = competencias.sort((a, b) => b.score - a.score)[0];
+  // slice() evita mutar `competencias` (el gráfico mantiene su orden original)
+  const comp_baja = competencias.slice().sort((a, b) => a.score - b.score)[0];
+  const comp_alta = competencias.slice().sort((a, b) => b.score - a.score)[0];
 
   const plan_1 = `Score actual: ${score_overall}/10 (${scoreTotal}%). Fortaleza: ${comp_alta.name} (${comp_alta.score}/10). Área crítica: ${comp_baja.name} (${comp_baja.score}/10).`;
 
@@ -199,14 +211,20 @@ function parseTranscript(transcriptText, asesorName, familyName) {
   const bubbles = [];
   const lines = transcriptText.split('\n').filter(l => l.trim());
 
+  // ElevenLabs entrega los turnos con role "agent" / "user"
+  const AGENT_KEYS = ['victor', 'carlos', 'george', 'agent', 'assistant', 'ai'];
+
   const SPEAKERS = {
     'victor': 'Victor',
     'carlos': 'Carlos',
     'george': 'George',
+    'agent': 'Victor',
+    'assistant': 'Victor',
     [asesorName.toLowerCase()]: asesorName,
     [familyName.toLowerCase()]: familyName,
     'familia': familyName,
-    'usuario': familyName
+    'usuario': familyName,
+    'user': familyName
   };
 
   lines.forEach((line, idx) => {
@@ -215,7 +233,7 @@ function parseTranscript(transcriptText, asesorName, familyName) {
       const [, speaker, text] = match;
       const cleanSpeaker = speaker.trim().toLowerCase();
       const displaySpeaker = SPEAKERS[cleanSpeaker] || speaker.trim();
-      const isAgent = ['victor', 'carlos', 'george'].includes(cleanSpeaker);
+      const isAgent = AGENT_KEYS.includes(cleanSpeaker);
 
       bubbles.push({
         speaker: displaySpeaker,
