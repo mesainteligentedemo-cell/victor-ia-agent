@@ -131,6 +131,40 @@ class ElevenLabsAPI {
 
     return '';
   }
+
+  /**
+   * Extrae los turnos crudos de la conversación conservando el tiempo real.
+   *
+   * normalizeTranscript() aplana a texto y pierde `time_in_call_secs`; esto
+   * permite que la transcripción del reporte muestre marcas de tiempo reales
+   * en vez de estimarlas.
+   *
+   * @param {object} conv
+   * @returns {Array<{role:string, message:string, time_in_call_secs:number|null}>}
+   */
+  static extractTurns(conv) {
+    if (!conv || typeof conv !== 'object') return [];
+
+    const raw = conv.transcript || conv.messages || conv.turns;
+    if (!Array.isArray(raw)) return [];
+
+    return raw
+      .map((turn) => {
+        if (!turn || typeof turn !== 'object') return null;
+        const message = turn.message || turn.text || turn.content || '';
+        if (!message) return null;
+
+        const secs = turn.time_in_call_secs ?? turn.time_in_call ?? turn.start_time ?? null;
+        const parsed = Number(secs);
+
+        return {
+          role: String(turn.role || turn.speaker || turn.source || 'agent'),
+          message: String(message),
+          time_in_call_secs: Number.isFinite(parsed) ? parsed : null
+        };
+      })
+      .filter(Boolean);
+  }
 }
 
 module.exports = ElevenLabsAPI;

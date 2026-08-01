@@ -24,7 +24,7 @@ const axios = require('axios');
 const { mapElevenLabsData } = require('./n8n-mapper');
 const { generateHTMLReport } = require('./report-generator');
 const { generatePDF } = require('./pdf-generator');
-const { sendEmailWithAttachments } = require('./email-sender');
+const { sendEmailWithAttachments, buildEmailPackage } = require('./email-sender');
 const ElevenLabsAPI = require('./elevenlabs-api');
 const { buildTranscriptContext, queryRAG, getAgentMeta } = require('./rag-query');
 
@@ -94,7 +94,13 @@ async function processCallWebhook(webhookBody, hmacSignature, rawBody) {
     if (!transcript) {
       throw new Error('Could not extract transcript');
     }
-    results.steps.push({ step: 4, status: 'success', action: `Transcript extracted (${transcript.length} chars)` });
+    // Los turnos crudos conservan time_in_call_secs -> timestamps reales en el reporte
+    const transcriptTurns = ElevenLabsAPI.extractTurns(conversation);
+    results.steps.push({
+      step: 4,
+      status: 'success',
+      action: `Transcript extracted (${transcript.length} chars, ${transcriptTurns.length} turnos)`
+    });
 
     // ════════════════════════════════════════════
     // STEP 5: MAP ELEVENLABS DATA → 25 FIELDS
@@ -110,6 +116,10 @@ async function processCallWebhook(webhookBody, hmacSignature, rawBody) {
       ...collected,
       conversation_id: conversationId,
       transcript: transcript,
+      transcript_turns: transcriptTurns,
+      // El inicio real de la llamada manda sobre el momento de proceso:
+      // el webhook puede llegar minutos después de que terminó la sesión.
+      metadata: conversation.metadata || nestedPayload.metadata,
       audio_url: conversation.audio_url
     });
     results.steps.push({ step: 5, status: 'success', action: '25 data fields mapped' });
@@ -147,7 +157,7 @@ async function processCallWebhook(webhookBody, hmacSignature, rawBody) {
     // STEP 8: GENERATE CHARTS DATA
     // ════════════════════════════════════════════
     console.log('[STEP 8] Generating charts data...');
-    const chartsData = generateChartsData(mappedData);
+    const chartsData = generateChartsData(mappedData, transcript, transcriptTurns);
     results.steps.push({ step: 8, status: 'success', action: 'Charts data generated (6 charts)' });
 
     // ════════════════════════════════════════════
@@ -222,12 +232,15 @@ async function processCallWebhook(webhookBody, hmacSignature, rawBody) {
     // STEP 14: SEND EMAIL
     // ════════════════════════════════════════════
     console.log('[STEP 14] Sending email with attachments...');
-    const recipient = process.env.EMAIL_TO_PRIMARY || 'mesainteligentedemo@gmail.com';
-    const safeName = String(mergedData.nombre).replace(/\s+/g, '-');
+    const recipients = resolveRecipients();
+
+    // Asunto, cuerpos y nombres de archivo se derivan del mismo instante:
+    // el PDF y el MP3 comparten base para que queden juntos al ordenar por nombre.
+    const email = buildEmailPackage(mergedData, mergedData.session_iso);
 
     const attachments = [
       {
-        filename: `reporte-${safeName}-${conversationId}.pdf`,
+        filename: email.pdfFilename,
         content: pdfBuffer,
         contentType: 'application/pdf'
       }
@@ -235,17 +248,18 @@ async function processCallWebhook(webhookBody, hmacSignature, rawBody) {
 
     if (mp3Buffer) {
       attachments.push({
-        filename: `sesion-${safeName}-${conversationId}.mp3`,
+        filename: email.mp3Filename,
         content: mp3Buffer,
         contentType: 'audio/mpeg'
       });
     }
 
     const emailResult = await sendEmailWithAttachments({
-      to: recipient,
+      to: recipients,
       from: process.env.EMAIL_FROM || 'info@victor-ia.xyz',
-      subject: `Info Capacitación: Reporte de ${mergedData.nombre} | ${mergedData.fecha_sesion} | ${mergedData.hora_sesion}`,
-      htmlBody: htmlReport,
+      subject: email.subject,
+      htmlBody: email.html,
+      textBody: email.text,
       attachments
     });
 
@@ -255,14 +269,38 @@ async function processCallWebhook(webhookBody, hmacSignature, rawBody) {
     results.steps.push({
       step: 14,
       status: 'success',
-      action: `Email sent to ${recipient} (${attachments.length} adjuntos)`
+      action: `Email sent to ${recipients.join(', ')} (${attachments.map((a) => a.filename).join(', ')})`
     });
+
+    results.email = {
+      subject: email.subject,
+      to: recipients,
+      attachments: attachments.map((a) => a.filename),
+      messageId: emailResult.messageId
+    };
 
     // ════════════════════════════════════════════
     // SUCCESS
     // ════════════════════════════════════════════
     results.success = true;
-    results.data = mergedData;
+    // Devolvemos un resumen, no `mergedData`: el objeto completo lleva el
+    // transcript entero y las respuestas del webhook se quedaban en megabytes.
+    results.data = {
+      conversationId,
+      nombre: mergedData.nombre,
+      empleado_id: mergedData.empleado_id,
+      modulo: mergedData.modulo,
+      idioma: mergedData.idioma,
+      fecha_sesion: mergedData.fecha_sesion,
+      hora_cancun: mergedData.hora_cancun,
+      duracion_texto: mergedData.duracion_texto,
+      score_overall: mergedData.score_overall,
+      scoreTotal: mergedData.scoreTotal,
+      turnos: (mergedData.transcription || []).length,
+      html_bytes: htmlReport.length,
+      pdf_bytes: pdfBuffer.length,
+      mp3_bytes: mp3Buffer ? mp3Buffer.length : 0
+    };
     const duration = Date.now() - startTime;
     console.log(`[SUCCESS] Pipeline completed in ${duration}ms`);
     results.duration = duration;
@@ -282,6 +320,21 @@ async function processCallWebhook(webhookBody, hmacSignature, rawBody) {
 
     return results;
   }
+}
+
+/**
+ * Destinatarios del reporte.
+ * EMAIL_TO_PRIMARY acepta varias direcciones separadas por coma o punto y coma.
+ *
+ * @returns {string[]}
+ */
+function resolveRecipients() {
+  const raw = process.env.EMAIL_TO_PRIMARY || 'mesainteligentedemo@gmail.com';
+  const list = String(raw)
+    .split(/[,;]/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return list.length ? list : ['mesainteligentedemo@gmail.com'];
 }
 
 /**
@@ -499,41 +552,122 @@ function calculateEngagementScore(transcript) {
 }
 
 /**
- * Generate charts data for ApexCharts
+ * Construye los datos de los 6 gráficos del reporte.
+ *
+ * Todo se deriva de la sesión real: los scores del agente y el transcript.
+ * Nada es aleatorio — un reporte de evaluación con datos inventados no sirve
+ * para tomar decisiones de coaching.
+ *
+ * @param {object} mappedData
+ * @param {string} transcript Texto plano de la conversación
+ * @param {Array}  turns      Turnos con tiempo real (puede venir vacío)
  */
-function generateChartsData(mappedData) {
+function generateChartsData(mappedData, transcript, turns) {
+  const comp = Object.fromEntries((mappedData.competencias || []).map((c) => [c.name, c.score]));
+
   return {
     competencias: {
-      categories: mappedData.competencias.map(c => c.name),
-      values: mappedData.competencias.map(c => c.score)
+      categories: (mappedData.competencias || []).map((c) => c.name),
+      values: (mappedData.competencias || []).map((c) => c.score)
     },
+    // Cada fase se evalúa con la competencia que realmente la gobierna
     timeline: {
-      labels: ['Meet', 'Discovery', 'Pitch', 'Cierre'],
-      points: [2, 5, 8, 9]
+      labels: ['Apertura', 'Descubrimiento', 'Presentación', 'Objeciones', 'Cierre'],
+      points: [
+        comp['Rapport'] ?? mappedData.score_rapport,
+        comp['Lectura Sala'] ?? mappedData.score_lectura_sala,
+        comp['PNL'] ?? mappedData.score_pnl,
+        comp['Objeciones'] ?? mappedData.score_objecciones,
+        comp['Cierre'] ?? mappedData.score_cierre
+      ].map((v) => Number(v) || 0)
     },
     emotional: {
-      points: generateEmotionPoints(10)
+      points: buildEngagementCurve(transcript, mappedData.duracion_sec)
     },
-    speech: {
-      victor: 65,
-      usuario: 30,
-      otros: 5
-    }
+    speech: buildSpeechSplit(transcript, turns)
   };
 }
 
 /**
- * Generate emotion points for chart
+ * Curva de engagement minuto a minuto.
+ *
+ * Proxy medible: densidad de intercambio (palabras + preguntas) por segmento.
+ * Es determinista y reproducible — el mismo transcript da siempre la misma curva.
+ *
+ * @param {string} transcript
+ * @param {number} duracionSec
+ * @returns {Array<{x:number,y:number}>}
  */
-function generateEmotionPoints(minutes) {
-  const points = [];
-  for (let i = 0; i < minutes; i++) {
-    points.push({
-      x: i,
-      y: Math.random() * 8 + 2
-    });
+function buildEngagementCurve(transcript, duracionSec) {
+  const lines = String(transcript || '').split('\n').filter((l) => l.trim());
+  const minutos = Math.max(2, Math.min(20, Math.round((Number(duracionSec) || 600) / 60)));
+
+  if (lines.length < 2) {
+    return Array.from({ length: minutos }, (_, i) => ({ x: i, y: 5 }));
   }
-  return points;
+
+  const porSegmento = Math.max(1, Math.ceil(lines.length / minutos));
+  const bruto = [];
+
+  for (let i = 0; i < minutos; i++) {
+    const slice = lines.slice(i * porSegmento, (i + 1) * porSegmento);
+    if (!slice.length) {
+      bruto.push(0);
+      continue;
+    }
+    const texto = slice.join(' ');
+    const palabras = texto.split(/\s+/).filter(Boolean).length;
+    const preguntas = (texto.match(/\?/g) || []).length;
+    // Las preguntas pesan: en venta consultiva marcan descubrimiento activo
+    bruto.push(palabras + preguntas * 12);
+  }
+
+  // Normalizamos a 0-10 contra el pico de la propia sesión
+  const max = Math.max(...bruto, 1);
+  return bruto.map((valor, i) => ({
+    x: i,
+    y: Math.round((valor / max) * 90) / 10 + 1 // rango efectivo ~1..10
+  }));
+}
+
+/**
+ * Reparto del habla entre asesor y cliente simulado.
+ * Se mide en caracteres pronunciados, que aproximan el tiempo en voz mucho
+ * mejor que el número de turnos.
+ *
+ * @returns {{victor:number, usuario:number, otros:number}} porcentajes
+ */
+function buildSpeechSplit(transcript, turns) {
+  let agentChars = 0;
+  let userChars = 0;
+
+  const AGENT_ROLES = ['agent', 'assistant', 'ai', 'victor', 'carlos', 'george', 'jorge'];
+
+  if (Array.isArray(turns) && turns.length) {
+    for (const t of turns) {
+      const len = String(t.message || '').length;
+      if (AGENT_ROLES.includes(String(t.role || '').toLowerCase())) agentChars += len;
+      else userChars += len;
+    }
+  } else {
+    for (const line of String(transcript || '').split('\n')) {
+      const m = line.match(/^(.*?):\s*(.*)$/);
+      if (!m) continue;
+      const role = m[1].trim().toLowerCase();
+      const len = m[2].length;
+      if (AGENT_ROLES.includes(role)) agentChars += len;
+      else userChars += len;
+    }
+  }
+
+  const total = agentChars + userChars;
+  if (!total) return { victor: 55, usuario: 40, otros: 5 };
+
+  // 'otros' representa silencios/ruido: no se puede medir desde el texto,
+  // así que se reserva un 5% fijo y se declara como tal en el gráfico.
+  const otros = 5;
+  const victor = Math.round((agentChars / total) * (100 - otros));
+  return { victor, usuario: 100 - otros - victor, otros };
 }
 
 /**

@@ -1,15 +1,347 @@
 /**
- * EMAIL SENDER — Envía reportes con Resend
+ * EMAIL SENDER — Envía los reportes de capacitación con Resend
  *
- * Características:
- * - HTML inline (reporte completo)
- * - PDF adjunto
- * - MP3 adjunto
- * - Retry logic
- * - Error tracking
+ * Responsabilidades:
+ * - Formatear fecha/hora en America/Cancun (UTC-5, sin horario de verano)
+ * - Construir el asunto y el cuerpo del correo
+ * - Nombrar los adjuntos (PDF + MP3) con la misma base: Nombre_dd_mm_aaaa_hh_mm_am
+ * - Enviar con reintentos y backoff exponencial
+ *
+ * Nota de diseño: el cuerpo del correo NO es el reporte completo. El reporte
+ * viaja como PDF adjunto; el correo es el resumen ejecutivo que se lee en el
+ * teléfono en 20 segundos.
  */
 
 const { Resend } = require('resend');
+
+const TZ = 'America/Cancun';
+
+const MESES = [
+  'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+  'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'
+];
+
+// ════════════════════════════════════════════════════════════
+// FORMATO DE FECHA Y HORA
+// ════════════════════════════════════════════════════════════
+
+/**
+ * Descompone una fecha en sus partes según el huso de Cancún.
+ *
+ * Se usa `Intl` con locale en-US a propósito: el dayPeriod de es-MX varía
+ * entre versiones de ICU ("a.m.", "a. m." con espacio fino, "AM"), y aquí
+ * necesitamos una salida estable para nombres de archivo.
+ *
+ * @param {Date|string|number} input
+ * @returns {{year:string, month:string, day:string, hour:string, minute:string, ampm:string}}
+ */
+function cancunParts(input) {
+  const date = toDate(input);
+
+  try {
+    const fmt = new Intl.DateTimeFormat('en-US', {
+      timeZone: TZ,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true
+    });
+
+    const p = {};
+    for (const part of fmt.formatToParts(date)) p[part.type] = part.value;
+
+    // hour12 + 2-digit devuelve "12" para medianoche/mediodía; nunca "00".
+    return {
+      year: p.year,
+      month: p.month,
+      day: p.day,
+      hour: String(p.hour).padStart(2, '0'),
+      minute: p.minute,
+      ampm: String(p.dayPeriod || '').toUpperCase() === 'PM' ? 'p.m.' : 'a.m.'
+    };
+  } catch (error) {
+    // Fallback sin Intl/tzdata: Cancún es UTC-5 fijo desde 2015 (sin DST)
+    console.warn('[EMAIL] Intl con timeZone no disponible, usando offset fijo UTC-5:', error.message);
+    const shifted = new Date(date.getTime() - 5 * 60 * 60 * 1000);
+    const h24 = shifted.getUTCHours();
+    const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
+    return {
+      year: String(shifted.getUTCFullYear()),
+      month: String(shifted.getUTCMonth() + 1).padStart(2, '0'),
+      day: String(shifted.getUTCDate()).padStart(2, '0'),
+      hour: String(h12).padStart(2, '0'),
+      minute: String(shifted.getUTCMinutes()).padStart(2, '0'),
+      ampm: h24 >= 12 ? 'p.m.' : 'a.m.'
+    };
+  }
+}
+
+/** Normaliza cualquier entrada a Date válida (fallback: ahora). */
+function toDate(input) {
+  if (input instanceof Date && !Number.isNaN(input.getTime())) return input;
+  if (input === null || input === undefined || input === '') return new Date();
+  const d = new Date(input);
+  return Number.isNaN(d.getTime()) ? new Date() : d;
+}
+
+/**
+ * Hora en America/Cancun, formato 12 horas.
+ * @param {Date|string|number} [input]
+ * @returns {string} p. ej. "06:26 a.m."
+ */
+function formatTimezoneCancun(input) {
+  const p = cancunParts(input);
+  return `${p.hour}:${p.minute} ${p.ampm}`;
+}
+
+/**
+ * Fecha local (Cancún) en formato dd/mm/aaaa.
+ * @param {Date|string|number} [input]
+ * @returns {string} p. ej. "01/08/2026"
+ */
+function formatDateLocal(input) {
+  const p = cancunParts(input);
+  return `${p.day}/${p.month}/${p.year}`;
+}
+
+/**
+ * Fecha larga en español, para leerse dentro de una frase.
+ * @param {Date|string|number} [input]
+ * @returns {string} p. ej. "1 de agosto de 2026"
+ */
+function formatDateLong(input) {
+  const p = cancunParts(input);
+  const mes = MESES[Number(p.month) - 1] || p.month;
+  return `${Number(p.day)} de ${mes} de ${p.year}`;
+}
+
+/**
+ * Base compartida por el PDF y el MP3 — así ambos adjuntos se ordenan juntos
+ * en el gestor de archivos del gerente.
+ *
+ * @param {string} nombre Nombre del asesor
+ * @param {Date|string|number} [input] Momento de la sesión
+ * @returns {string} p. ej. "Victor_01_08_2026_06_26_am"
+ */
+function buildAttachmentBasename(nombre, input) {
+  const p = cancunParts(input);
+
+  const safeName = String(nombre || 'Asesor')
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')   // acentos fuera: sobreviven a cualquier cliente de correo
+    .replace(/[^A-Za-z0-9]+/g, '_')   // sin espacios ni caracteres reservados en Windows
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 48) || 'Asesor';
+
+  const periodo = p.ampm.replace(/\./g, ''); // "a.m." -> "am"
+  return `${safeName}_${p.day}_${p.month}_${p.year}_${p.hour}_${p.minute}_${periodo}`;
+}
+
+// ════════════════════════════════════════════════════════════
+// ASUNTO Y CUERPO
+// ════════════════════════════════════════════════════════════
+
+/**
+ * Asunto del correo.
+ * Formato: "Reporte de Capacitación: Victor 01/08/2026 06:26 a.m."
+ *
+ * @param {object} data Datos del reporte
+ * @param {Date|string|number} [when] Momento de la sesión
+ */
+function buildEmailSubject(data, when) {
+  const nombre = (data && data.nombre) || 'Asesor VTC';
+  return `Reporte de Capacitación: ${nombre} ${formatDateLocal(when)} ${formatTimezoneCancun(when)}`;
+}
+
+const DIVIDER = '------------------------------------------------------------';
+
+/**
+ * Cuerpo del correo en texto plano.
+ * Es la fuente de verdad: la versión HTML se construye a partir de esta misma
+ * estructura para que ambos digan exactamente lo mismo.
+ *
+ * @param {object} data
+ * @param {Date|string|number} [when]
+ * @returns {string}
+ */
+function buildEmailText(data, when) {
+  const d = data || {};
+  const nombre = d.nombre || 'el asesor';
+  const fechaEmail = formatDateLong(when);
+  const hora = formatTimezoneCancun(when);
+
+  const scoreTotal = d.scoreTotal != null
+    ? d.scoreTotal
+    : Math.round(((Number(d.score_overall) || 0) / 10) * 100);
+
+  return [
+    'Estimados,',
+    '',
+    // Sin punto final: `hora` ya termina en "a.m." / "p.m."
+    `Les envío el resumen de la sesión de entrenamiento de ${nombre} el día ${fechaEmail} a las ${hora}`,
+    '',
+    'RESUMEN DE LA SESIÓN',
+    `Duración: ${d.duracion_texto || '—'} min`,
+    `Módulo: ${d.modulo || '—'}`,
+    `Desempeño general: ${d.score_overall != null ? d.score_overall : '—'}/10 (${scoreTotal}%)`,
+    `Idioma: ${d.idioma || '—'}`,
+    '',
+    'ANÁLISIS:',
+    plain(d.resumen),
+    '',
+    'FORTALEZAS IDENTIFICADAS:',
+    plain(d.fortalezas),
+    '',
+    'AREAS A MEJORAR:',
+    plain(d.areas_mejora),
+    '',
+    'RECOMENDACIÓN DEL COACH:',
+    plain(d.recomendacion_coach),
+    '',
+    DIVIDER,
+    '',
+    'PROXIMOS PASOS',
+    '',
+    'Para acceder al reporte completo con gráficos, análisis detallado de competencias y '
+      + 'plan de acción personalizado, descargue el archivo PDF adjunto.',
+    '',
+    'Para revisar la transcripción completa de la sesión, descargue el archivo de audio (MP3) adjunto.',
+    '',
+    DIVIDER,
+    '',
+    'Quedo atento a cualquier pregunta.',
+    '',
+    'Saludos cordiales,',
+    '',
+    'El equipo de Victor-IA',
+    'Entrenamiento VTC Capacitación',
+    'victor-ia.xyz'
+  ].join('\n');
+}
+
+/**
+ * Cuerpo del correo en HTML.
+ * Layout de tabla y estilos inline: es lo único que Outlook y Gmail renderizan
+ * igual. Mantiene la paleta VTC (navy #1a3a52 / dorado #d4af37) sin depender
+ * de imágenes ni de fuentes externas.
+ *
+ * @param {object} data
+ * @param {Date|string|number} [when]
+ * @returns {string}
+ */
+function buildEmailHTML(data, when) {
+  const d = data || {};
+  const nombre = escapeHtml(d.nombre || 'el asesor');
+  const fechaEmail = formatDateLong(when);
+  const hora = formatTimezoneCancun(when);
+
+  const scoreTotal = d.scoreTotal != null
+    ? d.scoreTotal
+    : Math.round(((Number(d.score_overall) || 0) / 10) * 100);
+
+  const font = "font-family:'Segoe UI',Helvetica,Arial,sans-serif";
+  const label = `${font};font-size:11px;letter-spacing:2px;text-transform:uppercase;color:#d4af37;font-weight:700;margin:0 0 8px`;
+  const para = `${font};font-size:14px;line-height:1.7;color:#dfe6ed;margin:0 0 6px`;
+
+  const block = (titulo, contenido) => `
+      <p style="${label}">${escapeHtml(titulo)}</p>
+      <p style="${para}">${nl2br(plain(contenido))}</p>
+      <div style="height:22px"></div>`;
+
+  const row = (k, v) => `
+        <tr>
+          <td style="${font};font-size:13px;color:#9db0c2;padding:7px 0;border-bottom:1px solid rgba(255,255,255,.08)">${escapeHtml(k)}</td>
+          <td style="${font};font-size:14px;color:#ffffff;font-weight:600;text-align:right;padding:7px 0;border-bottom:1px solid rgba(255,255,255,.08)">${escapeHtml(v)}</td>
+        </tr>`;
+
+  return `<!DOCTYPE html>
+<html lang="es"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Reporte de Capacitación — ${nombre}</title></head>
+<body style="margin:0;padding:0;background:#0a1721;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#0a1721;padding:28px 12px">
+<tr><td align="center">
+<table role="presentation" width="640" cellpadding="0" cellspacing="0" style="max-width:640px;width:100%;background:#102435;border-radius:14px;overflow:hidden;border:1px solid rgba(212,175,55,.22)">
+
+  <tr><td style="background:#1a3a52;padding:32px 34px;border-bottom:3px solid #d4af37">
+    <p style="${font};font-size:10px;letter-spacing:3px;text-transform:uppercase;color:#d4af37;font-weight:700;margin:0 0 10px">Victorious Travelers Club · Elite Training</p>
+    <h1 style="${font};font-size:24px;color:#ffffff;margin:0;font-weight:700">Reporte de Capacitación</h1>
+    <p style="${font};font-size:14px;color:#9db0c2;margin:6px 0 0">${nombre} · ${escapeHtml(formatDateLocal(when))} · ${escapeHtml(hora)}</p>
+  </td></tr>
+
+  <tr><td style="padding:32px 34px">
+
+    <p style="${para}">Estimados,</p>
+    <p style="${para}">Les envío el resumen de la sesión de entrenamiento de <strong style="color:#e6c869">${nombre}</strong> el día ${escapeHtml(fechaEmail)} a las ${escapeHtml(hora)}</p>
+    <div style="height:26px"></div>
+
+    <p style="${label}">Resumen de la sesión</p>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 26px">
+      ${row('Duración', `${d.duracion_texto || '—'} min`)}
+      ${row('Módulo', String(d.modulo || '—'))}
+      ${row('Desempeño general', `${d.score_overall != null ? d.score_overall : '—'}/10 (${scoreTotal}%)`)}
+      ${row('Idioma', String(d.idioma || '—'))}
+    </table>
+
+    ${block('Análisis', d.resumen)}
+    ${block('Fortalezas identificadas', d.fortalezas)}
+    ${block('Áreas a mejorar', d.areas_mejora)}
+    ${block('Recomendación del coach', d.recomendacion_coach)}
+
+    <div style="border-top:1px solid rgba(212,175,55,.22);margin:8px 0 26px"></div>
+
+    <p style="${label}">Próximos pasos</p>
+    <p style="${para}">Para acceder al reporte completo con gráficos, análisis detallado de competencias y plan de acción personalizado, descargue el archivo <strong style="color:#e6c869">PDF adjunto</strong>.</p>
+    <p style="${para}">Para revisar la transcripción completa de la sesión, descargue el archivo de <strong style="color:#e6c869">audio (MP3) adjunto</strong>.</p>
+
+    <div style="border-top:1px solid rgba(212,175,55,.22);margin:26px 0"></div>
+
+    <p style="${para}">Quedo atento a cualquier pregunta.</p>
+    <p style="${para}">Saludos cordiales,</p>
+    <div style="height:14px"></div>
+    <p style="${para};margin:0"><strong style="color:#ffffff">El equipo de Victor-IA</strong></p>
+    <p style="${font};font-size:13px;color:#9db0c2;margin:2px 0 0">Entrenamiento VTC Capacitación</p>
+    <p style="${font};font-size:13px;color:#d4af37;margin:2px 0 0">victor-ia.xyz</p>
+
+  </td></tr>
+
+  <tr><td style="background:#0a1721;padding:18px 34px;text-align:center;border-top:1px solid rgba(212,175,55,.18)">
+    <p style="${font};font-size:11px;color:#6f8298;margin:0">Generado automáticamente por Victor IA · ${escapeHtml(formatDateLocal(when))} ${escapeHtml(hora)} (America/Cancún)</p>
+  </td></tr>
+
+</table>
+</td></tr></table>
+</body></html>`;
+}
+
+/** Aplana texto: quita viñetas heredadas y normaliza saltos. */
+function plain(text) {
+  if (text === null || text === undefined || text === '') return '—';
+  return String(text)
+    .replace(/<br\s*\/?>/gi, '\n')
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .join('\n');
+}
+
+function escapeHtml(str) {
+  return String(str == null ? '' : str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function nl2br(str) {
+  return escapeHtml(str).replace(/\n/g, '<br>');
+}
+
+// ════════════════════════════════════════════════════════════
+// ENVÍO
+// ════════════════════════════════════════════════════════════
 
 class EmailSender {
   constructor(apiKey) {
@@ -21,26 +353,17 @@ class EmailSender {
    * Enviar email con adjuntos (PDF + MP3)
    */
   async sendWithAttachments(options) {
-    const {
-      to,
-      from,
-      subject,
-      htmlBody,
-      attachments = []
-    } = options;
+    const { to, from, subject, htmlBody, textBody, attachments = [] } = options;
 
-    // Validar campos requeridos
     if (!to || !from || !subject || !htmlBody) {
       throw new Error('Missing required email fields: to, from, subject, htmlBody');
     }
 
-    // Validar adjuntos
     if (!Array.isArray(attachments)) {
       throw new Error('Attachments must be an array');
     }
 
-    // Preparar adjuntos para Resend
-    const preparedAttachments = attachments.map(att => {
+    const preparedAttachments = attachments.map((att) => {
       if (!att.filename || !att.content) {
         throw new Error('Each attachment must have filename and content');
       }
@@ -51,11 +374,10 @@ class EmailSender {
       };
     });
 
-    console.log(`[EMAIL] Preparing email to: ${to}`);
+    console.log(`[EMAIL] Preparing email to: ${Array.isArray(to) ? to.join(', ') : to}`);
     console.log(`[EMAIL] Subject: ${subject}`);
-    console.log(`[EMAIL] Attachments: ${preparedAttachments.length}`);
+    console.log(`[EMAIL] Attachments: ${preparedAttachments.map((a) => a.filename).join(', ') || 'ninguno'}`);
 
-    // Retry logic
     let attempt = 0;
     let lastError;
 
@@ -64,13 +386,17 @@ class EmailSender {
         attempt++;
         console.log(`[EMAIL] Attempt ${attempt}/${this.maxRetries}...`);
 
-        const response = await this.resend.emails.send({
-          from: from,
-          to: to,
-          subject: subject,
+        const payload = {
+          from,
+          to,
+          subject,
           html: htmlBody,
           attachments: preparedAttachments
-        });
+        };
+        // El texto plano mejora la entregabilidad y da fallback en clientes sin HTML
+        if (textBody) payload.text = textBody;
+
+        const response = await this.resend.emails.send(payload);
 
         if (response.error) {
           throw new Error(`Resend error: ${response.error.message}`);
@@ -81,23 +407,23 @@ class EmailSender {
         return {
           success: true,
           messageId: response.data.id,
+          subject,
+          attachments: preparedAttachments.map((a) => a.filename),
           timestamp: new Date().toISOString(),
-          attempt: attempt
+          attempt
         };
-
       } catch (error) {
         lastError = error;
         console.error(`[EMAIL] Attempt ${attempt} failed:`, error.message);
 
         if (attempt < this.maxRetries) {
-          const delay = Math.pow(2, attempt) * 1000; // Exponential backoff
+          const delay = Math.pow(2, attempt) * 1000; // Backoff exponencial
           console.log(`[EMAIL] Retrying in ${delay}ms...`);
           await this.sleep(delay);
         }
       }
     }
 
-    // All retries failed
     console.error(`[EMAIL] All ${this.maxRetries} attempts failed`);
     return {
       success: false,
@@ -107,24 +433,15 @@ class EmailSender {
     };
   }
 
-  /**
-   * Validar dirección de email
-   */
   validateEmail(email) {
     const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     return re.test(email);
   }
 
-  /**
-   * Sleep utility
-   */
   sleep(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
-  /**
-   * Get email headers (para logging)
-   */
   static getEmailHeaders(options) {
     return {
       from: options.from,
@@ -138,7 +455,7 @@ class EmailSender {
 }
 
 /**
- * Export singleton function
+ * Envío con validación de direcciones. Acepta uno o varios destinatarios.
  */
 async function sendEmailWithAttachments(options) {
   const apiKey = process.env.RESEND_API_KEY;
@@ -148,15 +465,59 @@ async function sendEmailWithAttachments(options) {
 
   const sender = new EmailSender(apiKey);
 
-  // Validar emails
-  if (!sender.validateEmail(options.to)) {
-    throw new Error(`Invalid recipient email: ${options.to}`);
+  const recipients = Array.isArray(options.to) ? options.to : [options.to];
+  for (const addr of recipients) {
+    if (!sender.validateEmail(addr)) {
+      throw new Error(`Invalid recipient email: ${addr}`);
+    }
   }
-  if (!sender.validateEmail(options.from)) {
+
+  // El remitente puede venir como "Nombre <correo@dominio>" — validamos solo el correo
+  const fromAddress = extractAddress(options.from);
+  if (!sender.validateEmail(fromAddress)) {
     throw new Error(`Invalid sender email: ${options.from}`);
   }
 
   return sender.sendWithAttachments(options);
 }
 
-module.exports = { EmailSender, sendEmailWithAttachments };
+/** Extrae el correo de un remitente con formato "Nombre <correo@dominio>". */
+function extractAddress(value) {
+  const match = String(value || '').match(/<([^>]+)>/);
+  return (match ? match[1] : String(value || '')).trim();
+}
+
+/**
+ * Construye el paquete completo del correo (asunto + cuerpos + nombres de adjunto).
+ * Lo consume el pipeline en api-process-call.js.
+ *
+ * @param {object} data Datos del reporte ya mapeados
+ * @param {Date|string|number} [when] Momento de la sesión
+ */
+function buildEmailPackage(data, when) {
+  const basename = buildAttachmentBasename(data && data.nombre, when);
+  return {
+    subject: buildEmailSubject(data, when),
+    html: buildEmailHTML(data, when),
+    text: buildEmailText(data, when),
+    basename,
+    pdfFilename: `${basename}.pdf`,
+    mp3Filename: `${basename}.mp3`,
+    fecha_formateada: formatDateLocal(when),
+    fecha_email: formatDateLong(when),
+    hora_america_cancun: formatTimezoneCancun(when)
+  };
+}
+
+module.exports = {
+  EmailSender,
+  sendEmailWithAttachments,
+  buildEmailPackage,
+  buildEmailSubject,
+  buildEmailHTML,
+  buildEmailText,
+  buildAttachmentBasename,
+  formatTimezoneCancun,
+  formatDateLocal,
+  formatDateLong
+};

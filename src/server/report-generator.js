@@ -1,17 +1,26 @@
 /**
- * REPORT GENERATOR — Renderiza HTML del reporte
+ * REPORT GENERATOR — Renderiza el HTML del reporte premium
  *
- * Entrada: datos completos del reporte
- * Salida: HTML renderizado (listo para email + PDF)
+ * Entrada: datos completos del pipeline (mapper + análisis + charts)
+ * Salida:  HTML autocontenido, listo para PDF (Puppeteer) y para archivar
+ *
+ * Cambio v3.1: los gráficos ya no se inyectan como <script> de ApexCharts.
+ * Se renderizan como SVG inline en el servidor (src/server/chart-svg.js).
+ * Motivo: ni Chromium headless con `networkidle2` ni un cliente de correo
+ * garantizan la ejecución de JS de un CDN; el SVG siempre se ve.
  */
 
 const Handlebars = require('handlebars');
 const fs = require('fs');
 const path = require('path');
+const { buildReportCharts } = require('./chart-svg');
+
+// Circunferencia del anillo de score (r = 58 en el viewBox del template)
+const RING_CIRCUMFERENCE = 2 * Math.PI * 58;
 
 class ReportGenerator {
   constructor() {
-    // En Lambda, __dirname no funciona. Usar process.cwd() + ruta relativa.
+    // En Lambda, __dirname apunta al bundle; process.cwd() sí resuelve al proyecto.
     this.templatePath = path.join(process.cwd(), 'src/templates/reporte-master.html');
     this.template = null;
     this.loadTemplate();
@@ -32,19 +41,13 @@ class ReportGenerator {
    * Generar reporte HTML completo
    */
   async generate(data) {
-    console.log('[REPORT] Generating report for:', data.nombre);
+    console.log('[REPORT] Generating report for:', data && data.nombre);
 
     try {
-      // Preparar datos
-      const reportData = this.prepareData(data);
-
-      // Renderizar
+      const reportData = this.prepareData(data || {});
       const html = this.template(reportData);
-
-      // Inyectar scripts de gráficos
-      const finalHTML = this.injectChartsScripts(html, reportData.charts);
-
-      return finalHTML;
+      console.log(`[REPORT] HTML generado: ${html.length} chars`);
+      return html;
     } catch (error) {
       console.error('[REPORT] Error generating report:', error.message);
       throw error;
@@ -52,162 +55,215 @@ class ReportGenerator {
   }
 
   /**
-   * Preparar datos para renderizado
+   * Preparar y normalizar datos para el template
    */
   prepareData(data) {
+    const score = this.num(data.score_overall, 8);
+    const scoreTotal = this.num(data.scoreTotal, Math.round((score / 10) * 100));
+    const nivel = this.nivelDesempeno(score);
+
+    // Anillo de progreso: stroke-dasharray precalculado (Handlebars no hace aritmética)
+    const dash = (RING_CIRCUMFERENCE * Math.min(100, Math.max(0, scoreTotal))) / 100;
+
+    const competencias = Array.isArray(data.competencias) && data.competencias.length
+      ? data.competencias
+      : this.competenciasFallback(data);
+
+    // Los gráficos se construyen sobre los datos ya normalizados
+    const charts = buildReportCharts({
+      competencias,
+      charts: data.charts || {},
+      nombre: data.nombre
+    });
+
+    const transcription = Array.isArray(data.transcription) ? data.transcription : [];
+
     return {
-      // Información básica
-      nombre: data.nombre || 'N/A',
-      empleado_id: data.empleado_id || 'N/A',
-      puesto: data.puesto || 'N/A',
-      modulo: data.modulo || 'N/A',
-      familia_nombre: data.familia_nombre || 'N/A',
-      idioma: data.idioma || 'Español',
+      // ── Identidad ──────────────────────────────────────────
+      nombre: this.v(data.nombre, 'Asesor VTC'),
+      empleado_id: this.v(data.empleado_id, 'VTC-001'),
+      puesto: this.v(data.puesto, 'Asesor'),
+      modulo: this.v(data.modulo, 'Meet & Greet'),
+      familia_nombre: this.v(data.familia_nombre, 'Familia simulada'),
+      idioma: this.v(data.idioma, 'Español'),
+      conversationId: this.v(data.conversationId, '—'),
 
-      // Fecha y hora
-      fecha_sesion: data.fecha_sesion || new Date().toLocaleDateString('es-MX'),
-      hora_sesion: data.hora_sesion || new Date().toLocaleTimeString('es-MX'),
-      duracion_texto: data.duracion_texto || '00:00',
-      duracion_minutos: data.duracion_minutos || 0,
+      // ── Fecha y hora ───────────────────────────────────────
+      fecha_sesion: this.v(data.fecha_sesion, new Date().toLocaleDateString('es-MX')),
+      hora_sesion: this.v(data.hora_sesion, ''),
+      hora_cancun: this.v(data.hora_cancun, data.hora_sesion),
+      fecha_larga: this.v(data.fecha_larga, data.fecha_sesion),
+      duracion_texto: this.v(data.duracion_texto, '00:00'),
+      duracion_minutos: this.num(data.duracion_minutos, 0),
 
-      // Scores
-      score_rapport: data.score_rapport || 8,
-      score_pnl: data.score_pnl || 8,
-      score_postura: data.score_postura || 9,
-      score_objecciones: data.score_objecciones || 7,
-      score_lectura_sala: data.score_lectura_sala || 9,
-      score_cierre: data.score_cierre || 8,
-      score_overall: data.score_overall || 8,
-      scoreTotal: data.scoreTotal || 80,
-      mejora_potencial: data.mejora_potencial || '20%',
+      // ── Scores ─────────────────────────────────────────────
+      score_rapport: this.num(data.score_rapport, 8),
+      score_pnl: this.num(data.score_pnl, 8),
+      score_postura: this.num(data.score_postura, 9),
+      score_objecciones: this.num(data.score_objecciones, 7),
+      score_lectura_sala: this.num(data.score_lectura_sala, 9),
+      score_cierre: this.num(data.score_cierre, 8),
+      score_overall: score,
+      scoreTotal,
+      mejora_potencial: this.v(data.mejora_potencial, `${Math.max(0, 100 - scoreTotal)}%`),
 
-      // Resumen y análisis
-      resumen: data.resumen || 'Sesión de entrenamiento completada',
+      // Anillo + nivel
+      ring_dash: Math.round(dash * 100) / 100,
+      ring_gap: Math.round((RING_CIRCUMFERENCE - dash) * 100) / 100,
+      ring_color: nivel.color,
+      nivel_desempeno: nivel.label,
+      nivel_clase: nivel.cls,
+
+      // ── Narrativa ──────────────────────────────────────────
+      resumen: this.v(data.resumen, 'Sesión de entrenamiento completada.'),
+      actividad_sesion: this.v(data.actividad_sesion, 'Sesión completada.'),
+      recomendacion_coach: this.v(
+        data.recomendacion_coach,
+        this.recomendacionFallback(score, competencias)
+      ),
+      analisis_pnl: this.v(data.analisis_pnl, 'Sin observaciones de PNL registradas en esta sesión.'),
+      objeciones_trabajadas: this.v(data.objeciones_trabajadas, 'No se registraron objeciones.'),
+
+      // Texto plano (fallback) + listas (presentación preferida)
       fortalezas: this.formatText(data.fortalezas),
       areas_mejora: this.formatText(data.areas_mejora),
-      analisis_pnl: data.analisis_pnl || 'N/A',
-      objeciones_trabajadas: data.objeciones_trabajadas || 'N/A',
-      actividad_sesion: data.actividad_sesion || 'Sesión completada',
+      fortalezas_list: this.toList(data.fortalezas_list, data.fortalezas),
+      areas_list: this.toList(data.areas_list, data.areas_mejora),
+      objeciones_list: this.toList(data.objeciones_list, data.objeciones_trabajadas, true),
 
-      // Neurociencia
-      principios_neuro: data.principios_neuro || [],
-      cumplimiento_neuro: data.cumplimiento_neuro || 85,
+      // ── Neurociencia ───────────────────────────────────────
+      principios_neuro: Array.isArray(data.principios_neuro) ? data.principios_neuro : [],
+      cumplimiento_neuro: this.num(data.cumplimiento_neuro, 85),
 
-      // Plan de acción
-      plan_1: data.plan_1 || 'Diagnóstico completado',
-      plan_2: data.plan_2 || 'Plan de mejora establecido',
-      plan_3: data.plan_3 || 'Validación en 7 días',
+      // ── Plan de acción ─────────────────────────────────────
+      plan_1: this.v(data.plan_1, 'Diagnóstico completado.'),
+      plan_2: this.v(data.plan_2, 'Plan de mejora establecido.'),
+      plan_3: this.v(data.plan_3, 'Validación en 7 días.'),
 
-      // Transcripción
-      transcription: data.transcription || [],
+      // ── Transcripción ──────────────────────────────────────
+      transcription,
+      transcript_turnos: transcription.length,
 
-      // URLs (CTAs)
-      pop_up_url: data.pop_up_url || '#',
-      pdf_download_url: data.pdf_download_url || '#',
-      retrain_url: data.retrain_url || '#',
+      // ── CTAs ───────────────────────────────────────────────
+      pop_up_url: this.v(data.pop_up_url, '#'),
+      pdf_download_url: this.v(data.pdf_download_url, '#'),
+      retrain_url: this.v(data.retrain_url, '#'),
 
-      // Competencias
-      competencias: data.competencias || [],
+      // ── Contexto del agente (KB / RAG) ─────────────────────
+      agente: data.agente || {},
+      kb_fidelity: data.kb_fidelity || null,
+      kb_topics: data.kb_topics || [],
 
-      // Charts (para inyectar en scripts)
-      charts: data.charts || {}
+      // ── Competencias + gráficos SVG ────────────────────────
+      competencias,
+      ...charts
     };
   }
 
-  /**
-   * Inyectar scripts de gráficos
-   */
-  injectChartsScripts(html, chartsData) {
-    const chartScripts = `
-    <script>
-      // ApexCharts initialization
-      const options = {
-        chart: { type: 'bar', toolbar: { show: false } },
-        colors: ['#C8A96A', '#4CAF50', '#0066CC'],
-        theme: { mode: 'dark' }
-      };
+  // ════════════════════════════════════════════
+  // HELPERS
+  // ════════════════════════════════════════════
 
-      // Competencias Chart
-      if (document.getElementById('competenciasChart')) {
-        new ApexCharts(document.getElementById('competenciasChart'), {
-          ...options,
-          series: [{
-            name: 'Score',
-            data: ${JSON.stringify(chartsData.competencias?.values || [])}
-          }],
-          xaxis: { categories: ${JSON.stringify(chartsData.competencias?.categories || [])} }
-        }).render();
-      }
+  /** Valor con default; descarta vacíos y nulos. */
+  v(value, def) {
+    if (value === null || value === undefined) return def;
+    const s = String(value).trim();
+    return s === '' || s === '-' ? def : s;
+  }
 
-      // Timeline Chart
-      if (document.getElementById('timelineChart')) {
-        new ApexCharts(document.getElementById('timelineChart'), {
-          ...options,
-          chart: { type: 'line' },
-          series: [{
-            name: 'Score',
-            data: ${JSON.stringify(chartsData.timeline?.points || [])}
-          }],
-          xaxis: { categories: ${JSON.stringify(chartsData.timeline?.labels || [])} }
-        }).render();
-      }
-
-      // Emotional Chart
-      if (document.getElementById('emotionalChart')) {
-        new ApexCharts(document.getElementById('emotionalChart'), {
-          ...options,
-          chart: { type: 'area' },
-          series: [{
-            name: 'Engagement',
-            data: ${JSON.stringify(chartsData.emotional?.points || [])}
-          }]
-        }).render();
-      }
-
-      // Speech Chart
-      if (document.getElementById('speechChart')) {
-        new ApexCharts(document.getElementById('speechChart'), {
-          ...options,
-          chart: { type: 'pie' },
-          series: [${chartsData.speech?.victor || 65}, ${chartsData.speech?.usuario || 30}, ${chartsData.speech?.otros || 5}],
-          labels: ['Victor', 'Usuario', 'Otros']
-        }).render();
-      }
-
-      // Objeciones Chart (placeholder)
-      if (document.getElementById('objecionesChart')) {
-        new ApexCharts(document.getElementById('objecionesChart'), {
-          ...options,
-          chart: { type: 'donut' },
-          series: [70, 30],
-          labels: ['Manejadas', 'Pendientes']
-        }).render();
-      }
-
-      // Multi-Speaker Chart
-      if (document.getElementById('multiSpeakerChart')) {
-        new ApexCharts(document.getElementById('multiSpeakerChart'), {
-          ...options,
-          chart: { type: 'radar' },
-          series: [{
-            name: 'Victor',
-            data: [90, 85, 88, 90, 87]
-          }],
-          xaxis: { categories: ['Rapport', 'PNL', 'Postura', 'Cierre', 'Lectura'] }
-        }).render();
-      }
-    </script>
-    `;
-
-    return html.replace('</body>', chartScripts + '</body>');
+  /** Número finito con default. */
+  num(value, def) {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : def;
   }
 
   /**
-   * Formatear texto multilinea
+   * Convierte un bloque de texto en lista de puntos.
+   * Acepta separadores por salto de línea o, si `commaSplit`, por coma.
+   * Limpia viñetas heredadas (✓, •, -, *) para que el CSS ponga la suya.
    */
+  toList(preferred, rawText, commaSplit = false) {
+    if (Array.isArray(preferred) && preferred.length) {
+      return preferred.map((x) => this.stripBullet(String(x))).filter(Boolean);
+    }
+    if (!rawText) return [];
+
+    const text = String(rawText);
+    let parts = text.split(/\r?\n|(?:^|\s)[•·]\s+/).filter((p) => p && p.trim());
+
+    // Si vino todo en una línea y se pidió, partimos por comas de nivel superior
+    if (parts.length <= 1 && commaSplit) {
+      parts = text.split(/,(?![^(]*\))/).filter((p) => p && p.trim());
+    }
+
+    const items = parts.map((p) => this.stripBullet(p)).filter(Boolean);
+    return items.length > 1 ? items : items.length === 1 ? items : [];
+  }
+
+  /** Quita viñetas y numeración inicial. */
+  stripBullet(line) {
+    return String(line)
+      .replace(/^\s*(?:[✓✔✅×✗•·▪▸►◆●○*\-–—]|\d+[.)])\s*/u, '')
+      .trim();
+  }
+
+  /** Clasificación del desempeño (etiqueta + color + clase CSS del badge). */
+  nivelDesempeno(score) {
+    if (score >= 9) return { label: 'Desempeño élite', cls: 'b-good', color: '#009E73' };
+    if (score >= 8) return { label: 'Desempeño sólido', cls: 'b-gold', color: '#d4af37' };
+    if (score >= 6.5) return { label: 'En desarrollo', cls: 'b-warn', color: '#E69F00' };
+    return { label: 'Requiere refuerzo', cls: 'b-bad', color: '#D55E00' };
+  }
+
+  /**
+   * Recomendación del coach cuando el agente no la envía.
+   * Se construye con los datos reales de la sesión — no es texto genérico.
+   */
+  recomendacionFallback(score, competencias) {
+    const ordenadas = (competencias || []).slice().sort((a, b) => a.score - b.score);
+    const baja = ordenadas[0];
+    const alta = ordenadas[ordenadas.length - 1];
+
+    if (!baja || !alta) {
+      return `Desempeño global de ${score}/10. Mantener el ritmo de práctica y revisar la grabación con el gerente.`;
+    }
+
+    if (score >= 8.5) {
+      return `Desempeño de ${score}/10: listo para piso de ventas. Capitalizar ${alta.name} `
+        + `(${alta.score}/10) usando la grabación como material de referencia para el equipo. `
+        + `Único punto de vigilancia: ${baja.name} (${baja.score}/10) — reforzar en la sesión semanal.`;
+    }
+
+    if (score >= 7) {
+      return `Desempeño de ${score}/10: sólido con una brecha clara. Concentrar el coaching de los `
+        + `próximos 7 días en ${baja.name} (${baja.score}/10) sin tocar ${alta.name} (${alta.score}/10), `
+        + `que ya está en estándar. Reevaluar con una simulación al séptimo día.`;
+    }
+
+    return `Desempeño de ${score}/10: requiere refuerzo antes de piso de ventas. Prioridad absoluta en `
+      + `${baja.name} (${baja.score}/10) con acompañamiento diario. Apoyarse en ${alta.name} `
+      + `(${alta.score}/10) como base de confianza. Revalidar en 7 días con simulación completa.`;
+  }
+
+  /** Competencias mínimas cuando el mapper no las entrega. */
+  competenciasFallback(data) {
+    return [
+      { name: 'Rapport', score: this.num(data.score_rapport, 8) },
+      { name: 'PNL', score: this.num(data.score_pnl, 8) },
+      { name: 'Postura', score: this.num(data.score_postura, 9) },
+      { name: 'Objeciones', score: this.num(data.score_objecciones, 7) },
+      { name: 'Lectura Sala', score: this.num(data.score_lectura_sala, 9) },
+      { name: 'Cierre', score: this.num(data.score_cierre, 8) }
+    ];
+  }
+
+  /** Texto multilínea -> HTML con <br> (se inyecta con triple stash). */
   formatText(text) {
     if (!text) return '';
-    return text.split('\n').filter(l => l.trim()).join('<br>');
+    return Handlebars.escapeExpression(String(text))
+      .split('\n')
+      .filter((l) => l.trim())
+      .join('<br>');
   }
 }
 

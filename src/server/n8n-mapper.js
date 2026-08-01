@@ -1,9 +1,15 @@
 /**
  * N8N MAPPER — Transforma data de ElevenLabs → Variables del reporte
  *
- * Entrada: webhook body de ElevenLabs
- * Salida: objeto con 50+ campos para renderizar reporte HTML
+ * Entrada: webhook body de ElevenLabs (o payload plano de N8N)
+ * Salida: objeto con 60+ campos para renderizar el reporte HTML y el email
  */
+
+const {
+  formatTimezoneCancun,
+  formatDateLocal,
+  formatDateLong
+} = require('./email-sender');
 
 function mapElevenLabsData(webhookBody) {
   const wh = webhookBody.body || webhookBody;
@@ -28,12 +34,16 @@ function mapElevenLabsData(webhookBody) {
   const familia_nombre = v(safe(wh, 'familia_nombre', null), 'López');
 
   // ===== FECHA Y HORA =====
-  const ahora = new Date();
-  const fecha_sesion = ahora.toLocaleDateString('es-MX', { year: 'numeric', month: '2-digit', day: '2-digit' });
-  const hora_sesion = ahora.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
+  // Preferimos el inicio real de la conversación; si no viene, el momento de proceso.
+  // Todo se expresa en America/Cancun: es el huso operativo del club.
+  const sessionDate = resolveSessionDate(wh);
+  const fecha_sesion = formatDateLocal(sessionDate);
+  const fecha_larga = formatDateLong(sessionDate);
+  const hora_cancun = formatTimezoneCancun(sessionDate);
+  const hora_sesion = hora_cancun;
 
   // ===== DURACIÓN =====
-  const rawDuracion = safe(wh, 'duracion_segundos', null);
+  const rawDuracion = safe(wh, 'duracion_segundos', null) ?? safe(wh, 'call_duration_secs', null);
   const parsedDuracion = rawDuracion === null || rawDuracion === '' ? NaN : Number(rawDuracion);
   const duracion_sec = Number.isFinite(parsedDuracion) && parsedDuracion > 0 ? Math.round(parsedDuracion) : 570;
   const duracion_minutos = Math.floor(duracion_sec / 60);
@@ -74,9 +84,7 @@ function mapElevenLabsData(webhookBody) {
   const objeciones_trabajadas = v(safe(wh, 'objeciones_trabajadas', null),
     'Precio (respondió con valor-tiempo), Garantía (explicó bien), Seguridad (faltó dato neurocientífico)');
 
-  const resumen = `Sesión de ${duracion_texto} con ${nombre} en ${modulo}. Score: ${score_overall}/10 (${scoreTotal}%). Familia: Sentimiento positivo. Recomendación: Refuerzo en fortalezas clave.`;
-
-  // ===== COMPETENCIAS (para gráfico) =====
+  // ===== COMPETENCIAS (para gráficos) =====
   const competencias = [
     { name: 'Rapport', score: score_rapport },
     { name: 'PNL', score: score_pnl },
@@ -86,15 +94,39 @@ function mapElevenLabsData(webhookBody) {
     { name: 'Cierre', score: score_cierre }
   ];
 
+  // slice() evita mutar `competencias` (los gráficos mantienen su orden original)
+  const comp_baja = competencias.slice().sort((a, b) => a.score - b.score)[0];
+  const comp_alta = competencias.slice().sort((a, b) => b.score - a.score)[0];
+
+  // ===== RESUMEN (sección ANÁLISIS del email) =====
+  // Si el agente entrega su propio resumen, ese manda: es análisis real de la
+  // llamada. El generado es un respaldo con los datos duros de la sesión.
+  const resumen = v(
+    safe(wh, 'resumen', null) || safe(wh, 'resumen_sesion', null) || safe(wh, 'analisis_general', null),
+    `Sesión de ${duracion_texto} en el módulo ${modulo} con ${nombre}. Desempeño global de `
+      + `${score_overall}/10 (${scoreTotal}%). Competencia más fuerte: ${comp_alta.name} `
+      + `(${comp_alta.score}/10). Competencia a reforzar: ${comp_baja.name} (${comp_baja.score}/10).`
+  );
+
+  // ===== RECOMENDACIÓN DEL COACH =====
+  // Dinámica: viene de la llamada cuando el agente la genera; si no, se
+  // construye con los datos reales de esta sesión (nunca texto genérico).
+  const recomendacion_coach = v(
+    safe(wh, 'recomendacion_coach', null)
+      || safe(wh, 'recomendacion', null)
+      || safe(wh, 'coach_recommendation', null),
+    buildRecomendacion(score_overall, comp_alta, comp_baja)
+  );
+
   // ===== PRINCIPIOS NEUROCIENTÍFICOS =====
-  const principios_neuro = safe(wh, 'principios_neuro', null) || [
+  const principios_neuro = normalizePrincipios(safe(wh, 'principios_neuro', null)) || [
     {
       titulo: 'Activación Límbica',
       descripcion: 'Se activó el sistema límbico mediante calibración visual y validación de sueños familiares.'
     },
     {
       titulo: 'Anclajes Emocionales',
-      descripcion: 'Ancla "memoria familiar" se activó. Reacción: asintencia y sonrisa genuina.'
+      descripcion: 'Ancla "memoria familiar" se activó. Reacción: asentimiento y sonrisa genuina.'
     },
     {
       titulo: 'Reencuadre PNL',
@@ -102,7 +134,7 @@ function mapElevenLabsData(webhookBody) {
     },
     {
       titulo: 'Espejeo de Submodalidades',
-      descripcion: 'Sincronización de tono y ritmo generó rapport neuronal. Familia bajó defensas rápidamente.'
+      descripcion: 'Sincronización de tono y ritmo generó rapport neuronal. La familia bajó defensas rápidamente.'
     },
     {
       titulo: 'Sincronización Neuronal',
@@ -110,13 +142,14 @@ function mapElevenLabsData(webhookBody) {
     }
   ];
 
-  const cumplimiento_neuro = safe(wh, 'cumplimiento_neuro', 85) || 85;
+  // El agente manda este valor a veces en escala 0-10 y a veces como porcentaje.
+  // El reporte siempre lo pinta como % (ancho de barra), así que normalizamos aquí.
+  const rawCumplimiento = Number(safe(wh, 'cumplimiento_neuro', null));
+  const cumplimiento_neuro = Number.isFinite(rawCumplimiento) && rawCumplimiento > 0
+    ? Math.round(rawCumplimiento <= 10 ? rawCumplimiento * 10 : Math.min(100, rawCumplimiento))
+    : 85;
 
   // ===== PLAN DE ACCIÓN =====
-  // slice() evita mutar `competencias` (el gráfico mantiene su orden original)
-  const comp_baja = competencias.slice().sort((a, b) => a.score - b.score)[0];
-  const comp_alta = competencias.slice().sort((a, b) => b.score - a.score)[0];
-
   const plan_1 = `Score actual: ${score_overall}/10 (${scoreTotal}%). Fortaleza: ${comp_alta.name} (${comp_alta.score}/10). Área crítica: ${comp_baja.name} (${comp_baja.score}/10).`;
 
   const plan_2 = `Coaching intensivo en ${comp_baja.name} (3 sesiones de 20 min c/u). Práctica diaria: 2 simulaciones mínimo. Meta: ${comp_baja.name} de ${comp_baja.score}/10 → 8+/10 en 7 días.`;
@@ -125,12 +158,16 @@ function mapElevenLabsData(webhookBody) {
 
   // ===== ACTIVIDAD SESIÓN =====
   const actividad_sesion = v(safe(wh, 'actividad_sesion', null),
-    `${nombre} demostró dominio del módulo ${modulo} en ${duracion_texto}. La familia participó activamente. Se trabajaron objeciones principales. Puntos de quiebre identificados y manejados.`);
+    `${nombre} trabajó el módulo ${modulo} durante ${duracion_texto} minutos frente a la familia ${familia_nombre}. `
+      + `Se cubrieron las fases de apertura, descubrimiento, presentación y cierre, con manejo de objeciones en tiempo real.`);
 
-  // ===== TRANSCRIPCIÓN (si está disponible) =====
+  // ===== TRANSCRIPCIÓN =====
   let transcription = [];
-  if (safe(wh, 'transcript', null)) {
-    transcription = parseTranscript(safe(wh, 'transcript', ''), nombre, familia_nombre);
+  const turns = safe(wh, 'transcript_turns', null);
+  if (Array.isArray(turns) && turns.length) {
+    transcription = turnsToBubbles(turns, nombre, familia_nombre);
+  } else if (safe(wh, 'transcript', null)) {
+    transcription = parseTranscript(safe(wh, 'transcript', ''), nombre, familia_nombre, duracion_sec);
   }
 
   // ===== URLS (para CTAs) =====
@@ -150,9 +187,12 @@ function mapElevenLabsData(webhookBody) {
     modulo,
     familia_nombre,
 
-    // Fecha/Hora
+    // Fecha/Hora (todo en America/Cancun)
     fecha_sesion,
+    fecha_larga,
     hora_sesion,
+    hora_cancun,
+    session_iso: sessionDate.toISOString(),
     duracion_texto,
     duracion_minutos,
     duracion_sec,
@@ -170,11 +210,17 @@ function mapElevenLabsData(webhookBody) {
 
     // Análisis
     resumen,
+    recomendacion_coach,
     fortalezas,
     areas_mejora,
     analisis_pnl,
     objeciones_trabajadas,
     actividad_sesion,
+
+    // Listas normalizadas (presentación en el reporte)
+    fortalezas_list: splitItems(fortalezas),
+    areas_list: splitItems(areas_mejora),
+    objeciones_list: splitItems(objeciones_trabajadas, true),
 
     // Competencias (para gráficos)
     competencias,
@@ -200,13 +246,128 @@ function mapElevenLabsData(webhookBody) {
 
     // Metadata
     timestamp: new Date().toISOString(),
-    version: 'v3.0',
+    version: 'v3.1',
 
     // ===== CONTEXTO DEL AGENTE (KB + RAG) =====
-    // Enriquecimiento desde el snapshot de agent_4001kyww2ysve4ns6qhajvd6xrc8.
+    // Enriquecimiento desde el snapshot del agente ElevenLabs.
     // Permite al reporte mostrar contra qué guion se evaluó al asesor.
     agente: agentContext(modulo)
   };
+}
+
+/**
+ * Determina el momento real de la sesión.
+ * ElevenLabs expone el inicio en varios lugares según la versión del webhook.
+ *
+ * @param {object} wh
+ * @returns {Date}
+ */
+function resolveSessionDate(wh) {
+  const candidates = [
+    wh && wh.session_start,
+    wh && wh.start_time,
+    wh && wh.metadata && wh.metadata.start_time_unix_secs,
+    wh && wh.start_time_unix_secs,
+    wh && wh.event_timestamp
+  ];
+
+  for (const c of candidates) {
+    if (c === null || c === undefined || c === '') continue;
+
+    // Unix en segundos (ElevenLabs) vs milisegundos vs ISO string
+    if (typeof c === 'number' || /^\d+$/.test(String(c))) {
+      const n = Number(c);
+      const ms = n < 1e12 ? n * 1000 : n;
+      const d = new Date(ms);
+      if (!Number.isNaN(d.getTime()) && d.getFullYear() > 2000) return d;
+      continue;
+    }
+
+    const d = new Date(c);
+    if (!Number.isNaN(d.getTime())) return d;
+  }
+
+  return new Date();
+}
+
+/**
+ * Recomendación del coach derivada de los datos reales de la sesión.
+ * Solo se usa si el agente no envió la suya.
+ */
+function buildRecomendacion(score, alta, baja) {
+  if (score >= 8.5) {
+    return `Desempeño de ${score}/10: el asesor está listo para piso de ventas. Capitalizar `
+      + `${alta.name} (${alta.score}/10) usando la grabación como referencia para el equipo. `
+      + `Punto único de vigilancia: ${baja.name} (${baja.score}/10), a reforzar en la sesión semanal.`;
+  }
+  if (score >= 7) {
+    return `Desempeño de ${score}/10: base sólida con una brecha clara. Concentrar el coaching de los `
+      + `próximos 7 días exclusivamente en ${baja.name} (${baja.score}/10); ${alta.name} `
+      + `(${alta.score}/10) ya está en estándar y no requiere intervención. Revalidar al séptimo día.`;
+  }
+  return `Desempeño de ${score}/10: requiere refuerzo antes de piso de ventas. Prioridad absoluta en `
+    + `${baja.name} (${baja.score}/10) con acompañamiento diario. Usar ${alta.name} `
+    + `(${alta.score}/10) como base de confianza. Revalidar en 7 días con simulación completa.`;
+}
+
+/**
+ * Convierte un bloque de texto en lista de puntos limpios.
+ * @param {string} text
+ * @param {boolean} commaSplit Permite partir por comas si vino todo en una línea
+ */
+function splitItems(text, commaSplit = false) {
+  if (!text) return [];
+
+  let parts = String(text)
+    .replace(/<br\s*\/?>/gi, '\n')
+    .split(/\r?\n/)
+    .filter((p) => p && p.trim());
+
+  // Muchos agentes devuelven "A, B, C" en una sola línea.
+  // El lookahead evita partir dentro de un paréntesis: "Precio (valor, tiempo)".
+  if (parts.length <= 1 && commaSplit) {
+    parts = String(text).split(/,(?![^(]*\))/).filter((p) => p && p.trim());
+  }
+
+  return parts
+    .map((p) => p.replace(/^\s*(?:[✓✔✅×✗•·▪▸►◆●○*\-–—]|\d+[.)])\s*/u, '').trim())
+    .filter(Boolean);
+}
+
+/**
+ * Normaliza los principios neurocientíficos a [{titulo, descripcion}].
+ * Acepta array de objetos, array de strings o string con saltos de línea.
+ */
+function normalizePrincipios(raw) {
+  if (!raw) return null;
+
+  if (Array.isArray(raw)) {
+    const items = raw
+      .map((p) => {
+        if (p && typeof p === 'object') {
+          return {
+            titulo: String(p.titulo || p.title || p.nombre || 'Principio'),
+            descripcion: String(p.descripcion || p.description || p.detalle || '')
+          };
+        }
+        const text = String(p || '').trim();
+        if (!text) return null;
+        const [titulo, ...rest] = text.split(/:\s*/);
+        return { titulo, descripcion: rest.join(': ') || text };
+      })
+      .filter((p) => p && p.titulo);
+    return items.length ? items : null;
+  }
+
+  if (typeof raw === 'string') {
+    const items = splitItems(raw).map((line) => {
+      const [titulo, ...rest] = line.split(/:\s*/);
+      return { titulo, descripcion: rest.join(': ') || line };
+    });
+    return items.length ? items : null;
+  }
+
+  return null;
 }
 
 /**
@@ -244,48 +405,126 @@ function agentContext(modulo) {
   }
 }
 
+// ════════════════════════════════════════════
+// TRANSCRIPCIÓN
+// ════════════════════════════════════════════
+
+// ElevenLabs entrega los turnos con role "agent" / "user"
+const AGENT_KEYS = ['victor', 'carlos', 'george', 'jorge', 'agent', 'assistant', 'ai'];
+
+/** Formatea segundos a "mm:ss". */
+function mmss(totalSeconds) {
+  const s = Math.max(0, Math.round(Number(totalSeconds) || 0));
+  const m = Math.floor(s / 60);
+  return `${String(m).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+}
+
 /**
- * Parsear transcript y crear burbujas de chat con speaker detection
+ * Etiquetas de cada lado de la conversación.
+ *
+ * En ElevenLabs el rol `user` es quien habla al micrófono — el asesor en
+ * entrenamiento — y `agent` es la IA que interpreta al cliente/coach.
+ *
+ * Caso borde real: el agente se llama "Coach VICTOR" y el asesor evaluado
+ * también puede llamarse Victor. Si los nombres chocan, desambiguamos el lado
+ * de la IA; si no, el reporte muestra dos "VICTOR" y es ilegible.
  */
-function parseTranscript(transcriptText, asesorName, familyName) {
-  const bubbles = [];
-  const lines = transcriptText.split('\n').filter(l => l.trim());
+function speakerMap(asesorName, familyName) {
+  const asesor = String(asesorName || 'Asesor').trim();
+  const asesorKey = asesor.toLowerCase();
 
-  // ElevenLabs entrega los turnos con role "agent" / "user"
-  const AGENT_KEYS = ['victor', 'carlos', 'george', 'agent', 'assistant', 'ai'];
+  const agentLabel = (persona) =>
+    persona.toLowerCase() === asesorKey ? `${persona} (IA)` : persona;
 
-  const SPEAKERS = {
-    'victor': 'Victor',
-    'carlos': 'Carlos',
-    'george': 'George',
-    'agent': 'Victor',
-    'assistant': 'Victor',
-    [asesorName.toLowerCase()]: asesorName,
-    [familyName.toLowerCase()]: familyName,
-    'familia': familyName,
-    'usuario': familyName,
-    'user': familyName
+  return {
+    victor: agentLabel('Victor'),
+    carlos: agentLabel('Carlos'),
+    george: agentLabel('George'),
+    jorge: agentLabel('Jorge'),
+    agent: agentLabel('Victor'),
+    assistant: agentLabel('Victor'),
+    ai: agentLabel('Victor'),
+    [asesorKey]: asesor,
+    [String(familyName).toLowerCase()]: familyName,
+    familia: familyName,
+    usuario: asesor,
+    user: asesor
   };
+}
+
+/**
+ * Convierte los turnos crudos de ElevenLabs en burbujas de chat.
+ * Ventaja sobre parseTranscript: conserva el timestamp real del turno.
+ *
+ * @param {Array<{role?:string, message?:string, time_in_call_secs?:number}>} turns
+ */
+function turnsToBubbles(turns, asesorName, familyName) {
+  const SPEAKERS = speakerMap(asesorName, familyName);
+
+  return turns
+    .map((turn) => {
+      const rawSpeaker = String(turn.role || turn.speaker || turn.source || 'agent').toLowerCase().trim();
+      const text = String(turn.message || turn.text || turn.content || '').trim();
+      if (!text) return null;
+
+      const isAgent = AGENT_KEYS.includes(rawSpeaker);
+      const secs = turn.time_in_call_secs ?? turn.time_in_call ?? turn.start_time ?? null;
+
+      return {
+        speaker: SPEAKERS[rawSpeaker] || rawSpeaker,
+        text,
+        timestamp: secs != null ? mmss(secs) : '',
+        side: isAgent ? 'right' : 'left',
+        type: isAgent ? 'agent' : 'user'
+      };
+    })
+    .filter(Boolean);
+}
+
+/**
+ * Parsear transcript en texto plano ("Speaker: mensaje") y crear burbujas.
+ * Los timestamps se estiman repartiendo la duración real entre los turnos —
+ * si se conoce la duración; en otro caso quedan vacíos (mejor nada que un dato falso).
+ *
+ * @param {string} transcriptText
+ * @param {string} asesorName
+ * @param {string} familyName
+ * @param {number} [duracionSec] Duración real de la llamada en segundos
+ */
+function parseTranscript(transcriptText, asesorName, familyName, duracionSec) {
+  const bubbles = [];
+  const lines = String(transcriptText).split('\n').filter((l) => l.trim());
+  const SPEAKERS = speakerMap(asesorName, familyName);
+  const total = Number(duracionSec);
+  const hasDuration = Number.isFinite(total) && total > 0 && lines.length > 1;
 
   lines.forEach((line, idx) => {
     const match = line.match(/^(.*?):\s*(.*)$/);
-    if (match) {
-      const [, speaker, text] = match;
-      const cleanSpeaker = speaker.trim().toLowerCase();
-      const displaySpeaker = SPEAKERS[cleanSpeaker] || speaker.trim();
-      const isAgent = AGENT_KEYS.includes(cleanSpeaker);
+    if (!match) return;
 
-      bubbles.push({
-        speaker: displaySpeaker,
-        text: text.trim(),
-        timestamp: `${String(Math.floor(idx / 2)).padStart(2, '0')}:${String((idx % 2) * 30).padStart(2, '0')}`,
-        side: isAgent ? 'right' : 'left',
-        type: isAgent ? 'agent' : 'user'
-      });
-    }
+    const [, speaker, text] = match;
+    if (!text.trim()) return;
+
+    const cleanSpeaker = speaker.trim().toLowerCase();
+    const displaySpeaker = SPEAKERS[cleanSpeaker] || speaker.trim();
+    const isAgent = AGENT_KEYS.includes(cleanSpeaker);
+
+    bubbles.push({
+      speaker: displaySpeaker,
+      text: text.trim(),
+      timestamp: hasDuration ? mmss((idx / (lines.length - 1)) * total) : '',
+      side: isAgent ? 'right' : 'left',
+      type: isAgent ? 'agent' : 'user'
+    });
   });
 
   return bubbles;
 }
 
-module.exports = { mapElevenLabsData, parseTranscript };
+module.exports = {
+  mapElevenLabsData,
+  parseTranscript,
+  turnsToBubbles,
+  splitItems,
+  resolveSessionDate
+};
