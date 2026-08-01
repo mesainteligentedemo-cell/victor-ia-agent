@@ -120,24 +120,29 @@ async function triggerRedeploy() {
 // RESEND API KEY
 // ════════════════════════════════════════════
 
+const RESEND_AUTO_PREFIX = 'victor-ia-agent-auto';
+
 /**
- * Crea una API key nueva en Resend y borra las antiguas con el mismo prefijo
- * de nombre (conserva la recién creada).
+ * Crea una API key nueva en Resend.
  *
- * @param {object} [opts]
- * @param {boolean} [opts.deleteOld=true]
+ * NO borra las keys antiguas: el borrado se hace en `cleanupOldResendKeys()`
+ * y SOLO después de confirmar que la key nueva quedó propagada a Vercel.
+ *
+ * Motivo (bug real evitado): si borráramos la key vieja aquí y la propagación
+ * a Vercel fallara (p. ej. falta VERCEL_TOKEN), producción se quedaría con una
+ * key ya eliminada -> el envío de reportes por email dejaría de funcionar.
+ *
  * @returns {Promise<object>}
  */
-async function rotateResendKey(opts = {}) {
+async function rotateResendKey() {
   const current = process.env.RESEND_API_KEY;
   if (!current) return { rotated: false, reason: 'RESEND_API_KEY no configurada' };
 
-  const namePrefix = 'victor-ia-agent-auto';
-  const name = `${namePrefix}-${new Date().toISOString().slice(0, 10)}`;
+  const name = `${RESEND_AUTO_PREFIX}-${new Date().toISOString().slice(0, 10)}`;
   const headers = { Authorization: `Bearer ${current}`, 'Content-Type': 'application/json' };
 
   try {
-    // 1. Crear la nueva key (permission full_access para poder rotar la próxima vez)
+    // permission full_access para que la key nueva pueda rotar la siguiente vez
     const created = await axios.post(
       'https://api.resend.com/api-keys',
       { name, permission: 'full_access' },
@@ -148,31 +153,42 @@ async function rotateResendKey(opts = {}) {
     const newId = created.data && created.data.id;
     if (!newKey) return { rotated: false, reason: 'Resend no devolvió token' };
 
-    // 2. Borrar keys automáticas anteriores (nunca la nueva, nunca las manuales)
-    const deleted = [];
-    if (opts.deleteOld !== false) {
-      try {
-        const list = await axios.get('https://api.resend.com/api-keys', { headers, timeout: 15000 });
-        const olds = ((list.data && list.data.data) || []).filter(
-          (k) => k.id !== newId && String(k.name || '').startsWith(namePrefix)
-        );
-        for (const k of olds) {
-          try {
-            await axios.delete(`https://api.resend.com/api-keys/${k.id}`, { headers, timeout: 15000 });
-            deleted.push(k.name);
-          } catch (e) {
-            console.warn(`[ROTATE] No se pudo borrar Resend key ${k.id}: ${e.message}`);
-          }
-        }
-      } catch (e) {
-        console.warn('[ROTATE] Listado de Resend keys falló:', e.message);
-      }
-    }
-
-    return { rotated: true, key: newKey, id: newId, name, deleted_old: deleted };
+    return { rotated: true, key: newKey, id: newId, name, cleanup_pending: true };
   } catch (error) {
     const detail = error.response ? JSON.stringify(error.response.data).slice(0, 300) : error.message;
     return { rotated: false, reason: detail };
+  }
+}
+
+/**
+ * Borra las keys automáticas anteriores de Resend, conservando `keepId`.
+ * Solo debe llamarse cuando la key nueva ya está activa en producción.
+ *
+ * Nunca toca keys creadas a mano (solo las que empiezan por el prefijo auto).
+ *
+ * @param {string} authKey Key con permisos para listar/borrar (la NUEVA)
+ * @param {string} keepId  Id de la key que se conserva
+ */
+async function cleanupOldResendKeys(authKey, keepId) {
+  const headers = { Authorization: `Bearer ${authKey}`, 'Content-Type': 'application/json' };
+  const deleted = [];
+  try {
+    const list = await axios.get('https://api.resend.com/api-keys', { headers, timeout: 15000 });
+    const olds = ((list.data && list.data.data) || []).filter(
+      (k) => k.id !== keepId && String(k.name || '').startsWith(RESEND_AUTO_PREFIX)
+    );
+    for (const k of olds) {
+      try {
+        await axios.delete(`https://api.resend.com/api-keys/${k.id}`, { headers, timeout: 15000 });
+        deleted.push(k.name);
+      } catch (e) {
+        console.warn(`[ROTATE] No se pudo borrar Resend key ${k.id}: ${e.message}`);
+      }
+    }
+    return { cleaned: true, deleted };
+  } catch (e) {
+    console.warn('[ROTATE] Listado de Resend keys falló:', e.message);
+    return { cleaned: false, reason: e.message, deleted };
   }
 }
 
@@ -238,9 +254,12 @@ async function rotateAll(opts = {}) {
   details.vtc_shared_secret = { rotated: true, length: newSecret.length, algorithm: 'randomBytes(32).hex' };
 
   // ── 2. RESEND_API_KEY (automático vía API de Resend)
+  // Solo se CREA aquí. El borrado de las keys viejas se difiere hasta confirmar
+  // que la nueva quedó propagada (ver paso 7).
+  let resend = null;
   if (opts.rotateResend !== false && !opts.dryRun) {
-    const resend = await rotateResendKey();
-    details.resend = { rotated: resend.rotated, id: resend.id, name: resend.name, deleted_old: resend.deleted_old, reason: resend.reason };
+    resend = await rotateResendKey();
+    details.resend = { rotated: resend.rotated, id: resend.id, name: resend.name, reason: resend.reason };
     if (resend.rotated) {
       newEnv.RESEND_API_KEY = resend.key;
       rotated.push('RESEND_API_KEY');
@@ -280,6 +299,25 @@ async function rotateAll(opts = {}) {
   }
   details.redeploy = redeploy;
 
+  // ── 7. Limpieza diferida de las keys viejas de Resend
+  // SOLO si la key nueva ya quedó en producción. Si la propagación falló, las
+  // conservamos: producción sigue usando la vieja y debe seguir funcionando.
+  if (resend && resend.rotated) {
+    if (vercel.updated) {
+      const cleanup = await cleanupOldResendKeys(resend.key, resend.id);
+      details.resend.cleanup = cleanup;
+    } else {
+      details.resend.cleanup = {
+        cleaned: false,
+        skipped: true,
+        reason:
+          'Propagación a Vercel no confirmada — se conservan las keys anteriores ' +
+          'para no dejar producción sin una key válida. Propaga RESEND_API_KEY y ' +
+          'vuelve a ejecutar la limpieza.'
+      };
+    }
+  }
+
   const status = failed.length === 0 ? 'success' : rotated.length ? 'partial' : 'failed';
 
   return {
@@ -302,6 +340,7 @@ module.exports = {
   rotateAll,
   generateSharedSecret,
   rotateResendKey,
+  cleanupOldResendKeys,
   checkElevenLabsKey,
   pushEnvToVercel,
   triggerRedeploy,
