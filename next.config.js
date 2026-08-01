@@ -17,7 +17,7 @@ const nextConfig = {
     // El template Handlebars se lee en runtime con fs.readFileSync.
     // Sin esto, Vercel puede no incluirlo en el bundle de la lambda.
     outputFileTracingIncludes: {
-      '/api/process-call': ['./src/templates/**'],
+      '/api/process-call': ['src/templates/**', './src/templates/**', '.next/server/src/templates/**'],
     },
   },
 

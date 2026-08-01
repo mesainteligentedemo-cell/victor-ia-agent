@@ -11,7 +11,8 @@ const path = require('path');
 
 class ReportGenerator {
   constructor() {
-    this.templatePath = path.join(__dirname, '../templates/reporte-master.html');
+    // En Lambda, __dirname no funciona. Usar process.cwd() + ruta relativa.
+    this.templatePath = path.join(process.cwd(), 'src/templates/reporte-master.html');
     this.template = null;
     this.loadTemplate();
   }
