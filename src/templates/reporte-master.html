@@ -9,31 +9,47 @@
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700;900&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 /* ══════════════════════════════════════════════════════════════
-   VTC ELITE — REPORTE DE CAPACITACIÓN
+   VTC ELITE — REPORTE DE CAPACITACIÓN  ·  v3.2 (layout fluido)
    Paleta de marca: navy #1a3a52 · dorado #d4af37
-   Todo el CSS va inline: el reporte viaja como PDF y como email,
-   ninguno de los dos contextos garantiza hojas de estilo externas.
+
+   Principios del rediseño:
+   1. NADA tiene altura fija. Todo se dimensiona por su contenido.
+      Una sesión de 5 minutos produce un reporte de 3 páginas; una de 30
+      produce 15. El documento crece, no se estira con huecos.
+   2. Ritmo vertical por margen entre bloques, no por padding de sección.
+      El padding de una sección vacía dejaba bandas muertas de 80px.
+   3. Cero saltos de página forzados. Solo se protege lo que NO debe
+      partirse por la mitad (una tarjeta, una burbuja, un paso del plan).
+   4. Todo el CSS va inline: el reporte viaja como PDF y como email,
+      ninguno de los dos contextos garantiza hojas de estilo externas.
    ══════════════════════════════════════════════════════════════ */
 
 :root{
   --navy:#1a3a52;
   --navy-deep:#102435;
   --navy-abyss:#0a1721;
-  --navy-lift:#22485f;
   --gold:#d4af37;
   --gold-soft:#e6c869;
   --gold-pale:#f2e3b0;
   --good:#009E73;
+  --good-lit:#3fd7ae;
   --warn:#E69F00;
+  --warn-lit:#ffc457;
   --bad:#D55E00;
+  --bad-lit:#ff9257;
   --sky:#56B4E9;
   --paper:#eef2f6;
   --muted:#9db0c2;
   --hair:rgba(212,175,55,.22);
   --hair-soft:rgba(255,255,255,.08);
-  --shadow-lg:0 24px 60px rgba(0,0,0,.45), 0 2px 0 rgba(255,255,255,.05) inset;
-  --shadow-md:0 12px 32px rgba(0,0,0,.32), 0 1px 0 rgba(255,255,255,.06) inset;
-  --radius:14px;
+  --shadow-lg:0 20px 48px rgba(0,0,0,.42), 0 1px 0 rgba(255,255,255,.05) inset;
+  --shadow-md:0 8px 24px rgba(0,0,0,.28), 0 1px 0 rgba(255,255,255,.06) inset;
+  --radius:13px;
+
+  /* Ritmo vertical único: cambiar aquí cambia todo el documento */
+  --gap-block:14px;
+  --gap-section:30px;
+  --pad-x:42px;
 }
 
 *{margin:0;padding:0;box-sizing:border-box}
@@ -43,7 +59,7 @@ body{
   background:var(--navy-abyss);
   color:var(--paper);
   font-size:13px;
-  line-height:1.65;
+  line-height:1.62;
   -webkit-font-smoothing:antialiased;
   -webkit-print-color-adjust:exact;
   print-color-adjust:exact;
@@ -60,143 +76,159 @@ body{
 
 /* ─── Tipografía de sistema ─────────────────────────────────── */
 .display{font-family:'Playfair Display',Georgia,'Times New Roman',serif;font-weight:700;letter-spacing:.2px}
-.eyebrow{
-  font-size:10px;letter-spacing:3.2px;text-transform:uppercase;
-  color:var(--gold);font-weight:700;
-}
-.lede{color:var(--muted);font-size:13.5px;line-height:1.8}
+.eyebrow{font-size:10px;letter-spacing:3.2px;text-transform:uppercase;color:var(--gold);font-weight:700}
+.lede{color:var(--muted);font-size:13.5px;line-height:1.75}
 
 /* ─── PORTADA ───────────────────────────────────────────────── */
 .cover{
   position:relative;
-  padding:64px 46px 46px;
+  padding:52px var(--pad-x) 34px;
   background:
     linear-gradient(155deg, rgba(212,175,55,.14) 0%, rgba(26,58,82,0) 46%),
     linear-gradient(180deg, var(--navy) 0%, var(--navy-deep) 100%);
   border-bottom:3px solid var(--gold);
   overflow:hidden;
 }
-.cover::after{
-  content:'';position:absolute;inset:auto 0 0 0;height:1px;
-  background:linear-gradient(90deg,transparent,rgba(255,255,255,.35),transparent);
-}
 .crest{
-  display:inline-block;padding:7px 16px;border:1px solid var(--hair);
+  display:inline-block;padding:6px 15px;border:1px solid var(--hair);
   border-radius:999px;background:rgba(212,175,55,.09);
-  box-shadow:var(--shadow-md);margin-bottom:26px;
+  box-shadow:var(--shadow-md);margin-bottom:20px;
 }
 .cover h1{
   font-family:'Playfair Display',Georgia,serif;
-  font-size:44px;line-height:1.08;font-weight:700;color:#fff;
-  letter-spacing:-.5px;margin-bottom:14px;
+  font-size:40px;line-height:1.06;font-weight:700;color:#fff;
+  letter-spacing:-.5px;margin-bottom:12px;
   text-shadow:0 2px 18px rgba(0,0,0,.4);
 }
 .cover h1 em{font-style:normal;color:var(--gold);display:block}
 .cover-meta{
-  display:flex;flex-wrap:wrap;gap:10px 26px;margin-top:24px;
-  padding-top:22px;border-top:1px solid var(--hair-soft);
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));
+  gap:12px 22px;margin-top:20px;padding-top:18px;
+  border-top:1px solid var(--hair-soft);
 }
-.cover-meta div{font-size:12px;color:var(--muted)}
+.cover-meta div{font-size:11.5px;color:var(--muted);line-height:1.4}
 .cover-meta strong{display:block;color:var(--paper);font-size:14px;font-weight:600;margin-top:2px}
 
-/* ─── SECCIONES ─────────────────────────────────────────────── */
-.section{padding:40px 46px}
+/* ─── CUERPO: ritmo vertical sin bandas muertas ─────────────── */
+.body{padding:var(--gap-section) 0 0}
+
+.section{padding:0 var(--pad-x);margin-bottom:var(--gap-section)}
+.section:last-child{margin-bottom:var(--gap-section)}
+/* Todo hijo directo de una sección hereda el mismo ritmo. Sin esto había
+   que poner style="margin-top:20px" a mano y cada bloque quedaba distinto. */
+.section > * + *{margin-top:var(--gap-block)}
+
 .section-head{
-  display:flex;align-items:baseline;gap:14px;
-  margin-bottom:26px;padding-bottom:14px;
-  border-bottom:1px solid var(--hair);
+  display:flex;align-items:baseline;gap:12px;
+  padding-bottom:10px;border-bottom:1px solid var(--hair);
 }
 .section-num{
   font-family:'Playfair Display',Georgia,serif;
-  font-size:34px;font-weight:700;color:var(--gold);opacity:.42;line-height:1;
+  font-size:29px;font-weight:700;color:var(--gold);opacity:.42;line-height:1;
 }
 .section-title{
   font-family:'Playfair Display',Georgia,serif;
-  font-size:23px;font-weight:700;color:#fff;flex:1;line-height:1.25;
+  font-size:21px;font-weight:700;color:#fff;flex:1;line-height:1.2;
 }
-.section-note{font-size:11px;color:var(--muted);text-align:right;max-width:220px;line-height:1.5}
+.section-note{font-size:10.5px;color:var(--muted);text-align:right;max-width:230px;line-height:1.45}
 
-/* ─── TARJETAS 3D ───────────────────────────────────────────── */
+/* Subtítulo de bloque dentro de una sección (A, B, C… del plan) */
+.block-head{display:flex;align-items:baseline;gap:10px;margin-top:22px}
+.block-letter{
+  font-family:'Playfair Display',Georgia,serif;font-size:15px;font-weight:900;
+  color:#14202b;background:linear-gradient(145deg,var(--gold),#a8842a);
+  width:26px;height:26px;border-radius:7px;flex:0 0 26px;
+  display:flex;align-items:center;justify-content:center;line-height:1;
+  box-shadow:0 3px 10px rgba(212,175,55,.3);
+}
+.block-title{font-size:14.5px;font-weight:700;color:var(--gold-soft);letter-spacing:.2px;flex:1}
+.block-note{font-size:10.5px;color:var(--muted)}
+
+/* ─── TARJETAS ──────────────────────────────────────────────── */
 .card{
   background:linear-gradient(165deg, rgba(255,255,255,.065) 0%, rgba(255,255,255,.018) 100%);
   border:1px solid var(--hair-soft);
   border-radius:var(--radius);
   box-shadow:var(--shadow-md);
-  padding:24px 26px;
+  padding:18px 20px;
   position:relative;
 }
-.card::before{
-  content:'';position:absolute;inset:0 0 auto 0;height:1px;border-radius:var(--radius) var(--radius) 0 0;
-  background:linear-gradient(90deg,transparent,rgba(255,255,255,.22),transparent);
-}
 .card-gold{border-left:3px solid var(--gold)}
+.card-warn{border-left:3px solid var(--warn)}
+.card-sky{border-left:3px solid var(--sky)}
 .card-title{
-  font-size:10px;letter-spacing:2.4px;text-transform:uppercase;
-  color:var(--gold);font-weight:700;margin-bottom:16px;
+  font-size:10px;letter-spacing:2.2px;text-transform:uppercase;
+  color:var(--gold);font-weight:700;margin-bottom:12px;
 }
-.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:18px}
-.grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
-.grid-4{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+.card > .card-title:only-child{margin-bottom:0}
+
+/* Rejillas fluidas: el número de columnas lo decide el ancho disponible,
+   no una constante. Sin esto, en móvil y en A4 sobraba espacio a la derecha. */
+.grid{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(230px,1fr))}
+.grid-tight{display:grid;gap:11px;grid-template-columns:repeat(auto-fit,minmax(132px,1fr))}
+.grid-wide{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(300px,1fr))}
 
 .row{
-  display:flex;justify-content:space-between;align-items:baseline;gap:14px;
-  padding:9px 0;border-bottom:1px dashed rgba(255,255,255,.07);
+  display:flex;justify-content:space-between;align-items:baseline;gap:12px;
+  padding:7px 0;border-bottom:1px dashed rgba(255,255,255,.07);
 }
 .row:last-child{border-bottom:0;padding-bottom:0}
+.row:first-of-type{padding-top:0}
 .row dt{color:var(--muted);font-size:11.5px;letter-spacing:.3px}
 .row dd{color:var(--paper);font-weight:600;font-size:13px;text-align:right}
 
 /* ─── HERO DE DESEMPEÑO ─────────────────────────────────────── */
 .hero{
-  display:grid;grid-template-columns:196px 1fr;gap:32px;align-items:center;
+  display:grid;grid-template-columns:minmax(132px,158px) 1fr;gap:24px;align-items:center;
   background:
     radial-gradient(420px 220px at 8% 50%, rgba(212,175,55,.16), transparent 70%),
     linear-gradient(160deg, rgba(255,255,255,.07), rgba(255,255,255,.015));
   border:1px solid var(--hair);
-  border-radius:18px;
+  border-radius:16px;
   box-shadow:var(--shadow-lg);
-  padding:30px 32px;
+  padding:22px 24px;
 }
-.ring{position:relative;width:172px;height:172px}
-.ring svg{width:100%;height:100%;transform:rotate(-90deg)}
+/* El anillo se dimensiona por su columna, no por píxeles fijos */
+.ring{position:relative;width:100%;aspect-ratio:1/1;max-width:158px}
+.ring svg{width:100%;height:100%;display:block;transform:rotate(-90deg)}
 .ring-center{
   position:absolute;inset:0;display:flex;flex-direction:column;
   align-items:center;justify-content:center;text-align:center;
 }
 .ring-score{
   font-family:'Playfair Display',Georgia,serif;
-  font-size:42px;font-weight:900;color:#fff;line-height:1;
+  font-size:38px;font-weight:900;color:#fff;line-height:1;
   text-shadow:0 3px 16px rgba(0,0,0,.5);
 }
-.ring-score span{font-size:19px;color:var(--muted);font-weight:600}
-.ring-pct{font-size:11px;letter-spacing:2px;color:var(--gold);font-weight:700;margin-top:6px}
-.hero-body h3{
-  font-family:'Playfair Display',Georgia,serif;
-  font-size:21px;color:#fff;margin-bottom:6px;
-}
+.ring-score span{font-size:17px;color:var(--muted);font-weight:600}
+.ring-pct{font-size:10.5px;letter-spacing:2px;color:var(--gold);font-weight:700;margin-top:5px}
+.hero-body h3{font-family:'Playfair Display',Georgia,serif;font-size:19px;color:#fff;margin-bottom:5px}
+.hero-body .prose{margin-top:4px}
+
 .badge{
-  display:inline-block;padding:5px 13px;border-radius:999px;
-  font-size:10.5px;font-weight:800;letter-spacing:1.6px;text-transform:uppercase;
-  margin-bottom:12px;
+  display:inline-block;padding:4px 12px;border-radius:999px;
+  font-size:10px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;
+  margin-bottom:9px;
 }
-.badge.b-good{background:rgba(0,158,115,.18);color:#3fd7ae;border:1px solid rgba(0,158,115,.45)}
+.badge.b-good{background:rgba(0,158,115,.18);color:var(--good-lit);border:1px solid rgba(0,158,115,.45)}
 .badge.b-gold{background:rgba(212,175,55,.16);color:var(--gold-soft);border:1px solid rgba(212,175,55,.45)}
-.badge.b-warn{background:rgba(230,159,0,.16);color:#ffc457;border:1px solid rgba(230,159,0,.45)}
-.badge.b-bad{background:rgba(213,94,0,.18);color:#ff9257;border:1px solid rgba(213,94,0,.5)}
+.badge.b-warn{background:rgba(230,159,0,.16);color:var(--warn-lit);border:1px solid rgba(230,159,0,.45)}
+.badge.b-bad{background:rgba(213,94,0,.18);color:var(--bad-lit);border:1px solid rgba(213,94,0,.5)}
 
 /* ─── MÉTRICAS ──────────────────────────────────────────────── */
 .metric{
   background:linear-gradient(170deg, rgba(255,255,255,.07), rgba(255,255,255,.015));
-  border:1px solid var(--hair-soft);border-radius:12px;
+  border:1px solid var(--hair-soft);border-radius:11px;
   box-shadow:var(--shadow-md);
-  padding:18px 16px;text-align:center;
+  padding:13px 12px;text-align:center;
 }
-.metric-label{font-size:9.5px;letter-spacing:1.8px;text-transform:uppercase;color:var(--muted);margin-bottom:8px}
-.metric-value{font-family:'Playfair Display',Georgia,serif;font-size:26px;font-weight:700;color:#fff;line-height:1.1}
-.metric-value.sm{font-size:16px;font-family:'Inter',sans-serif;font-weight:700}
+.metric-label{font-size:9px;letter-spacing:1.6px;text-transform:uppercase;color:var(--muted);margin-bottom:5px;line-height:1.3}
+.metric-value{font-family:'Playfair Display',Georgia,serif;font-size:23px;font-weight:700;color:#fff;line-height:1.1}
+.metric-value.sm{font-size:14.5px;font-family:'Inter',sans-serif;font-weight:700;line-height:1.35}
 .metric-value.gold{color:var(--gold)}
-.metric-value.good{color:#3fd7ae}
-.metric-value.warn{color:#ffc457}
+.metric-value.good{color:var(--good-lit)}
+.metric-value.warn{color:var(--warn-lit)}
+.metric-value.bad{color:var(--bad-lit)}
 
 /* ─── GRÁFICOS ──────────────────────────────────────────────── */
 .chart-card{
@@ -204,97 +236,225 @@ body{
   border:1px solid var(--hair-soft);
   border-radius:var(--radius);
   box-shadow:var(--shadow-md);
-  padding:22px 24px 20px;
-  margin-bottom:24px;
-  page-break-inside:avoid;
-  break-inside:avoid;
+  padding:16px 18px 14px;
 }
-.chart-head{display:flex;justify-content:space-between;align-items:baseline;gap:16px;margin-bottom:6px}
-.chart-title{font-size:14.5px;font-weight:700;color:#fff;letter-spacing:.2px}
-.chart-kicker{font-size:10px;letter-spacing:1.8px;text-transform:uppercase;color:var(--gold);font-weight:700}
-.chart-sub{font-size:11.5px;color:var(--muted);margin-bottom:14px;line-height:1.55}
-.chart-svg{width:100%;height:auto;display:block}
+.chart-head{display:flex;justify-content:space-between;align-items:baseline;gap:14px;margin-bottom:4px}
+.chart-title{font-size:14px;font-weight:700;color:#fff;letter-spacing:.2px}
+.chart-kicker{font-size:9.5px;letter-spacing:1.6px;text-transform:uppercase;color:var(--gold);font-weight:700;white-space:nowrap}
+.chart-sub{font-size:11px;color:var(--muted);margin-bottom:10px;line-height:1.5}
+/* El SVG llega con viewBox: escala solo, sin alto fijo que deje aire debajo */
+.chart-card svg{width:100%;height:auto;display:block}
 
-/* ─── LISTAS DE ANÁLISIS ────────────────────────────────────── */
+/* ─── LISTAS ────────────────────────────────────────────────── */
 .tick-list{list-style:none}
 .tick-list li{
-  position:relative;padding:11px 0 11px 30px;font-size:13px;line-height:1.65;
+  position:relative;padding:8px 0 8px 27px;font-size:12.8px;line-height:1.6;
   border-bottom:1px dashed rgba(255,255,255,.07);
 }
-.tick-list li:last-child{border-bottom:0}
+.tick-list li:first-child{padding-top:0}
+.tick-list li:first-child::before{top:1px}
+.tick-list li:last-child{border-bottom:0;padding-bottom:0}
 .tick-list li::before{
-  position:absolute;left:0;top:11px;width:19px;height:19px;border-radius:50%;
-  display:flex;align-items:center;justify-content:center;
-  font-size:11px;font-weight:800;line-height:19px;text-align:center;
+  position:absolute;left:0;top:8px;width:18px;height:18px;border-radius:50%;
+  font-size:10px;font-weight:800;line-height:18px;text-align:center;
 }
-.list-good li::before{content:'✓';background:rgba(0,158,115,.2);color:#3fd7ae;border:1px solid rgba(0,158,115,.5)}
-.list-warn li::before{content:'▲';background:rgba(230,159,0,.18);color:#ffc457;border:1px solid rgba(230,159,0,.5);font-size:9px}
-.list-info li::before{content:'◆';background:rgba(86,180,233,.16);color:var(--sky);border:1px solid rgba(86,180,233,.45);font-size:9px}
-.list-gold li::before{content:'●';background:rgba(212,175,55,.16);color:var(--gold);border:1px solid rgba(212,175,55,.5);font-size:8px}
+.list-good li::before{content:'✓';background:rgba(0,158,115,.2);color:var(--good-lit);border:1px solid rgba(0,158,115,.5)}
+.list-warn li::before{content:'▲';background:rgba(230,159,0,.18);color:var(--warn-lit);border:1px solid rgba(230,159,0,.5);font-size:8px}
+.list-info li::before{content:'◆';background:rgba(86,180,233,.16);color:var(--sky);border:1px solid rgba(86,180,233,.45);font-size:8px}
+.list-gold li::before{content:'●';background:rgba(212,175,55,.16);color:var(--gold);border:1px solid rgba(212,175,55,.5);font-size:7px}
+.list-step{counter-reset:paso}
+.list-step li::before{
+  counter-increment:paso;content:counter(paso);
+  background:rgba(212,175,55,.16);color:var(--gold-soft);border:1px solid rgba(212,175,55,.5);font-size:9.5px;
+}
 
-.prose{font-size:13px;line-height:1.8;color:#dbe4ec}
+.prose{font-size:12.8px;line-height:1.72;color:#dbe4ec}
 .prose strong{color:var(--gold-soft)}
+.prose + .prose{margin-top:8px}
 
 /* ─── NEUROCIENCIA ──────────────────────────────────────────── */
 .neuro-item{
-  padding:15px 18px;margin-bottom:11px;
+  padding:11px 15px;
   background:rgba(86,180,233,.055);
   border-left:3px solid var(--sky);
-  border-radius:0 10px 10px 0;
-  page-break-inside:avoid;break-inside:avoid;
+  border-radius:0 9px 9px 0;
 }
-.neuro-item h4{font-size:13px;color:#8fd0f5;margin-bottom:4px;font-weight:700}
-.neuro-item p{font-size:12.5px;color:#c6d4e0;line-height:1.65}
+.neuro-item + .neuro-item{margin-top:8px}
+.stack > .neuro-item + .neuro-item{margin-top:0}
+.neuro-item h4{font-size:12.5px;color:#8fd0f5;margin-bottom:3px;font-weight:700}
+.neuro-item p{font-size:12px;color:#c6d4e0;line-height:1.58}
 
 .gauge{
-  margin-top:18px;padding:20px 24px;border-radius:12px;
+  padding:16px 20px;border-radius:11px;
   background:linear-gradient(120deg, rgba(212,175,55,.16), rgba(212,175,55,.04));
   border:1px solid var(--hair);text-align:center;box-shadow:var(--shadow-md);
 }
-.gauge-label{font-size:10px;letter-spacing:2.2px;text-transform:uppercase;color:var(--gold);font-weight:700}
-.gauge-value{font-family:'Playfair Display',Georgia,serif;font-size:38px;font-weight:900;color:#fff;line-height:1.1;margin:4px 0 10px}
-.gauge-track{height:9px;border-radius:999px;background:rgba(255,255,255,.09);overflow:hidden;box-shadow:inset 0 1px 3px rgba(0,0,0,.4)}
-.gauge-fill{height:100%;border-radius:999px;background:linear-gradient(90deg,var(--gold),var(--gold-pale));box-shadow:0 0 14px rgba(212,175,55,.55)}
+.gauge-label{font-size:9.5px;letter-spacing:2px;text-transform:uppercase;color:var(--gold);font-weight:700}
+.gauge-value{font-family:'Playfair Display',Georgia,serif;font-size:32px;font-weight:900;color:#fff;line-height:1.1;margin:2px 0 8px}
+.gauge-track{height:8px;border-radius:999px;background:rgba(255,255,255,.09);overflow:hidden;box-shadow:inset 0 1px 3px rgba(0,0,0,.4)}
+.gauge-fill{height:100%;border-radius:999px;background:linear-gradient(90deg,var(--gold),var(--gold-pale));box-shadow:0 0 12px rgba(212,175,55,.5)}
 
-/* ─── PLAN DE ACCIÓN ────────────────────────────────────────── */
-.step{
-  display:grid;grid-template-columns:52px 1fr;gap:18px;align-items:start;
-  padding:20px 22px;margin-bottom:14px;
-  background:linear-gradient(160deg, rgba(255,255,255,.06), rgba(255,255,255,.014));
-  border:1px solid var(--hair-soft);border-radius:12px;box-shadow:var(--shadow-md);
-  page-break-inside:avoid;break-inside:avoid;
+/* ═══ PLAN DE ACCIÓN (bloques A–F) ═══════════════════════════ */
+
+/* Semáforo: la lectura de 3 segundos del gerente */
+.semaforo{
+  display:grid;grid-template-columns:auto 1fr;gap:14px;align-items:center;
+  padding:15px 18px;border-radius:12px;box-shadow:var(--shadow-md);
 }
+.semaforo.sem-verde{background:rgba(0,158,115,.13);border:1px solid rgba(0,158,115,.45)}
+.semaforo.sem-amarillo{background:rgba(230,159,0,.12);border:1px solid rgba(230,159,0,.45)}
+.semaforo.sem-rojo{background:rgba(213,94,0,.13);border:1px solid rgba(213,94,0,.5)}
+.semaforo-dot{width:15px;height:15px;border-radius:50%}
+.sem-verde .semaforo-dot{background:var(--good-lit);box-shadow:0 0 14px rgba(63,215,174,.7)}
+.sem-amarillo .semaforo-dot{background:var(--warn-lit);box-shadow:0 0 14px rgba(255,196,87,.7)}
+.sem-rojo .semaforo-dot{background:var(--bad-lit);box-shadow:0 0 14px rgba(255,146,87,.7)}
+.semaforo h4{font-size:13.5px;font-weight:800;letter-spacing:.6px;margin-bottom:2px}
+.sem-verde h4{color:var(--good-lit)}
+.sem-amarillo h4{color:var(--warn-lit)}
+.sem-rojo h4{color:var(--bad-lit)}
+.semaforo p{font-size:12.3px;color:#dbe4ec;line-height:1.58}
+
+/* Rejilla de bloques cortos: diagnósticos, criterios y principios son
+   párrafos de 2-3 líneas. En una sola columna a 712px de ancho desperdiciaban
+   media línea por bloque y sumaban casi una página entera de aire. */
+.stack{display:grid;gap:9px;grid-template-columns:repeat(auto-fit,minmax(268px,1fr));align-items:start}
+
+/* A · Diagnóstico */
+.diag{
+  padding:10px 13px;border-radius:9px;
+  background:rgba(255,255,255,.038);
+  border-left:3px solid var(--hair-soft);
+}
+.stack > .diag + .diag{margin-top:0}
+.diag + .diag{margin-top:8px}
+.diag.tono-ok{border-left-color:var(--good)}
+.diag.tono-warn{border-left-color:var(--warn)}
+.diag.tono-bad{border-left-color:var(--bad)}
+.diag h5{font-size:11.5px;font-weight:700;color:#fff;margin-bottom:3px;letter-spacing:.2px}
+.diag p{font-size:12.2px;color:#c9d5e0;line-height:1.6}
+
+/* B · Plan de mejora por competencia */
+.comp{
+  border:1px solid var(--hair-soft);border-radius:12px;
+  background:linear-gradient(160deg, rgba(255,255,255,.055), rgba(255,255,255,.012));
+  box-shadow:var(--shadow-md);padding:16px 18px;
+}
+.comp + .comp{margin-top:12px}
+.comp-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:8px 12px;margin-bottom:10px}
+.comp-name{font-size:14.5px;font-weight:700;color:#fff;flex:1;min-width:130px}
+.comp-scores{font-size:12px;color:var(--muted);white-space:nowrap}
+.comp-scores b{color:var(--gold-soft);font-size:13.5px}
+.pill{
+  font-size:9px;letter-spacing:1.3px;text-transform:uppercase;font-weight:800;
+  padding:3px 9px;border-radius:999px;white-space:nowrap;
+}
+.pill.p-alta{background:rgba(213,94,0,.18);color:var(--bad-lit);border:1px solid rgba(213,94,0,.5)}
+.pill.p-media{background:rgba(230,159,0,.16);color:var(--warn-lit);border:1px solid rgba(230,159,0,.5)}
+.pill.p-baja{background:rgba(0,158,115,.16);color:var(--good-lit);border:1px solid rgba(0,158,115,.45)}
+
+/* Barra actual vs meta: se lee la brecha sin hacer la resta */
+.bar{position:relative;height:9px;border-radius:999px;background:rgba(255,255,255,.075);overflow:hidden;margin-bottom:5px}
+.bar-fill{position:absolute;inset:0 auto 0 0;border-radius:999px;background:linear-gradient(90deg,#a8842a,var(--gold))}
+.bar-meta{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--gold-pale);box-shadow:0 0 6px rgba(242,227,176,.8)}
+.bar-legend{display:flex;justify-content:space-between;font-size:9.5px;color:var(--muted);letter-spacing:.3px;margin-bottom:11px}
+
+.comp-tecnica{font-size:12.3px;color:var(--gold-soft);font-weight:600;margin-bottom:8px}
+.comp-meta{
+  display:grid;gap:8px;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
+  margin-top:11px;padding-top:11px;border-top:1px dashed rgba(255,255,255,.09);
+}
+.comp-meta div{font-size:11.3px;color:#c1cedb;line-height:1.5}
+.comp-meta span{display:block;font-size:9px;letter-spacing:1.4px;text-transform:uppercase;color:var(--gold);font-weight:700;margin-bottom:2px}
+
+/* C · Hitos */
+.hito{
+  display:grid;grid-template-columns:minmax(96px,132px) 1fr;gap:14px;
+  padding:12px 0;border-bottom:1px dashed rgba(255,255,255,.08);
+}
+.hito:first-of-type{padding-top:0}
+.hito:last-child{border-bottom:0;padding-bottom:0}
+.hito-momento{font-size:11.5px;font-weight:800;color:var(--gold);letter-spacing:.4px;line-height:1.4}
+.hito p{font-size:12.3px;color:#dbe4ec;line-height:1.58}
+.hito-metrica{font-size:11.2px;color:var(--muted);margin-top:4px;line-height:1.5}
+.hito-metrica b{color:#c9d5e0;font-weight:600}
+
+/* D · Criterios de aprobación */
+.criterio{
+  display:grid;grid-template-columns:1fr;gap:5px;
+  padding:11px 14px;border-radius:9px;background:rgba(255,255,255,.038);
+  border-left:3px solid var(--hair-soft);
+}
+.criterio + .criterio{margin-top:8px}
+.stack > .criterio + .criterio{margin-top:0}
+.criterio.ok{border-left-color:var(--good)}
+.criterio.warn{border-left-color:var(--warn)}
+.criterio.bad{border-left-color:var(--bad)}
+.criterio-si{font-size:11px;letter-spacing:1.2px;text-transform:uppercase;color:var(--gold);font-weight:700}
+.criterio-si b{color:#fff;letter-spacing:0;text-transform:none;font-size:12.3px;font-weight:600}
+.criterio p{font-size:12.3px;color:#dbe4ec;line-height:1.55}
+.criterio-estado{font-size:11.2px;font-weight:600}
+.criterio.ok .criterio-estado{color:var(--good-lit)}
+.criterio.warn .criterio-estado{color:var(--warn-lit)}
+.criterio.bad .criterio-estado{color:var(--bad-lit)}
+
+/* E · Monitoreo */
+.mon{display:grid;grid-template-columns:minmax(84px,110px) 1fr;gap:12px;padding:8px 0;border-bottom:1px dashed rgba(255,255,255,.07)}
+.mon:first-of-type{padding-top:0}
+.mon:last-child{border-bottom:0;padding-bottom:0}
+.mon-freq{font-size:10px;letter-spacing:1.4px;text-transform:uppercase;color:var(--gold);font-weight:700;line-height:1.6}
+.mon p{font-size:12.2px;color:#dbe4ec;line-height:1.55}
+
+.callout{
+  padding:13px 16px;border-radius:10px;
+  background:linear-gradient(120deg, rgba(212,175,55,.14), rgba(212,175,55,.035));
+  border:1px solid var(--hair);
+}
+.callout span{font-size:9.5px;letter-spacing:1.8px;text-transform:uppercase;color:var(--gold);font-weight:700;display:block;margin-bottom:3px}
+.callout p{font-size:12.6px;color:#fff;font-weight:600;line-height:1.55}
+
+/* ─── PASO NUMERADO (plan resumido de respaldo) ─────────────── */
+.step{
+  display:grid;grid-template-columns:40px 1fr;gap:14px;align-items:start;
+  padding:14px 16px;
+  background:linear-gradient(160deg, rgba(255,255,255,.06), rgba(255,255,255,.014));
+  border:1px solid var(--hair-soft);border-radius:11px;box-shadow:var(--shadow-md);
+}
+.step + .step{margin-top:11px}
 .step-num{
-  width:44px;height:44px;border-radius:50%;
+  width:36px;height:36px;border-radius:50%;
   background:linear-gradient(145deg,var(--gold),#a8842a);
   color:#14202b;font-family:'Playfair Display',Georgia,serif;
-  font-size:21px;font-weight:900;
+  font-size:18px;font-weight:900;
   display:flex;align-items:center;justify-content:center;
-  box-shadow:0 6px 18px rgba(212,175,55,.35), inset 0 1px 0 rgba(255,255,255,.55);
+  box-shadow:0 5px 14px rgba(212,175,55,.32), inset 0 1px 0 rgba(255,255,255,.55);
 }
-.step h4{font-size:14px;color:var(--gold-soft);margin-bottom:5px;font-weight:700}
-.step p{font-size:12.8px;color:#dbe4ec;line-height:1.7}
+.step h4{font-size:13px;color:var(--gold-soft);margin-bottom:4px;font-weight:700}
+.step p{font-size:12.4px;color:#dbe4ec;line-height:1.62}
 
 /* ─── CTAs ──────────────────────────────────────────────────── */
-.cta-wrap{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:6px}
+.cta-wrap{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(180px,1fr))}
 .cta{
   display:block;text-align:center;text-decoration:none;
-  padding:18px 12px;border-radius:12px;
+  padding:14px 12px;border-radius:11px;
   background:linear-gradient(160deg, rgba(212,175,55,.18), rgba(212,175,55,.05));
   border:1px solid var(--hair);
   box-shadow:var(--shadow-md);
   color:var(--gold-soft);
 }
-.cta strong{display:block;font-size:13.5px;font-weight:700;color:#fff;margin-bottom:3px}
-.cta span{font-size:10.5px;color:var(--muted);letter-spacing:.4px}
+.cta strong{display:block;font-size:13px;font-weight:700;color:#fff;margin-bottom:2px}
+.cta span{font-size:10px;color:var(--muted);letter-spacing:.4px}
 
 /* ─── TRANSCRIPCIÓN ─────────────────────────────────────────── */
-.chat{padding:4px 0}
-.turn{display:flex;margin-bottom:14px;page-break-inside:avoid;break-inside:avoid}
+/* Solo hablante + texto literal. Sin etiquetas de sistema, sin símbolos.
+   El hablante y la marca de tiempo comparten renglón: en una sesión de 30
+   minutos son ~260 turnos, y una línea de más por turno son cinco páginas. */
+.chat{padding:0}
+.turn{display:flex;margin-bottom:8px}
+.turn:last-child{margin-bottom:0}
 .turn.right{justify-content:flex-end}
 .bubble{
-  max-width:78%;padding:12px 16px;border-radius:14px;
-  box-shadow:var(--shadow-md);position:relative;
+  max-width:82%;padding:8px 13px 9px;border-radius:12px;
+  box-shadow:var(--shadow-md);
 }
 .bubble.agent{
   background:linear-gradient(160deg, rgba(212,175,55,.17), rgba(212,175,55,.06));
@@ -304,31 +464,48 @@ body{
   background:linear-gradient(160deg, rgba(255,255,255,.075), rgba(255,255,255,.02));
   border:1px solid var(--hair-soft);border-bottom-left-radius:4px;
 }
-.bubble-speaker{font-size:10px;letter-spacing:1.6px;text-transform:uppercase;font-weight:800;margin-bottom:4px}
+.bubble-head{
+  display:flex;justify-content:space-between;align-items:baseline;
+  gap:12px;margin-bottom:1px;
+}
+.bubble-speaker{font-size:9.5px;letter-spacing:1.5px;text-transform:uppercase;font-weight:800;line-height:1.5}
 .bubble.agent .bubble-speaker{color:var(--gold)}
 .bubble.user .bubble-speaker{color:var(--sky)}
-.bubble-text{font-size:12.5px;line-height:1.68;color:#e6ecf2}
-.bubble-time{font-size:9.5px;color:var(--muted);margin-top:6px;opacity:.75;text-align:right}
+.bubble-time{font-size:9px;color:var(--muted);opacity:.7;line-height:1.5;white-space:nowrap}
+.bubble-text{font-size:12.3px;line-height:1.58;color:#e6ecf2;white-space:pre-line}
 
 /* ─── PIE ───────────────────────────────────────────────────── */
 .footer{
-  padding:30px 46px 40px;text-align:center;
+  padding:24px var(--pad-x) 30px;text-align:center;
   border-top:1px solid var(--hair);
   background:linear-gradient(180deg, rgba(212,175,55,.05), transparent);
 }
-.footer-mark{font-family:'Playfair Display',Georgia,serif;font-size:15px;color:var(--gold);letter-spacing:2px}
-.footer p{font-size:10.5px;color:var(--muted);margin-top:8px;line-height:1.7}
+.footer-mark{font-family:'Playfair Display',Georgia,serif;font-size:14px;color:var(--gold);letter-spacing:2px}
+.footer p{font-size:10px;color:var(--muted);margin-top:6px;line-height:1.65}
 
 /* ─── PAGINACIÓN PARA IMPRESIÓN/PDF ─────────────────────────── */
-/* Solo los bloques que caben en una página llevan `avoid`. Aplicarlo a
-   .section entera dejaba páginas medio vacías: una sección más alta que la
-   hoja se empuja igual y desperdicia la anterior. */
-.page-break{page-break-before:always;break-before:page;height:0}
-.card, .hero, .step, .neuro-item, .metric, .chart-card, .turn{
+/* Sin saltos forzados: el documento fluye y termina donde termina el
+   contenido. `break-after` desapareció por completo — era lo que dejaba media
+   página en blanco cuando una sección no cabía entera.
+
+   Qué se protege y qué no:
+   · ATÓMICO lo pequeño e indivisible — una métrica, un gráfico, una burbuja,
+     una fila de hito. Partirlos los vuelve ilegibles.
+   · DIVISIBLE lo grande — una tarjeta con doce puntos o el bloque de una
+     competencia. Declararlos atómicos empujaba 400px al inicio de la página
+     siguiente y dejaba el hueco atrás. Dentro, cada punto sí es atómico. */
+.hero, .step, .neuro-item, .metric, .chart-card, .turn,
+.diag, .criterio, .semaforo, .gauge, .callout, .hito, .mon, .comp-top{
   page-break-inside:avoid;break-inside:avoid;
 }
-.section-head{page-break-after:avoid;break-after:avoid}
-.chat{page-break-inside:auto;break-inside:auto}
+.card, .comp, .section, .chat, .body, .stack, .tick-list{
+  page-break-inside:auto;break-inside:auto;
+}
+/* La unidad mínima de una lista es el punto, no la lista entera */
+li{page-break-inside:avoid;break-inside:avoid}
+/* Un encabezado no arrastra salto; orphans/widows evita que quede solo */
+.section-head, .block-head{page-break-after:auto;break-after:auto}
+p, li{orphans:2;widows:2}
 
 /* Margen 0 a propósito: Puppeteer ya aplica 16mm arriba/abajo para el header y
    el footer. Declararlo también aquí lo duplicaba a 32mm y agregaba páginas. */
@@ -337,19 +514,20 @@ body{
 @media print{
   body{background:var(--navy-abyss)}
   .sheet{max-width:100%;box-shadow:none}
-  .section{padding:26px 34px}
-  .cover{padding:44px 34px 32px}
-  .chart-card{margin-bottom:16px;padding:16px 18px 14px}
-  .footer{padding:22px 34px 26px}
+  :root{--pad-x:32px;--gap-section:24px;--gap-block:12px}
+  .cover{padding:38px 32px 26px}
+  .cover h1{font-size:34px}
+  .footer{padding:20px 32px 24px}
 }
 
 @media (max-width:720px){
-  .section{padding:28px 20px}
-  .cover{padding:44px 22px 34px}
-  .cover h1{font-size:32px}
-  .grid-2,.grid-3,.grid-4,.cta-wrap{grid-template-columns:1fr}
+  :root{--pad-x:20px;--gap-section:26px}
+  .cover{padding:38px 20px 28px}
+  .cover h1{font-size:30px}
   .hero{grid-template-columns:1fr;justify-items:center;text-align:center}
-  .bubble{max-width:92%}
+  .ring{max-width:150px}
+  .hito,.mon,.semaforo{grid-template-columns:1fr;gap:6px}
+  .bubble{max-width:94%}
 }
 </style>
 </head>
@@ -372,6 +550,8 @@ body{
     </div>
   </header>
 
+  <div class="body">
+
   <!-- ═══════════════════ 1 · PERFIL DEL ASESOR ═══════════════ -->
   <section class="section">
     <div class="section-head">
@@ -379,7 +559,7 @@ body{
       <h2 class="section-title">Perfil del asesor</h2>
       <span class="section-note">Identidad y rol evaluado en esta sesión</span>
     </div>
-    <div class="grid-2">
+    <div class="grid">
       <div class="card card-gold">
         <div class="card-title">Datos del asesor</div>
         <dl>
@@ -428,14 +608,28 @@ body{
       </div>
     </div>
 
-    <div class="grid-4" style="margin-top:22px">
+    <div class="grid-tight">
       <div class="metric"><div class="metric-label">Duración</div><div class="metric-value">{{duracion_texto}}</div></div>
       <div class="metric"><div class="metric-label">Módulo</div><div class="metric-value sm">{{modulo}}</div></div>
       <div class="metric"><div class="metric-label">Score global</div><div class="metric-value good">{{scoreTotal}}%</div></div>
       <div class="metric"><div class="metric-label">Potencial de mejora</div><div class="metric-value gold">{{mejora_potencial}}</div></div>
+      {{#if plan}}
+      <div class="metric"><div class="metric-label">En estándar</div><div class="metric-value">{{plan.competencias_en_estandar}}<span style="font-size:15px;color:var(--muted)">/{{plan.competencias_totales}}</span></div></div>
+      <div class="metric"><div class="metric-label">Intervenciones</div><div class="metric-value sm">{{transcript_turnos}} turnos</div></div>
+      {{/if}}
     </div>
 
-    <div class="card" style="margin-top:20px">
+    {{#if plan.semaforo}}
+    <div class="semaforo {{plan.semaforo.cls}}">
+      <div class="semaforo-dot"></div>
+      <div>
+        <h4>{{plan.semaforo.label}}</h4>
+        <p>{{plan.semaforo.accion}}</p>
+      </div>
+    </div>
+    {{/if}}
+
+    <div class="card">
       <div class="card-title">Recomendación del coach</div>
       <p class="prose">{{recomendacion_coach}}</p>
     </div>
@@ -467,7 +661,6 @@ body{
       {{{chart_ranking}}}
     </div>
 
-
     <div class="chart-card">
       <div class="chart-head">
         <span class="chart-title">Desempeño por fase</span>
@@ -485,7 +678,6 @@ body{
       <p class="chart-sub">Densidad de intercambio minuto a minuto. El valle marca el punto donde conviene revisar la grabación.</p>
       {{{chart_engagement}}}
     </div>
-
 
     <div class="chart-card">
       <div class="chart-head">
@@ -506,8 +698,8 @@ body{
     </div>
   </section>
 
-
   <!-- ═══════════════════ 4 · NEUROCIENCIA ════════════════════ -->
+  {{#if principios_neuro}}
   <section class="section">
     <div class="section-head">
       <span class="section-num">04</span>
@@ -515,12 +707,14 @@ body{
       <span class="section-note">Mecanismos de decisión detectados durante la sesión</span>
     </div>
 
-    {{#each principios_neuro}}
-    <div class="neuro-item">
-      <h4>{{this.titulo}}</h4>
-      <p>{{this.descripcion}}</p>
+    <div class="stack">
+      {{#each principios_neuro}}
+      <div class="neuro-item">
+        <h4>{{this.titulo}}</h4>
+        <p>{{this.descripcion}}</p>
+      </div>
+      {{/each}}
     </div>
-    {{/each}}
 
     <div class="gauge">
       <div class="gauge-label">Cumplimiento neurocientífico</div>
@@ -528,52 +722,50 @@ body{
       <div class="gauge-track"><div class="gauge-fill" style="width:{{cumplimiento_neuro}}%"></div></div>
     </div>
   </section>
+  {{/if}}
 
-  <!-- ═══════════════════ 5 · FORTALEZAS ══════════════════════ -->
+  <!-- ═══════════════════ 5 · FORTALEZAS Y ÁREAS ══════════════ -->
+  <!-- Antes eran dos secciones enteras con un solo párrafo cada una: dos
+       encabezados, dos bloques de padding y mucho aire. Ahora comparten
+       sección y se reparten el ancho disponible. -->
   <section class="section">
     <div class="section-head">
       <span class="section-num">05</span>
-      <h2 class="section-title">Fortalezas identificadas</h2>
-      <span class="section-note">Conductas a reforzar y replicar en el equipo</span>
+      <h2 class="section-title">Fortalezas y áreas de mejora</h2>
+      <span class="section-note">Qué replicar en el equipo y qué corregir en 7 días</span>
     </div>
-    <div class="card card-gold">
-      {{#if fortalezas_list}}
-      <ul class="tick-list list-good">
-        {{#each fortalezas_list}}<li>{{this}}</li>{{/each}}
-      </ul>
-      {{else}}
-      <p class="prose">{{{fortalezas}}}</p>
-      {{/if}}
+    <div class="grid-wide">
+      <div class="card card-gold">
+        <div class="card-title">Fortalezas identificadas</div>
+        {{#if fortalezas_list}}
+        <ul class="tick-list list-good">
+          {{#each fortalezas_list}}<li>{{this}}</li>{{/each}}
+        </ul>
+        {{else}}
+        <p class="prose">{{{fortalezas}}}</p>
+        {{/if}}
+      </div>
+      <div class="card card-warn">
+        <div class="card-title">Áreas de mejora</div>
+        {{#if areas_list}}
+        <ul class="tick-list list-warn">
+          {{#each areas_list}}<li>{{this}}</li>{{/each}}
+        </ul>
+        {{else}}
+        <p class="prose">{{{areas_mejora}}}</p>
+        {{/if}}
+      </div>
     </div>
   </section>
 
-  <!-- ═══════════════════ 6 · ÁREAS DE MEJORA ═════════════════ -->
+  <!-- ═══════════════════ 6 · OBJECIONES ══════════════════════ -->
   <section class="section">
     <div class="section-head">
       <span class="section-num">06</span>
-      <h2 class="section-title">Áreas de mejora</h2>
-      <span class="section-note">Foco de coaching para los próximos 7 días</span>
-    </div>
-    <div class="card" style="border-left:3px solid var(--warn)">
-      {{#if areas_list}}
-      <ul class="tick-list list-warn">
-        {{#each areas_list}}<li>{{this}}</li>{{/each}}
-      </ul>
-      {{else}}
-      <p class="prose">{{{areas_mejora}}}</p>
-      {{/if}}
-    </div>
-  </section>
-
-  <!-- ═══════════════════ 7 · OBJECIONES ══════════════════════ -->
-  <section class="section">
-    <div class="section-head">
-      <span class="section-num">07</span>
       <h2 class="section-title">Manejo de objeciones</h2>
       <span class="section-note">Objeciones trabajadas y calidad de la respuesta</span>
     </div>
-    <div class="card" style="border-left:3px solid var(--sky)">
-      <div class="card-title">Objeciones detectadas en la sesión</div>
+    <div class="card card-sky">
       {{#if objeciones_list}}
       <ul class="tick-list list-info">
         {{#each objeciones_list}}<li>{{this}}</li>{{/each}}
@@ -581,31 +773,33 @@ body{
       {{else}}
       <p class="prose">{{objeciones_trabajadas}}</p>
       {{/if}}
-      <div class="row" style="margin-top:16px;border-top:1px solid var(--hair);border-bottom:0;padding-top:14px">
+      <div class="row" style="margin-top:12px;border-top:1px solid var(--hair);border-bottom:0;padding-top:11px">
         <dt>Score de manejo de objeciones</dt>
-        <dd style="color:{{ring_color}};font-size:16px">{{score_objecciones}}/10</dd>
+        <dd style="color:{{ring_color}};font-size:15px">{{score_objecciones}}/10</dd>
       </div>
     </div>
   </section>
 
-  <!-- ═══════════════════ 8 · PNL ═════════════════════════════ -->
+  <!-- ═══════════════════ 7 · PNL ═════════════════════════════ -->
   <section class="section">
     <div class="section-head">
-      <span class="section-num">08</span>
+      <span class="section-num">07</span>
       <h2 class="section-title">Análisis de PNL</h2>
       <span class="section-note">Anclajes, reencuadres y calibración del lenguaje</span>
     </div>
     <div class="card card-gold">
       <p class="prose">{{analisis_pnl}}</p>
-      <div class="grid-3" style="margin-top:20px">
+      <div class="grid-tight" style="margin-top:14px">
         <div class="metric"><div class="metric-label">Rapport</div><div class="metric-value">{{score_rapport}}</div></div>
         <div class="metric"><div class="metric-label">Técnicas PNL</div><div class="metric-value">{{score_pnl}}</div></div>
         <div class="metric"><div class="metric-label">Lectura de sala</div><div class="metric-value">{{score_lectura_sala}}</div></div>
+        <div class="metric"><div class="metric-label">Postura</div><div class="metric-value">{{score_postura}}</div></div>
+        <div class="metric"><div class="metric-label">Cierre</div><div class="metric-value">{{score_cierre}}</div></div>
       </div>
     </div>
 
     {{#if agente.agent_id}}
-    <div class="card" style="margin-top:18px;border-left:3px solid var(--sky)">
+    <div class="card card-sky">
       <div class="card-title">Contexto de evaluación · Knowledge Base</div>
       <dl>
         <div class="row"><dt>Agente evaluador</dt><dd>{{agente.agent_name}}</dd></div>
@@ -619,15 +813,199 @@ body{
     {{/if}}
   </section>
 
-
-  <!-- ═══════════════════ 9 · PLAN DE ACCIÓN ══════════════════ -->
+  <!-- ═══════════════════ 8 · PLAN DE ACCIÓN ══════════════════ -->
   <section class="section">
     <div class="section-head">
-      <span class="section-num">09</span>
+      <span class="section-num">08</span>
       <h2 class="section-title">Plan de acción para el gerente</h2>
-      <span class="section-note">Diagnóstico, intervención y validación</span>
+      <span class="section-note">Diagnóstico, intervención, validación y criterios de decisión</span>
     </div>
 
+    {{#if plan}}
+
+    <!-- Resumen operativo del plan: lo que cuesta y cuándo se valida -->
+    <div class="grid-tight">
+      <div class="metric"><div class="metric-label">Competencias críticas</div><div class="metric-value {{#if plan.competencias_criticas}}warn{{else}}good{{/if}}">{{plan.competencias_criticas}}</div></div>
+      <div class="metric"><div class="metric-label">Brecha total</div><div class="metric-value gold">{{plan.brecha_total}} pts</div></div>
+      <div class="metric"><div class="metric-label">Coaching estimado</div><div class="metric-value sm">{{plan.sesiones_totales}} sesiones · {{plan.horas_coaching}} h</div></div>
+      <div class="metric"><div class="metric-label">Validación</div><div class="metric-value sm">{{plan.fecha_validacion}}</div></div>
+    </div>
+
+    <!-- ── A · Diagnóstico completo ─────────────────────────── -->
+    <div class="block-head">
+      <span class="block-letter">A</span>
+      <span class="block-title">Diagnóstico completo</span>
+      <span class="block-note">Score, fortalezas, áreas críticas y brecha</span>
+    </div>
+    <div class="stack">
+      {{#each plan.diagnostico}}
+      <div class="diag tono-{{this.tono}}">
+        <h5>{{this.titulo}}</h5>
+        <p>{{this.detalle}}</p>
+      </div>
+      {{/each}}
+    </div>
+
+    <!-- ── B · Plan de mejora por competencia ───────────────── -->
+    <div class="block-head">
+      <span class="block-letter">B</span>
+      <span class="block-title">Plan de mejora detallado</span>
+      <span class="block-note">Por competencia: score actual, meta y ejercicios</span>
+    </div>
+    {{#if plan.mejora}}
+    <div>
+      {{#each plan.mejora}}
+      <div class="comp">
+        <!-- El encabezado, la barra y la técnica viajan juntos: separarlos
+             deja una barra de progreso huérfana sin saber de qué es. -->
+        <div class="comp-top">
+          <div class="comp-head">
+            <span class="comp-name">{{this.orden}}. {{this.competencia}}</span>
+            <span class="pill {{this.prioridad_cls}}">Prioridad {{this.prioridad}}</span>
+            <span class="comp-scores"><b>{{this.score}}</b>/10 → meta {{this.meta}}/10</span>
+          </div>
+
+          <div class="bar">
+            <div class="bar-fill" style="width:{{this.barra_actual}}%"></div>
+            <div class="bar-meta" style="left:{{this.barra_meta}}%"></div>
+          </div>
+          <div class="bar-legend">
+            <span>Ejecución actual: {{this.score}}/10</span>
+            <span>{{this.brecha_texto}}</span>
+          </div>
+
+          <p class="comp-tecnica">Técnica: {{this.tecnica}}</p>
+        </div>
+
+        <ul class="tick-list list-step">
+          {{#each this.ejercicios}}<li>{{this}}</li>{{/each}}
+        </ul>
+
+        <div class="comp-meta">
+          <div><span>Dosis</span>{{this.dosis_texto}} ({{this.minutos_totales}} min en total)</div>
+          <div><span>Métrica de control</span>{{this.metrica}}</div>
+          <div><span>Trayectoria esperada</span>{{this.timeline}}</div>
+          <div><span>Señal de que ya prendió</span>{{this.senal_exito}}</div>
+        </div>
+      </div>
+      {{/each}}
+    </div>
+    {{else}}
+    <div class="card">
+      <p class="prose">Ninguna competencia queda por debajo del estándar de {{plan.meta_estandar}}/10. No hay plan correctivo que aplicar: el trabajo pasa a modo mantenimiento con una simulación semanal.</p>
+    </div>
+    {{/if}}
+
+    <!-- ── C · Hitos y validaciones ─────────────────────────── -->
+    <div class="block-head">
+      <span class="block-letter">C</span>
+      <span class="block-title">Hitos y validaciones</span>
+      <span class="block-note">Calendario con métrica verificable por hito</span>
+    </div>
+    <div class="card">
+      {{#each plan.hitos}}
+      <div class="hito">
+        <div class="hito-momento">{{this.momento}}</div>
+        <div>
+          <p>{{this.objetivo}}</p>
+          <p class="hito-metrica"><b>Métrica:</b> {{this.metrica}} · <b>Verificación:</b> {{this.verificacion}}</p>
+        </div>
+      </div>
+      {{/each}}
+    </div>
+
+    <!-- ── D · Criterios de aprobación ──────────────────────── -->
+    <div class="block-head">
+      <span class="block-letter">D</span>
+      <span class="block-title">Criterios de aprobación</span>
+      <span class="block-note">Reglas de decisión, no opiniones</span>
+    </div>
+    <div class="stack">
+      {{#each plan.criterios}}
+      <div class="criterio {{this.cls}}">
+        <div class="criterio-si">Si <b>{{this.condicion}}</b></div>
+        <p>→ {{this.resultado}}</p>
+        <div class="criterio-estado">{{this.estado}}</div>
+      </div>
+      {{/each}}
+    </div>
+
+    <!-- ── E · Próximos pasos del gerente ───────────────────── -->
+    <div class="block-head">
+      <span class="block-letter">E</span>
+      <span class="block-title">Próximos pasos del gerente</span>
+      <span class="block-note">Qué hacer hoy y qué monitorear</span>
+    </div>
+    <div class="grid-wide">
+      <div class="card card-gold">
+        <div class="card-title">Hoy mismo</div>
+        <ul class="tick-list list-step">
+          {{#each plan.pasos.hoy}}<li>{{this}}</li>{{/each}}
+        </ul>
+      </div>
+      <div class="card card-sky">
+        <div class="card-title">Monitoreo continuo</div>
+        {{#each plan.pasos.monitoreo}}
+        <div class="mon">
+          <div class="mon-freq">{{this.frecuencia}}</div>
+          <p>{{this.que}}</p>
+        </div>
+        {{/each}}
+      </div>
+    </div>
+
+    <div class="callout">
+      <span>Reevaluación</span>
+      <p>{{plan.pasos.reevaluacion}}</p>
+    </div>
+
+    <div class="card card-warn">
+      <div class="card-title">Escalar a dirección si ocurre alguno de estos</div>
+      <ul class="tick-list list-warn">
+        {{#each plan.pasos.escalar}}<li>{{this}}</li>{{/each}}
+      </ul>
+    </div>
+
+    <!-- ── F · Notas de coaching ────────────────────────────── -->
+    <div class="block-head">
+      <span class="block-letter">F</span>
+      <span class="block-title">Notas de coaching</span>
+      <span class="block-note">Observaciones, patrones y recomendaciones</span>
+    </div>
+    <div class="grid-wide">
+      <div class="card">
+        <div class="card-title">Observaciones de la sesión</div>
+        <ul class="tick-list list-info">
+          {{#each plan.notas.observaciones}}<li>{{this}}</li>{{/each}}
+        </ul>
+      </div>
+      <div class="card">
+        <div class="card-title">Qué reforzar</div>
+        <ul class="tick-list list-gold">
+          {{#each plan.notas.reforzar}}<li>{{this}}</li>{{/each}}
+        </ul>
+      </div>
+    </div>
+
+    {{#if plan.notas.patrones}}
+    <div class="card card-sky">
+      <div class="card-title">Patrones detectados</div>
+      <ul class="tick-list list-info">
+        {{#each plan.notas.patrones}}<li>{{this}}</li>{{/each}}
+      </ul>
+    </div>
+    {{/if}}
+
+    <div class="card card-gold">
+      <div class="card-title">Recomendaciones para el gerente</div>
+      <ul class="tick-list list-gold">
+        {{#each plan.notas.recomendaciones}}<li>{{this}}</li>{{/each}}
+      </ul>
+    </div>
+
+    {{else}}
+    <!-- Respaldo: si el plan expandido no se pudo construir, el reporte sigue
+         entregando las tres frases del plan clásico en vez de una sección vacía. -->
     <div class="step">
       <div class="step-num">1</div>
       <div><h4>Diagnóstico y seguimiento</h4><p>{{plan_1}}</p></div>
@@ -640,45 +1018,62 @@ body{
       <div class="step-num">3</div>
       <div><h4>Validación y próximas acciones</h4><p>{{plan_3}}</p></div>
     </div>
+    {{/if}}
   </section>
 
-  <!-- ═══════════════════ 10 · ACCIONES ═══════════════════════ -->
+  <!-- ═══════════════════ 9 · ACCIONES ════════════════════════ -->
   <section class="section">
     <div class="section-head">
-      <span class="section-num">10</span>
+      <span class="section-num">09</span>
       <h2 class="section-title">Acciones disponibles</h2>
-      <span class="section-note">Accesos directos a la sesión y al material</span>
+      <span class="section-note">Accesos directos a la sesión, al material y al reentrenamiento</span>
     </div>
     <div class="cta-wrap">
       <a class="cta" href="{{pop_up_url}}"><strong>Escuchar la sesión</strong><span>Audio completo</span></a>
       <a class="cta" href="{{pdf_download_url}}"><strong>Descargar el reporte</strong><span>PDF con gráficos</span></a>
-      <a class="cta" href="{{retrain_url}}"><strong>Repetir el entrenamiento</strong><span>Nueva simulación</span></a>
+      <a class="cta" href="{{retrain_url}}"><strong>Solicitar reentrenamiento</strong><span>Agendar coaching</span></a>
+    </div>
+
+    <!-- El CTA sin destino visible no se usa: si el gerente no sabe a dónde
+         llega la solicitud, no la manda. Aquí se dice explícitamente. -->
+    <div class="card card-gold">
+      <div class="card-title">Cómo funciona la solicitud de reentrenamiento</div>
+      <ul class="tick-list list-step">
+        <li>Abre <strong>Solicitar reentrenamiento</strong> desde este reporte o desde el correo. El enlace ya viene firmado para esta sesión.</li>
+        <li>Marca las competencias a reforzar (vienen preseleccionadas las que están por debajo del estándar) y escribe las notas para el coach.</li>
+        <li>Al enviar, la solicitud queda registrada y llega por correo a <strong>{{gerente_email}}</strong> con el resumen del asesor, los scores, las áreas críticas, tus notas y el enlace a este reporte.</li>
+        <li>Recibes la confirmación en pantalla con el folio de la solicitud.</li>
+      </ul>
     </div>
   </section>
 
+  <!-- ═══════════════════ 10 · TRANSCRIPCIÓN ══════════════════ -->
+  <!-- Sin salto de página forzado: si la conversación fue corta, la
+       transcripción arranca en la misma hoja y el reporte termina antes. -->
   {{#if transcription}}
-  <div class="page-break"></div>
-
-  <!-- ═══════════════════ 11 · TRANSCRIPCIÓN ══════════════════ -->
   <section class="section">
     <div class="section-head">
-      <span class="section-num">11</span>
+      <span class="section-num">10</span>
       <h2 class="section-title">Transcripción completa</h2>
-      <span class="section-note">{{transcript_turnos}} intervenciones registradas</span>
+      <span class="section-note">{{transcript_turnos}} intervenciones · texto literal de la sesión</span>
     </div>
     <div class="chat">
       {{#each transcription}}
       <div class="turn {{this.side}}">
         <div class="bubble {{this.type}}">
-          <div class="bubble-speaker">{{this.speaker}}</div>
+          <div class="bubble-head">
+            <span class="bubble-speaker">{{this.speaker}}</span>
+            {{#if this.timestamp}}<span class="bubble-time">{{this.timestamp}}</span>{{/if}}
+          </div>
           <div class="bubble-text">{{this.text}}</div>
-          <div class="bubble-time">{{this.timestamp}}</div>
         </div>
       </div>
       {{/each}}
     </div>
   </section>
   {{/if}}
+
+  </div><!-- /.body -->
 
   <!-- ═══════════════════ PIE ═════════════════════════════════ -->
   <footer class="footer">

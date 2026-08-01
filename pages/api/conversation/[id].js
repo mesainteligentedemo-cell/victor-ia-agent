@@ -10,6 +10,7 @@
 
 import { verifyReportToken, extractRequestToken } from '../../../src/server/report-links';
 import { buildReportSummary } from '../../../src/server/rebuild-report';
+import { managerRecipients } from '../../../src/server/retrain-request';
 
 export const config = { maxDuration: 30 };
 
@@ -38,7 +39,13 @@ export default async function handler(req, res) {
 
   try {
     const summary = await buildReportSummary(conversationId);
-    return res.status(200).json({ success: true, conversation: summary });
+    // /retrain necesita decir a dónde llegará la solicitud ANTES de enviarla:
+    // un formulario que no dice a quién notifica no se usa.
+    return res.status(200).json({
+      success: true,
+      conversation: summary,
+      retrain_destinatarios: managerRecipients()
+    });
   } catch (error) {
     console.error(`[CONV-API] Error con ${conversationId}:`, error.message);
     const notFound = /no devolvió|404|not found/i.test(error.message);

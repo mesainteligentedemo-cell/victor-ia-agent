@@ -14,6 +14,15 @@
     },
     "pages/api/audio/[id].js": {
       "maxDuration": 30
+    },
+    "pages/api/retrain-request.js": {
+      "maxDuration": 30
+    },
+    "pages/api/retrain.js": {
+      "maxDuration": 30
+    },
+    "pages/api/conversation/[id].js": {
+      "maxDuration": 30
     }
   },
   "headers": [

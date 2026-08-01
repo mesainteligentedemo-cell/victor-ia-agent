@@ -6,7 +6,15 @@
  * reporte con notable — y el gerente lo mandaba a piso de ventas.
  */
 
-const { mapElevenLabsData, splitItems, resolveSessionDate } = require('../../src/server/n8n-mapper');
+const {
+  mapElevenLabsData,
+  splitItems,
+  resolveSessionDate,
+  parseTranscript,
+  turnsToBubbles,
+  cleanSpeakerLabel,
+  cleanTurnText
+} = require('../../src/server/n8n-mapper');
 const { validateReportData, extractDataCollection } = require('../../src/server/api-process-call');
 
 const SCORES = [
@@ -254,6 +262,103 @@ describe('validateReportData — cero no es "falta el dato"', () => {
   test('no lanza con datos nulos', () => {
     expect(() => validateReportData(null)).not.toThrow();
     expect(validateReportData(null).ok).toBe(false);
+  });
+});
+
+describe('transcripción — solo hablante y texto literal', () => {
+  test('cleanSpeakerLabel quita los envoltorios <>, [] y {}', () => {
+    expect(cleanSpeakerLabel('<Víctor English>')).toBe('Víctor English');
+    expect(cleanSpeakerLabel('[Usuario]')).toBe('Usuario');
+    expect(cleanSpeakerLabel('{agent}')).toBe('agent');
+  });
+
+  test('cleanSpeakerLabel quita el sufijo de rol', () => {
+    expect(cleanSpeakerLabel('Ana Torres (User)')).toBe('Ana Torres');
+    expect(cleanSpeakerLabel('Victor (Agent)')).toBe('Victor');
+    expect(cleanSpeakerLabel('**agent**:')).toBe('agent');
+  });
+
+  test('cleanTurnText quita las comillas que envuelven la frase entera', () => {
+    expect(cleanTurnText('"Hola estoy aquí"')).toBe('Hola estoy aquí');
+    expect(cleanTurnText('“Quiero entrenarme”')).toBe('Quiero entrenarme');
+  });
+
+  test('cleanTurnText NO rompe las comillas que son parte de lo que se dijo', () => {
+    expect(cleanTurnText('Él dijo "hola" y se fue')).toBe('Él dijo "hola" y se fue');
+  });
+
+  test('cleanTurnText quita SSML y marcadores de sistema', () => {
+    expect(cleanTurnText('Hola <break time="0.5s"/> familia')).toBe('Hola familia');
+    expect(cleanTurnText('[silence] Buenas tardes')).toBe('Buenas tardes');
+  });
+
+  test('parseTranscript resuelve <Víctor English> al agente, sin símbolos', () => {
+    const out = parseTranscript(
+      '<Víctor English>: "Hola, estoy aquí para entrenarte."\n' +
+      '<Usuario>: "Quiero entrenarme en objeciones."',
+      'Ana Torres',
+      'Ramírez',
+      600
+    );
+
+    expect(out).toHaveLength(2);
+    expect(out[0].speaker).toBe('Victor');
+    expect(out[0].text).toBe('Hola, estoy aquí para entrenarte.');
+    expect(out[0].type).toBe('agent');
+    expect(out[1].speaker).toBe('Ana Torres');
+    expect(out[1].text).toBe('Quiero entrenarme en objeciones.');
+    expect(out[1].type).toBe('user');
+  });
+
+  test('ninguna burbuja conserva etiquetas ni símbolos de sistema', () => {
+    const out = parseTranscript(
+      '<Víctor English> (Agent): "Buenas [silence]"\nuser: Hola',
+      'Ana',
+      'López'
+    );
+
+    for (const b of out) {
+      expect(b.speaker).not.toMatch(/[<>[\]{}]/);
+      expect(b.speaker).not.toMatch(/\((?:agent|user)\)/i);
+      expect(b.text).not.toMatch(/^["“«]/);
+      expect(b.text).not.toMatch(/\[silence\]/i);
+    }
+  });
+
+  test('una línea sin ":" se anexa al turno anterior en vez de perderse', () => {
+    const out = parseTranscript('agent: Primera parte\ny esta es la continuación', 'Ana', 'López');
+    expect(out).toHaveLength(1);
+    expect(out[0].text).toBe('Primera parte y esta es la continuación');
+  });
+
+  test('una frase con dos puntos no se lee como hablante nuevo', () => {
+    const out = parseTranscript('agent: Mire señora: esto ya lo hablamos', 'Ana', 'López');
+    expect(out).toHaveLength(1);
+    expect(out[0].speaker).toBe('Victor');
+    expect(out[0].text).toBe('Mire señora: esto ya lo hablamos');
+  });
+
+  test('turnsToBubbles limpia el texto y respeta el rol de ElevenLabs', () => {
+    const out = turnsToBubbles(
+      [
+        { role: 'agent', message: '"Bienvenidos" <break time="1s"/>', time_in_call_secs: 3 },
+        { role: 'user', message: 'Gracias', time_in_call_secs: 12 }
+      ],
+      'Ana Torres',
+      'Ramírez'
+    );
+
+    expect(out[0].text).toBe('Bienvenidos');
+    expect(out[0].timestamp).toBe('00:03');
+    expect(out[0].type).toBe('agent');
+    expect(out[1].speaker).toBe('Ana Torres');
+    expect(out[1].type).toBe('user');
+  });
+
+  test('si el asesor también se llama Victor, la IA queda desambiguada', () => {
+    const out = parseTranscript('agent: Hola\nuser: Buenas', 'Victor', 'López');
+    expect(out[0].speaker).toBe('Victor (IA)');
+    expect(out[1].speaker).toBe('Victor');
   });
 });
 

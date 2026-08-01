@@ -417,15 +417,141 @@ function agentContext(modulo) {
 // ════════════════════════════════════════════
 // TRANSCRIPCIÓN
 // ════════════════════════════════════════════
+//
+// Regla de la transcripción del reporte: SOLO "hablante: lo que dijo".
+//
+// Lo que llegaba antes y ya no se pinta:
+//   <Víctor English>: "Hola, estoy aquí..."   ->  Victor: Hola, estoy aquí...
+//   [Usuario] (User): Quiero entrenarme       ->  Ana Torres: Quiero entrenarme
+//
+// El motivo no es estético. El PDF lo lee un gerente que no sabe qué es un
+// "role" ni un tag SSML; cada símbolo de sistema en la página es ruido que le
+// hace dudar de si eso lo dijo el asesor o lo escribió la máquina.
 
 // ElevenLabs entrega los turnos con role "agent" / "user"
 const AGENT_KEYS = ['victor', 'carlos', 'george', 'jorge', 'agent', 'assistant', 'ai'];
+
+/**
+ * Etiquetas SSML que ElevenLabs deja dentro del mensaje del agente.
+ * Se pronuncian, no se dicen: fuera del texto literal.
+ */
+const SSML_TAGS = /<\/?(?:break|speak|prosody|phoneme|emphasis|say-as|sub|lang|voice|audio|mark|s|p)\b[^>]*\/?>/gi;
+
+/**
+ * Sufijo de rol pegado al nombre: "Víctor English (Agent)".
+ * El `(\S)` es obligatorio: sin él, "{agent}" (que es el nombre COMPLETO, no un
+ * sufijo) se borraba entero y el turno se quedaba sin hablante.
+ */
+const ROLE_SUFFIX = /(\S)\s*[([{]\s*(?:agent|assistant|ai|bot|user|usuario|cliente|system|sistema|coach|speaker)\s*[)\]}]\s*$/i;
+
+/** Etiqueta de hablante repetida DENTRO del propio mensaje. */
+const INLINE_SPEAKER_TAG = /^\s*[<[{]\s*[^<>[\]{}\n]{1,60}\s*[>\]}]\s*:?\s*/;
+const INLINE_ROLE_TAG = /^\s*[([]\s*(?:agent|assistant|ai|bot|user|usuario|cliente|system|sistema|coach)\s*[)\]]\s*:?\s*/i;
+
+/** Marcadores de sistema que no son habla. */
+const SYSTEM_MARKERS = /\[(?:tool[_ ]?call|tool[_ ]?result|function[_ ]?call|silence|silencio|inaudible|end[_ ]of[_ ]call|interrupted|noise)\]/gi;
+
+/** Pares de comillas que envuelven un turno completo. */
+const QUOTE_PAIRS = [['"', '"'], ['“', '”'], ['«', '»'], ["'", "'"], ['‘', '’']];
 
 /** Formatea segundos a "mm:ss". */
 function mmss(totalSeconds) {
   const s = Math.max(0, Math.round(Number(totalSeconds) || 0));
   const m = Math.floor(s / 60);
   return `${String(m).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+}
+
+/** Clave de búsqueda estable: sin acentos, sin mayúsculas, sin espacios sobrantes. */
+function normKey(value) {
+  return String(value == null ? '' : value)
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .toLowerCase()
+    .trim();
+}
+
+/**
+ * Deja el nombre del hablante limpio: sin envoltorios ni sufijos de rol.
+ *
+ * "<Víctor English>"   -> "Víctor English"
+ * "[Usuario]"          -> "Usuario"
+ * "Ana Torres (User)"  -> "Ana Torres"
+ * "**agent**:"         -> "agent"
+ *
+ * @param {string} raw
+ * @returns {string}
+ */
+function cleanSpeakerLabel(raw) {
+  let s = String(raw == null ? '' : raw).trim();
+
+  // Énfasis de markdown que a veces viene en los transcripts exportados
+  s = s.replace(/[*_`]+/g, '');
+  // Sufijo de rol ANTES de tocar los envoltorios: si primero quitáramos el
+  // paréntesis de cierre, "Ana Torres (User)" quedaría en "Ana Torres (User".
+  s = s.replace(ROLE_SUFFIX, '$1');
+  // Envoltorios: <>, [], {}, (), comillas
+  s = s.replace(/^[<[{("'«“‘\s]+/, '').replace(/[>\]})"'»”’\s]+$/, '');
+  // Y otra vez, por si el rol venía dentro del envoltorio: "<Ana (User)>"
+  s = s.replace(ROLE_SUFFIX, '$1');
+  // Puntuación residual en los extremos
+  s = s.replace(/^[\s:;.,–—-]+/, '').replace(/[\s:;.,–—-]+$/, '');
+
+  return s.replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * Quita las comillas que envuelven un turno entero, sin tocar las que forman
+ * parte de lo que se dijo.
+ *
+ * '"Hola"'            -> 'Hola'
+ * 'Él dijo "hola"'    -> 'Él dijo "hola"'   (no empieza con comilla: no se toca)
+ * '"Él dijo "hola""'  -> se deja igual: el interior tiene comillas sin balancear
+ */
+function stripWrappingQuotes(text) {
+  let t = String(text).trim();
+
+  // Hasta dos capas: '"«texto»"' aparece en algunos exports
+  for (let capa = 0; capa < 2; capa++) {
+    let cambio = false;
+
+    for (const [abre, cierra] of QUOTE_PAIRS) {
+      if (t.length > abre.length + cierra.length && t.startsWith(abre) && t.endsWith(cierra)) {
+        const interior = t.slice(abre.length, t.length - cierra.length);
+        if (!interior.includes(abre) && !interior.includes(cierra)) {
+          t = interior.trim();
+          cambio = true;
+          break;
+        }
+      }
+    }
+
+    if (!cambio) break;
+  }
+
+  return t;
+}
+
+/**
+ * Texto literal del turno: lo que se dijo, nada más.
+ * Quita SSML, marcadores de sistema, etiquetas de hablante repetidas y las
+ * comillas que envuelven la frase completa.
+ *
+ * @param {string} raw
+ * @returns {string}
+ */
+function cleanTurnText(raw) {
+  let t = String(raw == null ? '' : raw);
+
+  t = t.replace(SSML_TAGS, ' ');
+  t = t.replace(SYSTEM_MARKERS, ' ');
+  t = t.replace(INLINE_SPEAKER_TAG, '');
+  t = t.replace(INLINE_ROLE_TAG, '');
+  t = stripWrappingQuotes(t);
+
+  return t
+    .replace(/[ \t ]+/g, ' ')
+    .replace(/\s*\n\s*/g, '\n')
+    .trim();
 }
 
 /**
@@ -437,13 +563,17 @@ function mmss(totalSeconds) {
  * Caso borde real: el agente se llama "Coach VICTOR" y el asesor evaluado
  * también puede llamarse Victor. Si los nombres chocan, desambiguamos el lado
  * de la IA; si no, el reporte muestra dos "VICTOR" y es ilegible.
+ *
+ * Todas las claves van normalizadas (sin acentos, en minúsculas) para que
+ * "Víctor", "VICTOR" y "victor" resuelvan al mismo lado.
  */
 function speakerMap(asesorName, familyName) {
-  const asesor = String(asesorName || 'Asesor').trim();
-  const asesorKey = asesor.toLowerCase();
+  const asesor = cleanSpeakerLabel(asesorName) || 'Asesor';
+  const asesorKey = normKey(asesor);
+  const familia = cleanSpeakerLabel(familyName) || 'Familia';
 
   const agentLabel = (persona) =>
-    persona.toLowerCase() === asesorKey ? `${persona} (IA)` : persona;
+    normKey(persona) === asesorKey ? `${persona} (IA)` : persona;
 
   return {
     victor: agentLabel('Victor'),
@@ -453,12 +583,39 @@ function speakerMap(asesorName, familyName) {
     agent: agentLabel('Victor'),
     assistant: agentLabel('Victor'),
     ai: agentLabel('Victor'),
-    [asesorKey]: asesor,
-    [String(familyName).toLowerCase()]: familyName,
-    familia: familyName,
+    familia,
+    [normKey(familia)]: familia,
     usuario: asesor,
-    user: asesor
+    user: asesor,
+    // El asesor manda sobre cualquier colisión: es el evaluado.
+    [asesorKey]: asesor
   };
+}
+
+/**
+ * Resuelve un hablante crudo al nombre que se pinta en el reporte.
+ *
+ * Estrategia en cascada:
+ *   1. Nombre completo normalizado  ("víctor english" -> no está en el mapa)
+ *   2. Primera palabra               ("victor" -> Victor, el agente)
+ *   3. El nombre limpio tal cual     (nunca la etiqueta cruda con símbolos)
+ *
+ * @returns {{label:string, isAgent:boolean}}
+ */
+function resolveSpeaker(rawSpeaker, speakers) {
+  const limpio = cleanSpeakerLabel(rawSpeaker);
+  const key = normKey(limpio);
+
+  if (key && speakers[key]) {
+    return { label: speakers[key], isAgent: AGENT_KEYS.includes(key) };
+  }
+
+  const primera = key.split(/[\s_.\-/]+/)[0];
+  if (primera && speakers[primera]) {
+    return { label: speakers[primera], isAgent: AGENT_KEYS.includes(primera) };
+  }
+
+  return { label: limpio || 'Participante', isAgent: AGENT_KEYS.includes(primera) };
 }
 
 /**
@@ -472,15 +629,20 @@ function turnsToBubbles(turns, asesorName, familyName) {
 
   return turns
     .map((turn) => {
-      const rawSpeaker = String(turn.role || turn.speaker || turn.source || 'agent').toLowerCase().trim();
-      const text = String(turn.message || turn.text || turn.content || '').trim();
+      const rawSpeaker = turn.role || turn.speaker || turn.source || 'agent';
+      const text = cleanTurnText(turn.message || turn.text || turn.content || '');
       if (!text) return null;
 
-      const isAgent = AGENT_KEYS.includes(rawSpeaker);
+      // El rol crudo manda para decidir el lado: es el dato de ElevenLabs, no
+      // una inferencia sobre el nombre.
+      const rolKey = normKey(cleanSpeakerLabel(rawSpeaker));
+      const { label } = resolveSpeaker(rawSpeaker, SPEAKERS);
+      const isAgent = AGENT_KEYS.includes(rolKey) || AGENT_KEYS.includes(rolKey.split(/[\s_.\-/]+/)[0]);
+
       const secs = turn.time_in_call_secs ?? turn.time_in_call ?? turn.start_time ?? null;
 
       return {
-        speaker: SPEAKERS[rawSpeaker] || rawSpeaker,
+        speaker: label,
         text,
         timestamp: secs != null ? mmss(secs) : '',
         side: isAgent ? 'right' : 'left',
@@ -495,6 +657,9 @@ function turnsToBubbles(turns, asesorName, familyName) {
  * Los timestamps se estiman repartiendo la duración real entre los turnos —
  * si se conoce la duración; en otro caso quedan vacíos (mejor nada que un dato falso).
  *
+ * Una línea sin ":" no se descarta: se anexa al turno anterior. Antes se perdía,
+ * y con ella los párrafos largos que el agente parte en varias líneas.
+ *
  * @param {string} transcriptText
  * @param {string} asesorName
  * @param {string} familyName
@@ -502,30 +667,48 @@ function turnsToBubbles(turns, asesorName, familyName) {
  */
 function parseTranscript(transcriptText, asesorName, familyName, duracionSec) {
   const bubbles = [];
-  const lines = String(transcriptText).split('\n').filter((l) => l.trim());
+  const lines = String(transcriptText == null ? '' : transcriptText)
+    .split('\n')
+    .filter((l) => l.trim());
   const SPEAKERS = speakerMap(asesorName, familyName);
-  const total = Number(duracionSec);
-  const hasDuration = Number.isFinite(total) && total > 0 && lines.length > 1;
 
-  lines.forEach((line, idx) => {
-    const match = line.match(/^(.*?):\s*(.*)$/);
-    if (!match) return;
+  for (const line of lines) {
+    // El hablante nunca lleva ":" dentro, así que el primer ":" separa. El
+    // límite de 60 caracteres evita que una frase con dos puntos ("Mira: ya
+    // lo hablamos") se lea como un hablante nuevo.
+    const match = line.match(/^\s*([^:\n]{1,60}?)\s*:\s*(.+)$/);
+
+    if (!match) {
+      // Continuación del turno anterior (párrafo partido en varias líneas)
+      const previo = bubbles[bubbles.length - 1];
+      const extra = cleanTurnText(line);
+      if (previo && extra) previo.text = `${previo.text} ${extra}`.trim();
+      continue;
+    }
 
     const [, speaker, text] = match;
-    if (!text.trim()) return;
+    const limpio = cleanTurnText(text);
+    if (!limpio) continue;
 
-    const cleanSpeaker = speaker.trim().toLowerCase();
-    const displaySpeaker = SPEAKERS[cleanSpeaker] || speaker.trim();
-    const isAgent = AGENT_KEYS.includes(cleanSpeaker);
+    const { label, isAgent } = resolveSpeaker(speaker, SPEAKERS);
 
     bubbles.push({
-      speaker: displaySpeaker,
-      text: text.trim(),
-      timestamp: hasDuration ? mmss((idx / (lines.length - 1)) * total) : '',
+      speaker: label,
+      text: limpio,
+      timestamp: '',
       side: isAgent ? 'right' : 'left',
       type: isAgent ? 'agent' : 'user'
     });
-  });
+  }
+
+  // Los timestamps se reparten sobre los turnos REALES (no sobre las líneas
+  // crudas): con líneas de continuación, el índice de línea mentía.
+  const total = Number(duracionSec);
+  if (Number.isFinite(total) && total > 0 && bubbles.length > 1) {
+    bubbles.forEach((b, i) => {
+      b.timestamp = mmss((i / (bubbles.length - 1)) * total);
+    });
+  }
 
   return bubbles;
 }
@@ -535,5 +718,9 @@ module.exports = {
   parseTranscript,
   turnsToBubbles,
   splitItems,
-  resolveSessionDate
+  resolveSessionDate,
+  // Exportados para pruebas y para el reproductor
+  cleanSpeakerLabel,
+  cleanTurnText,
+  stripWrappingQuotes
 };

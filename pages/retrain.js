@@ -4,8 +4,13 @@
  * Solicitud de reentrenamiento sobre una sesión ya evaluada.
  * Es el destino del CTA "Solicitar reentrenamiento" del reporte.
  *
- * El formulario recoge qué competencias reforzar y por qué, y lo manda a
- * POST /api/retrain, que notifica al gerente por correo.
+ * Qué muestra antes de pedir nada: quién es el asesor, cómo le fue y qué está
+ * por debajo del estándar. Un formulario que arranca en blanco obliga al
+ * gerente a abrir el PDF en otra pestaña para acordarse de los números.
+ *
+ * Al enviar: POST /api/retrain-request, que registra la solicitud y notifica
+ * a los gerentes. Las competencias son opcionales — si no se marca ninguna,
+ * el servidor toma las que están por debajo del estándar.
  */
 
 import React, { useEffect, useMemo, useState } from 'react';
@@ -19,11 +24,17 @@ const C = {
   text: '#eef2f6',
   muted: '#9db0c2',
   good: '#009E73',
+  goodLit: '#3fd7ae',
+  warn: '#E69F00',
+  warnLit: '#ffc457',
   bad: '#D55E00',
   border: 'rgba(212,175,55,.22)'
 };
 
 const FONT = "Inter, 'Segoe UI', Helvetica, Arial, sans-serif";
+
+/** Estándar VTC: por debajo de esto la competencia es área crítica. */
+const META = 8;
 
 const PRIORIDADES = [
   { value: 'alta', label: 'Alta — antes de volver a piso' },
@@ -35,6 +46,7 @@ export default function Retrain() {
   const [conv, setConv] = useState(null);
   const [token, setToken] = useState(null);
   const [data, setData] = useState(null);
+  const [destinatarios, setDestinatarios] = useState([]);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -71,12 +83,29 @@ export default function Retrain() {
       })
       .then((body) => {
         if (cancelled) return;
-        setData(body.conversation);
-        // Preseleccionamos la competencia más débil: es la razón habitual de
-        // pedir reentrenamiento y ahorra un clic al gerente.
-        if (body.conversation && body.conversation.comp_baja) {
-          setCompetencias([body.conversation.comp_baja]);
+        const conversation = body.conversation || null;
+        setData(conversation);
+        setDestinatarios(Array.isArray(body.retrain_destinatarios) ? body.retrain_destinatarios : []);
+
+        // Preseleccionamos TODO lo que está por debajo del estándar: es lo que
+        // el gerente marcaría a mano después de mirar los scores.
+        const bajas = (conversation && Array.isArray(conversation.competencias)
+          ? conversation.competencias
+          : []
+        )
+          .filter((c) => Number(c.score) < META)
+          .sort((a, b) => a.score - b.score)
+          .map((c) => c.name);
+
+        if (bajas.length) setCompetencias(bajas);
+        else if (conversation && conversation.comp_baja) setCompetencias([conversation.comp_baja]);
+
+        // Prioridad sugerida por el resultado, no fija en "media".
+        if (conversation && Number.isFinite(Number(conversation.score_overall))) {
+          const s = Number(conversation.score_overall);
+          setPrioridad(s < 7 ? 'alta' : s < 8.5 ? 'media' : 'baja');
         }
+
         setLoading(false);
       })
       .catch((err) => {
@@ -93,6 +122,15 @@ export default function Retrain() {
     [data]
   );
 
+  const criticas = useMemo(
+    () => listaCompetencias.filter((c) => Number(c.score) < META).sort((a, b) => a.score - b.score),
+    [listaCompetencias]
+  );
+
+  const destinoTexto = destinatarios.length
+    ? destinatarios.join(', ')
+    : 'los gerentes de VTC Elite Training';
+
   function toggleCompetencia(name) {
     setCompetencias((prev) =>
       prev.includes(name) ? prev.filter((c) => c !== name) : [...prev, name]
@@ -101,16 +139,11 @@ export default function Retrain() {
 
   async function onSubmit(e) {
     e.preventDefault();
-    if (!competencias.length) {
-      setResultado({ ok: false, message: 'Elige al menos una competencia a reforzar.' });
-      return;
-    }
-
     setEnviando(true);
     setResultado(null);
 
     try {
-      const r = await fetch('/api/retrain', {
+      const r = await fetch('/api/retrain-request', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -126,9 +159,14 @@ export default function Retrain() {
       if (!r.ok || !body.success) {
         throw new Error(body.error || body.detail || `HTTP ${r.status}`);
       }
+
       setResultado({
         ok: true,
-        message: body.message || 'Solicitud registrada. El gerente recibió la notificación.'
+        message: body.confirmacion || body.message,
+        folio: body.folio || null,
+        destinatarios: Array.isArray(body.destinatarios) ? body.destinatarios : destinatarios,
+        competencias: Array.isArray(body.competencias) ? body.competencias : competencias,
+        prioridad: body.prioridad || prioridad
       });
     } catch (err) {
       setResultado({ ok: false, message: err.message });
@@ -139,7 +177,7 @@ export default function Retrain() {
 
   return (
     <div style={{ background: C.bg, minHeight: '100vh', color: C.text, fontFamily: FONT, padding: '24px 16px' }}>
-      <main style={{ maxWidth: 760, margin: '0 auto' }}>
+      <main style={{ maxWidth: 780, margin: '0 auto' }}>
 
         <header style={{
           background: C.navy, border: `1px solid ${C.border}`, borderBottom: `3px solid ${C.gold}`,
@@ -175,13 +213,62 @@ export default function Retrain() {
 
           {data && !resultado?.ok && (
             <form onSubmit={onSubmit}>
-              <p style={{ fontSize: 14, lineHeight: 1.7, color: C.muted, marginTop: 0 }}>
-                Marca las competencias a reforzar. La solicitud llega al gerente con el
-                contexto de esta sesión: scores, resumen y enlace al reporte.
-              </p>
 
-              <fieldset style={{ border: 'none', padding: 0, margin: '22px 0 0' }}>
+              {/* ── Ficha del asesor ───────────────────────────── */}
+              <div style={cardBox}>
+                <p style={cardTitle}>Asesor evaluado</p>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 14 }}>
+                  <Dato k="Nombre" v={data.nombre} />
+                  <Dato k="ID de empleado" v={data.empleado_id} />
+                  <Dato k="Puesto" v={data.puesto} />
+                  <Dato k="Módulo evaluado" v={data.modulo} />
+                  <Dato k="Sesión" v={`${data.fecha_sesion} ${data.hora_cancun || ''}`} />
+                  <Dato k="Duración" v={`${data.duracion_texto} min`} />
+                </div>
+
+                <div style={{
+                  display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'baseline',
+                  marginTop: 16, paddingTop: 14, borderTop: '1px solid rgba(255,255,255,.08)'
+                }}>
+                  <span style={{ fontSize: 12, color: C.muted }}>Desempeño global</span>
+                  <strong style={{ fontSize: 22, color: scoreColor(data.score_overall) }}>
+                    {data.score_overall}/10
+                  </strong>
+                  <span style={{ fontSize: 13, color: C.muted }}>({data.scoreTotal}%)</span>
+                </div>
+              </div>
+
+              {/* ── Áreas críticas ─────────────────────────────── */}
+              {criticas.length > 0 && (
+                <div style={{ ...cardBox, borderLeft: `3px solid ${C.warn}` }}>
+                  <p style={cardTitle}>Áreas críticas de esta sesión</p>
+                  <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13.5, lineHeight: 1.75, color: '#dbe4ec' }}>
+                    {criticas.map((c) => (
+                      <li key={c.name}>
+                        <strong style={{ color: C.warnLit }}>{c.name}</strong>: {c.score}/10
+                        {' '}— {Math.round((META - c.score) * 10) / 10} por debajo del estándar
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {data.recomendacion_coach && (
+                <div style={cardBox}>
+                  <p style={cardTitle}>Recomendación del coach</p>
+                  <p style={{ margin: 0, fontSize: 13.5, lineHeight: 1.75, color: '#dbe4ec' }}>
+                    {data.recomendacion_coach}
+                  </p>
+                </div>
+              )}
+
+              {/* ── Formulario ─────────────────────────────────── */}
+              <fieldset style={{ border: 'none', padding: 0, margin: '26px 0 0' }}>
                 <legend style={legendStyle}>Competencias a reforzar</legend>
+                <p style={{ margin: '0 0 12px', fontSize: 13, color: C.muted, lineHeight: 1.6 }}>
+                  Vienen preseleccionadas las que están por debajo de {META}/10. Si no marcas ninguna,
+                  el sistema toma esas mismas.
+                </p>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(210px,1fr))', gap: 10 }}>
                   {listaCompetencias.map((c) => {
                     const activo = competencias.includes(c.name);
@@ -202,7 +289,7 @@ export default function Retrain() {
                           style={{ accentColor: C.gold, width: 17, height: 17 }}
                         />
                         <span style={{ flex: 1 }}>{c.name}</span>
-                        <strong style={{ color: C.goldSoft }}>{c.score}/10</strong>
+                        <strong style={{ color: scoreColor(c.score) }}>{c.score}/10</strong>
                       </label>
                     );
                   })}
@@ -229,22 +316,39 @@ export default function Retrain() {
                 <textarea
                   value={notas}
                   onChange={(e) => setNotas(e.target.value)}
-                  rows={4}
+                  rows={5}
                   maxLength={2000}
-                  placeholder="Qué observaste en la sesión y qué esperas que cambie."
+                  placeholder="Qué observaste en la sesión y qué esperas que cambie. Se envía tal cual al gerente."
                   style={{ ...inputStyle, resize: 'vertical', lineHeight: 1.6 }}
                 />
+                <p style={{ margin: '6px 0 0', fontSize: 12, color: C.muted, textAlign: 'right' }}>
+                  {notas.length}/2000
+                </p>
               </fieldset>
+
+              {/* ── A dónde llega ──────────────────────────────── */}
+              <div style={{
+                marginTop: 24, padding: '14px 16px', borderRadius: 10,
+                background: 'linear-gradient(120deg, rgba(212,175,55,.14), rgba(212,175,55,.04))',
+                border: `1px solid ${C.border}`
+              }}>
+                <p style={{ margin: 0, fontSize: 13.5, lineHeight: 1.7, color: '#dbe4ec' }}>
+                  La solicitud se registra y llega por correo a{' '}
+                  <strong style={{ color: C.goldSoft }}>{destinoTexto}</strong> con el resumen del
+                  asesor, los scores, las áreas críticas, tus notas y el enlace a este reporte.
+                </p>
+              </div>
 
               {resultado && !resultado.ok && (
                 <div role="alert" style={{ ...alertBox(C.bad), marginTop: 20 }}>
-                  <p style={{ margin: 0, fontSize: 14, color: C.bad }}>{resultado.message}</p>
+                  <p style={{ margin: 0, fontWeight: 700, color: C.bad }}>No se pudo enviar</p>
+                  <p style={{ margin: '8px 0 0', fontSize: 14, color: C.muted }}>{resultado.message}</p>
                 </div>
               )}
 
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginTop: 26 }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginTop: 24 }}>
                 <button type="submit" disabled={enviando} style={{ ...btnPrimary, opacity: enviando ? 0.6 : 1 }}>
-                  {enviando ? 'Enviando…' : 'Enviar solicitud'}
+                  {enviando ? 'Enviando…' : 'Solicitar reentrenamiento'}
                 </button>
                 <a
                   href={`/player?conv=${encodeURIComponent(conv)}${token ? `&t=${encodeURIComponent(token)}` : ''}`}
@@ -258,8 +362,31 @@ export default function Retrain() {
 
           {resultado?.ok && (
             <div role="status" style={alertBox(C.good)}>
-              <p style={{ margin: 0, fontWeight: 700, color: C.good }}>Solicitud enviada</p>
-              <p style={{ margin: '8px 0 0', fontSize: 14, color: C.muted }}>{resultado.message}</p>
+              <p style={{ margin: 0, fontWeight: 700, fontSize: 17, color: C.goodLit }}>
+                Solicitud enviada
+              </p>
+              <p style={{ margin: '10px 0 0', fontSize: 14.5, lineHeight: 1.7, color: C.text }}>
+                {resultado.message}
+              </p>
+
+              <div style={{ marginTop: 18, paddingTop: 16, borderTop: '1px solid rgba(255,255,255,.1)' }}>
+                {resultado.folio && <Dato k="Folio de la solicitud" v={resultado.folio} />}
+                <div style={{ height: 12 }} />
+                <Dato k="Enviada a" v={(resultado.destinatarios || []).join(', ') || destinoTexto} />
+                <div style={{ height: 12 }} />
+                <Dato k="Prioridad" v={resultado.prioridad} />
+                <div style={{ height: 12 }} />
+                <Dato
+                  k="Competencias a reforzar"
+                  v={(resultado.competencias || []).join(', ') || 'Definidas por el sistema según los scores'}
+                />
+              </div>
+
+              <p style={{ margin: '18px 0 0', fontSize: 13, color: C.muted, lineHeight: 1.65 }}>
+                El gerente recibió el resumen del asesor, los scores de la sesión, las áreas críticas,
+                tus notas y el enlace al reporte completo.
+              </p>
+
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginTop: 20 }}>
                 <a
                   href={`/player?conv=${encodeURIComponent(conv)}${token ? `&t=${encodeURIComponent(token)}` : ''}`}
@@ -267,6 +394,9 @@ export default function Retrain() {
                 >
                   Volver al reproductor
                 </a>
+                <button type="button" onClick={() => setResultado(null)} style={btnGhost}>
+                  Enviar otra solicitud
+                </button>
               </div>
             </div>
           )}
@@ -279,6 +409,44 @@ export default function Retrain() {
     </div>
   );
 }
+
+/** Par etiqueta/valor con el mismo aspecto en toda la página. */
+function Dato({ k, v }) {
+  return (
+    <div>
+      <p style={{
+        margin: 0, fontSize: 10, letterSpacing: 1.6, textTransform: 'uppercase',
+        color: C.gold, fontWeight: 700
+      }}>{k}</p>
+      <p style={{ margin: '3px 0 0', fontSize: 14, color: C.text, fontWeight: 600, wordBreak: 'break-word' }}>
+        {v || '—'}
+      </p>
+    </div>
+  );
+}
+
+/** Color del score con la misma escala que el reporte. */
+function scoreColor(score) {
+  const n = Number(score);
+  if (!Number.isFinite(n)) return C.goldSoft;
+  if (n >= 9) return C.goodLit;
+  if (n >= 8) return C.goldSoft;
+  if (n >= 6.5) return C.warnLit;
+  return '#ff9257';
+}
+
+const cardBox = {
+  background: 'rgba(255,255,255,.04)',
+  border: '1px solid rgba(255,255,255,.08)',
+  borderRadius: 11,
+  padding: '18px 20px',
+  marginBottom: 14
+};
+
+const cardTitle = {
+  margin: '0 0 14px', fontSize: 10, letterSpacing: 2.2, textTransform: 'uppercase',
+  color: C.gold, fontWeight: 700
+};
 
 const legendStyle = {
   fontSize: 11, letterSpacing: 2, textTransform: 'uppercase',
@@ -299,7 +467,7 @@ const btnPrimary = {
 const btnGhost = {
   display: 'inline-block', background: 'transparent', color: C.goldSoft, fontWeight: 600,
   fontSize: 14, padding: '12px 22px', borderRadius: 8, textDecoration: 'none',
-  border: `1px solid ${C.border}`
+  border: `1px solid ${C.border}`, cursor: 'pointer', fontFamily: FONT
 };
 
 function alertBox(color) {

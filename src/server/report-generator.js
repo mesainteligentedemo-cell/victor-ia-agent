@@ -14,6 +14,8 @@ const Handlebars = require('handlebars');
 const fs = require('fs');
 const path = require('path');
 const { buildReportCharts } = require('./chart-svg');
+const { buildActionPlan } = require('./action-plan');
+const { managerRecipients } = require('./retrain-request');
 
 // Circunferencia del anillo de score (r = 58 en el viewBox del template)
 const RING_CIRCUMFERENCE = 2 * Math.PI * 58;
@@ -78,6 +80,37 @@ class ReportGenerator {
 
     const transcription = Array.isArray(data.transcription) ? data.transcription : [];
 
+    // Las listas se normalizan ANTES del plan: las notas de coaching citan
+    // fortalezas y áreas de mejora, y si el plan leyera el texto crudo mientras
+    // el reporte pinta la lista limpia, ambos dirían lo mismo con distinta cara.
+    const fortalezas_list = this.toList(data.fortalezas_list, data.fortalezas);
+    const areas_list = this.toList(data.areas_list, data.areas_mejora);
+    const objeciones_list = this.toList(data.objeciones_list, data.objeciones_trabajadas, true);
+
+    // Métricas derivadas de la conversación. Ninguna se inventa: si falta el
+    // dato base, el campo sale null y el template no lo pinta.
+    const metricas = this.metricasConversacion(data, transcription);
+
+    // Plan de acción expandido (bloques A–F). Se construye sobre las mismas
+    // competencias que alimentan los gráficos, así que reporte y plan nunca
+    // pueden contradecirse.
+    const accion = buildActionPlan(
+      {
+        ...data,
+        score_overall: score,
+        scoreTotal,
+        transcription,
+        fortalezas_list,
+        areas_list,
+        duracion_minutos: metricas.duracion_minutos
+      },
+      competencias
+    );
+
+    // A dónde llega una solicitud de reentrenamiento. El reporte lo dice
+    // explícitamente: un CTA sin destino visible no se usa.
+    const gerentes = managerRecipients();
+
     return {
       // ── Identidad ──────────────────────────────────────────
       nombre: this.v(data.nombre, 'Asesor VTC'),
@@ -127,22 +160,33 @@ class ReportGenerator {
       // Texto plano (fallback) + listas (presentación preferida)
       fortalezas: this.formatText(data.fortalezas),
       areas_mejora: this.formatText(data.areas_mejora),
-      fortalezas_list: this.toList(data.fortalezas_list, data.fortalezas),
-      areas_list: this.toList(data.areas_list, data.areas_mejora),
-      objeciones_list: this.toList(data.objeciones_list, data.objeciones_trabajadas, true),
+      fortalezas_list,
+      areas_list,
+      objeciones_list,
 
       // ── Neurociencia ───────────────────────────────────────
       principios_neuro: Array.isArray(data.principios_neuro) ? data.principios_neuro : [],
       cumplimiento_neuro: this.num(data.cumplimiento_neuro, 85),
 
       // ── Plan de acción ─────────────────────────────────────
-      plan_1: this.v(data.plan_1, 'Diagnóstico completado.'),
-      plan_2: this.v(data.plan_2, 'Plan de mejora establecido.'),
-      plan_3: this.v(data.plan_3, 'Validación en 7 días.'),
+      // Los tres campos históricos siguen existiendo (el correo y N8N los
+      // leen), pero ahora se derivan del plan expandido en vez de ser texto
+      // suelto. `plan` trae los bloques A–F que pinta la sección 09.
+      plan_1: this.v(data.plan_1, accion.plan_1),
+      plan_2: this.v(data.plan_2, accion.plan_2),
+      plan_3: this.v(data.plan_3, accion.plan_3),
+      plan: accion.plan,
+
+      // ── Flujo de reentrenamiento ───────────────────────────
+      gerente_email: gerentes.join(', '),
+      gerente_email_lista: gerentes,
 
       // ── Transcripción ──────────────────────────────────────
       transcription,
       transcript_turnos: transcription.length,
+
+      // ── Métricas derivadas de la conversación ──────────────
+      ...metricas,
 
       // ── CTAs ───────────────────────────────────────────────
       pop_up_url: this.v(data.pop_up_url, '#'),
@@ -205,6 +249,69 @@ class ReportGenerator {
     return String(line)
       .replace(/^\s*(?:[✓✔✅×✗•·▪▸►◆●○*\-–—]|\d+[.)])\s*/u, '')
       .trim();
+  }
+
+  /**
+   * Métricas que se calculan a partir de la conversación, no del agente.
+   *
+   * Alimentan el plan de acción (los detectores de patrones miran el ritmo de
+   * intervenciones y la duración) y la cabecera de la sección de resumen.
+   *
+   * Regla: si el dato base no está, el resultado es null. Un "0%" inventado en
+   * un reporte de coaching es peor que un hueco: el gerente lo lee como un
+   * hallazgo real.
+   *
+   * @param {object} data
+   * @param {Array} transcription
+   */
+  metricasConversacion(data, transcription) {
+    const turnos = transcription.length;
+
+    // Duración en minutos: preferimos el dato explícito; si no, lo derivamos
+    // de los segundos, y en último término del texto "mm:ss".
+    let minutos = Number(data.duracion_minutos);
+    if (!Number.isFinite(minutos) || minutos <= 0) {
+      const segs = Number(data.duracion_sec);
+      if (Number.isFinite(segs) && segs > 0) {
+        minutos = Math.floor(segs / 60);
+      } else {
+        const m = String(data.duracion_texto || '').match(/^(\d+):(\d{1,2})$/);
+        minutos = m ? Number(m[1]) : 0;
+      }
+    }
+
+    const turnosAgente = transcription.filter((t) => t && t.type === 'agent').length;
+    const turnosAsesor = turnos - turnosAgente;
+
+    // Reparto de la palabra por caracteres pronunciados: se acerca más al
+    // tiempo real de habla que contar turnos (un turno puede ser "ajá").
+    const chars = transcription.reduce(
+      (acc, t) => {
+        const n = String((t && t.text) || '').length;
+        if (t && t.type === 'agent') acc.agente += n;
+        else acc.asesor += n;
+        return acc;
+      },
+      { agente: 0, asesor: 0 }
+    );
+    const totalChars = chars.agente + chars.asesor;
+
+    return {
+      duracion_minutos: minutos,
+      turnos_agente: turnosAgente,
+      turnos_asesor: turnosAsesor,
+      // Intervenciones por minuto: detecta monólogos y conversaciones picadas
+      ritmo_turnos: turnos > 0 && minutos > 0
+        ? Math.round((turnos / minutos) * 10) / 10
+        : null,
+      // Cuánto habló el asesor. En venta consultiva debe quedar bajo el 45%.
+      habla_asesor_pct: totalChars > 0
+        ? Math.round((chars.asesor / totalChars) * 100)
+        : null,
+      palabras_promedio_turno: turnos > 0
+        ? Math.round(totalChars / turnos)
+        : null
+    };
   }
 
   /** Clasificación del desempeño (etiqueta + color + clase CSS del badge). */
