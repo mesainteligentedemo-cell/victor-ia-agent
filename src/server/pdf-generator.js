@@ -170,11 +170,26 @@ async function generatePDF(htmlContent, metadata = {}) {
 
 /**
  * Cleanup on exit
+ *
+ * NOTA: 'exit' es síncrono — un handler async nunca llega a completarse y
+ * además puede provocar un assert de libuv al salir. Cerramos el browser
+ * en las señales de terminación (donde sí se puede esperar) y, en 'exit',
+ * solo matamos el proceso hijo de forma síncrona.
  */
-process.on('exit', async () => {
-  if (pdfGenerator) {
-    await pdfGenerator.closeBrowser();
-  }
+function shutdown(signal) {
+  if (!pdfGenerator) process.exit(0);
+  pdfGenerator
+    .closeBrowser()
+    .catch((e) => console.warn('[PDF] closeBrowser falló:', e.message))
+    .finally(() => process.exit(0));
+}
+
+process.once('SIGTERM', () => shutdown('SIGTERM'));
+process.once('SIGINT', () => shutdown('SIGINT'));
+
+process.on('exit', () => {
+  const proc = pdfGenerator && pdfGenerator.browser && pdfGenerator.browser.process();
+  if (proc) proc.kill('SIGKILL');
 });
 
 module.exports = { PDFGenerator, generatePDF };
