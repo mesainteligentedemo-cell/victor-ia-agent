@@ -10,15 +10,20 @@ const {
   formatDateLocal,
   formatDateLong
 } = require('./email-sender');
+const { buildReportLinks } = require('./report-links');
 
 function mapElevenLabsData(webhookBody) {
   const wh = webhookBody.body || webhookBody;
 
   // Helpers
   const v = (x, def) => (x == null || x === '') ? (def || '-') : String(x).trim();
+  // OJO: `|| def` borraba los valores falsy legítimos — un score_overall de 0
+  // se convertía en el default 8 y el reporte mentía. Solo undefined/null/''
+  // cuentan como "sin dato".
   const safe = (obj, path, def) => {
     try {
-      return path.split('.').reduce((acc, p) => acc[p], obj) || def;
+      const val = path.split('.').reduce((acc, p) => (acc == null ? undefined : acc[p]), obj);
+      return val === undefined || val === null || val === '' ? def : val;
     } catch {
       return def;
     }
@@ -72,17 +77,22 @@ function mapElevenLabsData(webhookBody) {
   const mejora_potencial = Math.round(100 - scoreTotal) + '%';
 
   // ===== ANÁLISIS TEXTOS =====
+  // Los defaults NO inventan observaciones. Antes decían cosas como
+  // "Excelente calibración visual" aunque el agente no hubiera evaluado nada:
+  // un reporte de coaching con hallazgos falsos es peor que uno vacío, porque
+  // el gerente toma decisiones sobre él. Ahora el respaldo es neutro y se
+  // apoya en las competencias reales de la sesión.
   const fortalezas = v(safe(wh, 'fortalezas', null),
-    '✓ Excelente calibración visual\n✓ Empatía genuina con la familia\n✓ Manejo natural de pausas');
+    'Continuar desarrollando fortalezas identificadas');
 
   const areas_mejora = v(safe(wh, 'areas_mejora', null),
-    '• Mejorar cierre de objeciones sobre precio\n• Aumentar velocidad en lectura de sala\n• Profundizar en técnicas de reencuadre');
+    'Mantener enfoque en competencias clave');
 
   const analisis_pnl = v(safe(wh, 'analisis_pnl', null),
-    'Uso efectivo de anclajes emocionales. Reencuadres de valor bien ejecutados. Necesita mejorar submodalidades auditivas.');
+    'Sin observaciones de PNL registradas en esta sesión.');
 
   const objeciones_trabajadas = v(safe(wh, 'objeciones_trabajadas', null),
-    'Precio (respondió con valor-tiempo), Garantía (explicó bien), Seguridad (faltó dato neurocientífico)');
+    'No se registraron objeciones en esta sesión.');
 
   // ===== COMPETENCIAS (para gráficos) =====
   const competencias = [
@@ -171,10 +181,9 @@ function mapElevenLabsData(webhookBody) {
   }
 
   // ===== URLS (para CTAs) =====
-  const baseUrl = process.env.PUBLIC_BASE_URL || 'https://victor-ia-agent.vercel.app';
-  const pop_up_url = `${baseUrl}/player?conv=${conversationId}`;
-  const pdf_download_url = `${baseUrl}/api/pdf/${conversationId}`;
-  const retrain_url = `${baseUrl}/retrain?conv=${conversationId}`;
+  // Firmadas: atan el enlace a ESTE conversation_id y caducan.
+  // Ver src/server/report-links.js.
+  const { pop_up_url, pdf_download_url, retrain_url } = buildReportLinks(conversationId);
 
   // ===== RETORNAR OBJETO COMPLETO =====
   return {

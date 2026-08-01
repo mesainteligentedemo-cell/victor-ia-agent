@@ -311,7 +311,18 @@
    ]
   }
  },
+ "active": true,
  "settings": {
-  "executionOrder": "v1"
+  "executionOrder": "v1",
+  "saveDataErrorExecution": "all",
+  "saveDataSuccessExecution": "all",
+  "saveExecutionProgress": true,
+  "timezone": "America/Cancun"
+ },
+ "pinData": {},
+ "tags": [],
+ "meta": {
+  "instanceId": "victor-ia-agent-v3",
+  "notes": "Cron '0 0 1 */3 *' = 00:00 del dia 1 de cada trimestre (ene/abr/jul/oct) ~= cada 90 dias. NO usar '0 0 */90 * *': el campo dia-del-mes solo llega a 31, asi que */90 colapsa al dia 1 y dispararia CADA MES (30 dias), no cada 90. La ventana real la manda ROTATION_INTERVAL_DAYS=90 en Vercel, que es la que calcula next_rotation y el flag overdue."
  }
 }

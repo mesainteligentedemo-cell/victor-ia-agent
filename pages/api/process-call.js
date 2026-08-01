@@ -59,6 +59,8 @@ function extractSignature(headers) {
     headers['elevenlabs-signature'] ||
     headers['x-elevenlabs-signature'] ||
     headers['x-hmac-signature'] ||
+    // El workflow de N8N firma con este header (ver n8n-workflow-vic-agent-v3.json)
+    headers['x-webhook-signature'] ||
     headers['x-signature'] ||
     null
   );
@@ -93,7 +95,12 @@ export default async function handler(req, res) {
     const signature = extractSignature(req.headers);
     const result = await processCallWebhook(body, signature, rawBody);
 
-    return res.status(result && result.success ? 200 : 422).json(result);
+    if (result && result.success) return res.status(200).json(result);
+
+    // 401 cuando falla el HMAC (autenticación), 422 cuando el payload no se
+    // pudo procesar. El pipeline marca cuál corresponde.
+    const status = Number(result && result.statusCode) || 422;
+    return res.status(status).json(result);
   } catch (error) {
     console.error('[API] Unhandled error:', error);
     return res.status(500).json({

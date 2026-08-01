@@ -61,11 +61,59 @@ function polar(cx, cy, radius, angleDeg) {
 let uidCounter = 0;
 const uid = (prefix) => `${prefix}${++uidCounter}`;
 
-/** Clampa un número al rango [min,max] y descarta no-finitos. */
+/**
+ * Clampa un número al rango [min,max] y descarta no-finitos.
+ *
+ * OJO con los vacíos: `Number(null)` y `Number('')` valen 0 y son finitos, así
+ * que sin este filtro un score ausente se pintaba como un 0 real. "No hay dato"
+ * y "sacó cero" no son lo mismo — el default decide cuál mostrar.
+ */
 function clamp(n, min, max, def) {
+  if (n === null || n === undefined || n === '') return def;
   const x = Number(n);
   if (!Number.isFinite(x)) return def;
   return Math.min(max, Math.max(min, x));
+}
+
+/**
+ * Score listo para pintar y para narrar: siempre un número dentro de [0,10].
+ *
+ * Sin esto, un score undefined/NaN/12 llegaba tal cual a la descripción
+ * accesible ("Rapport: undefined de 10") y el lector de pantalla leía basura.
+ * El SVG ya clampaba la geometría; el texto no.
+ */
+function safeScore(value) {
+  return clamp(value, 0, 10, 0);
+}
+
+/** Longitud máxima de una etiqueta antes de recortarla. */
+const MAX_LABEL_CHARS = 25;
+
+/**
+ * Recorta etiquetas largas para que no se salgan del viewBox ni se solapen.
+ * Corta por palabra cuando puede: "Manejo de Objeciones Complejas" ->
+ * "Manejo de Objeciones…" es legible; un corte a mitad de palabra, no.
+ */
+function truncateLabel(text, max = MAX_LABEL_CHARS) {
+  const s = String(text == null ? '' : text).trim();
+  if (s.length <= max) return s;
+
+  const corte = s.slice(0, max - 1);
+  const ultimoEspacio = corte.lastIndexOf(' ');
+  // Solo cortamos por palabra si no perdemos más de un tercio del espacio útil
+  const base = ultimoEspacio > max * 0.6 ? corte.slice(0, ultimoEspacio) : corte;
+  return `${base.trimEnd()}…`;
+}
+
+/**
+ * Tamaño de fuente que hace caber la etiqueta.
+ * Las etiquetas largas bajan de cuerpo en vez de desbordar el gráfico.
+ */
+function labelFontSize(text, base = 13) {
+  const len = String(text == null ? '' : text).trim().length;
+  if (len <= 14) return base;
+  if (len <= 20) return base - 1;
+  return base - 2;
 }
 
 /** Envuelve el SVG con los atributos de accesibilidad correctos. */
@@ -167,11 +215,15 @@ function radarChart(competencias) {
     let anchor = 'middle';
     if (p.angle > 5 && p.angle < 175) anchor = 'start';
     else if (p.angle > 185 && p.angle < 355) anchor = 'end';
-    body += txt(lp.x, lp.y - 7, p.name, { size: 12, fill: P.text, anchor, weight: 600 });
+    // El radar es el gráfico más apretado: etiquetas cortas o se pisan entre sí.
+    const etiqueta = truncateLabel(p.name, 18);
+    body += txt(lp.x, lp.y - 7, etiqueta, {
+      size: labelFontSize(etiqueta, 12), fill: P.text, anchor, weight: 600
+    });
     body += txt(lp.x, lp.y + 9, `${p.score}/10`, { size: 11, fill: scoreColor(p.score), anchor, weight: 700 });
   });
 
-  const desc = items.map((c) => `${c.name}: ${c.score} de 10`).join('. ');
+  const desc = items.map((c) => `${c.name}: ${safeScore(c.score)} de 10`).join('. ');
   return svgWrap(`0 0 ${W} ${H}`, 'Perfil de competencias del asesor', desc, body);
 }
 
@@ -225,13 +277,16 @@ function barChart(competencias) {
       + `<stop offset="100%" stop-color="${color}" stop-opacity="1"/>`
       + `</linearGradient></defs>`;
 
-    body += txt(labelW, barY + barH / 2, c.name, { size: 13, fill: P.text, anchor: 'end', weight: 600 });
+    const etiqueta = truncateLabel(c.name);
+    body += txt(labelW, barY + barH / 2, etiqueta, {
+      size: labelFontSize(etiqueta), fill: P.text, anchor: 'end', weight: 600
+    });
     body += `<rect x="${barX}" y="${barY}" width="${r2(barMax)}" height="${barH}" rx="4" fill="rgba(255,255,255,0.045)"/>`;
     body += `<rect x="${barX}" y="${barY}" width="${r2(w)}" height="${barH}" rx="4" fill="url(#${gid})"/>`;
     body += txt(barX + w + 12, barY + barH / 2, `${score}`, { size: 13, fill: color, weight: 700 });
   });
 
-  const desc = items.map((c) => `${c.name}: ${c.score} de 10`).join('. ');
+  const desc = items.map((c) => `${c.name}: ${safeScore(c.score)} de 10`).join('. ');
   return svgWrap(`0 0 ${W} ${H}`, 'Ranking de competencias contra la meta VTC de 8.0', desc, body);
 }
 
@@ -280,7 +335,11 @@ function lineChart(labels, values, opts = {}) {
     const c = scoreColor(v);
     body += `<circle cx="${x(i)}" cy="${y(v)}" r="5.5" fill="${P.navyDeep}" stroke="${c}" stroke-width="2.5"/>`;
     body += txt(x(i), y(v) - 18, String(v), { size: 12, fill: c, anchor: 'middle', weight: 700 });
-    body += txt(x(i), H - padB + 22, L[i] || '', { size: 12, fill: P.text, anchor: 'middle', weight: 600 });
+    // Las fases del eje X caben en ~14 caracteres antes de solaparse
+    const fase = truncateLabel(L[i] || '', 14);
+    body += txt(x(i), H - padB + 22, fase, {
+      size: labelFontSize(fase, 12), fill: P.text, anchor: 'middle', weight: 600
+    });
   });
 
   const desc = L.map((l, i) => `${l}: ${V[i]} de 10`).join('. ');
@@ -410,7 +469,11 @@ function donutChart(slices, opts = {}) {
     const color = P.cat[i % P.cat.length];
     const pct = Math.round((s.value / total) * 100);
     body += `<rect x="${legX}" y="${legY - 9}" width="18" height="18" rx="4" fill="${color}"/>`;
-    body += txt(legX + 30, legY, s.label, { size: 13, fill: P.text, weight: 600 });
+    // La leyenda tiene ~310px: más de 28 caracteres pisan el porcentaje de la derecha
+    const etiqueta = truncateLabel(s.label, 28);
+    body += txt(legX + 30, legY, etiqueta, {
+      size: labelFontSize(etiqueta), fill: P.text, weight: 600
+    });
     body += txt(W - 40, legY, `${pct}%`, { size: 13, fill: color, anchor: 'end', weight: 700 });
     legY += 34;
   });
@@ -448,7 +511,10 @@ function gapChart(competencias, meta = 8) {
     const metaX = trackX + (meta / 10) * trackW;
     const gap = r2(Math.max(0, meta - score));
 
-    body += txt(labelW, barY + barH / 2, c.name, { size: 13, fill: P.text, anchor: 'end', weight: 600 });
+    const etiqueta = truncateLabel(c.name);
+    body += txt(labelW, barY + barH / 2, etiqueta, {
+      size: labelFontSize(etiqueta), fill: P.text, anchor: 'end', weight: 600
+    });
     body += `<rect x="${trackX}" y="${barY}" width="${r2(trackW)}" height="${barH}" rx="4" fill="rgba(255,255,255,0.045)"/>`;
 
     // Zona de brecha (solo si existe) — patrón diagonal + color, doble canal
@@ -472,8 +538,11 @@ function gapChart(competencias, meta = 8) {
 
   const desc = items
     .map((c) => {
-      const gap = Math.max(0, meta - clamp(c.score, 0, 10, 0));
-      return gap > 0 ? `${c.name} está ${r2(gap)} puntos debajo del estándar` : `${c.name} cumple el estándar`;
+      const score = safeScore(c.score);
+      const gap = Math.max(0, meta - score);
+      return gap > 0
+        ? `${c.name}: ${score} de 10, ${r2(gap)} puntos debajo del estándar`
+        : `${c.name}: ${score} de 10, cumple el estándar`;
     })
     .join('. ');
   return svgWrap(`0 0 ${W} ${H}`, 'Brecha de cada competencia contra el estándar VTC', desc, body);
@@ -507,6 +576,18 @@ function buildReportCharts(data) {
   const emotional = charts.emotional || {};
   const speech = charts.speech || {};
 
+  // El reparto del habla llega como porcentajes; si falta alguno, `Number(undefined)`
+  // da NaN y el donut se quedaba sin sectores. Normalizamos a 0 y dejamos que
+  // el propio donut degrade a "sin datos" si todo es cero.
+  const pct = (x) => {
+    const n = Number(x);
+    return Number.isFinite(n) && n > 0 ? n : 0;
+  };
+  const hablaAsesor = pct(speech.usuario);
+  const hablaIA = pct(speech.victor);
+  const hablaOtros = pct(speech.otros);
+  const hablaTotal = hablaAsesor + hablaIA + hablaOtros;
+
   return {
     chart_radar: radarChart(competencias),
     chart_ranking: barChart(competencias),
@@ -518,20 +599,14 @@ function buildReportCharts(data) {
     }),
     chart_habla: donutChart(
       [
-        { label: `${d.nombre || 'Asesor'} (asesor)`, value: speech.usuario },
-        { label: 'Cliente simulado (IA)', value: speech.victor },
-        { label: 'Silencios / otros', value: speech.otros }
+        { label: `${d.nombre || 'Asesor'} (asesor)`, value: hablaAsesor },
+        { label: 'Cliente simulado (IA)', value: hablaIA },
+        { label: 'Silencios / otros', value: hablaOtros }
       ],
       {
         title: 'Distribución del habla en la sesión',
         centerLabel: 'ASESOR',
-        centerValue: `${Math.round(
-          ((Number(speech.usuario) || 0) /
-            Math.max(
-              1,
-              (Number(speech.usuario) || 0) + (Number(speech.victor) || 0) + (Number(speech.otros) || 0)
-            )) * 100
-        )}%`
+        centerValue: hablaTotal > 0 ? `${Math.round((hablaAsesor / hablaTotal) * 100)}%` : '—'
       }
     ),
     chart_brecha: gapChart(competencias, 8)
@@ -546,5 +621,12 @@ module.exports = {
   areaChart,
   donutChart,
   gapChart,
+  // Exportados para los tests: son los que garantizan que ningún gráfico
+  // imprima undefined/NaN ni desborde con una etiqueta larga.
+  clamp,
+  safeScore,
+  truncateLabel,
+  labelFontSize,
+  esc,
   PALETTE: P
 };

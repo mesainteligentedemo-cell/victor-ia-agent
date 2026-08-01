@@ -1,0 +1,15 @@
+{
+  "root": true,
+  "extends": "next/core-web-vitals",
+  "ignorePatterns": ["node_modules/", ".next/", "coverage/", "out/"],
+  "overrides": [
+    {
+      "files": ["tests/**/*.js", "jest.config.js"],
+      "env": { "jest": true, "node": true }
+    },
+    {
+      "files": ["src/server/**/*.js", "scripts/**/*.js"],
+      "env": { "node": true }
+    }
+  ]
+}

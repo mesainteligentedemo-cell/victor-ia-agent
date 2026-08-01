@@ -11,17 +11,30 @@
 
 const axios = require('axios');
 
+/**
+ * Presupuesto de tiempo.
+ *
+ * La lambda de Vercel muere a los 60s. Con un timeout de 60s en este cliente,
+ * una sola llamada lenta consumía TODO el presupuesto y el pipeline moría sin
+ * generar nada. 15s es holgado para la API de ConvAI y deja margen para el
+ * render de Chromium y el envío del correo.
+ */
+const DEFAULT_TIMEOUT_MS = Number(process.env.ELEVENLABS_TIMEOUT_MS || 15000);
+/** El audio pesa más: se le da algo más de margen, pero acotado. */
+const AUDIO_TIMEOUT_MS = Number(process.env.ELEVENLABS_AUDIO_TIMEOUT_MS || 15000);
+
 class ElevenLabsAPI {
-  constructor(apiKey) {
+  constructor(apiKey, options = {}) {
     if (!apiKey) {
       throw new Error('ElevenLabsAPI: missing API key (set ELEVENLABS_API_KEY)');
     }
 
     this.apiKey = apiKey;
     this.baseUrl = 'https://api.elevenlabs.io/v1';
+    this.timeout = Number(options.timeout) || DEFAULT_TIMEOUT_MS;
     this.client = axios.create({
       baseURL: this.baseUrl,
-      timeout: 60000,
+      timeout: this.timeout,
       headers: {
         'xi-api-key': this.apiKey,
         Accept: 'application/json'
@@ -74,17 +87,21 @@ class ElevenLabsAPI {
    * @param {string} conversationId
    * @returns {Promise<Buffer|null>}
    */
-  async getAudio(conversationId) {
+  async getAudio(conversationId, timeoutMs) {
     if (!conversationId) {
       console.error('[ELEVENLABS] getAudio: conversationId is required');
       return null;
     }
 
+    // El audio es un extra no bloqueante: si no cabe en el presupuesto restante
+    // de la lambda, mejor renunciar a él que perder el reporte entero.
+    const timeout = Math.max(1000, Number(timeoutMs) || AUDIO_TIMEOUT_MS);
+
     try {
-      console.log(`[ELEVENLABS] GET /convai/conversations/${conversationId}/audio`);
+      console.log(`[ELEVENLABS] GET /convai/conversations/${conversationId}/audio (timeout ${timeout}ms)`);
       const response = await this.client.get(
         `/convai/conversations/${conversationId}/audio`,
-        { responseType: 'arraybuffer', headers: { Accept: 'audio/mpeg' } }
+        { responseType: 'arraybuffer', headers: { Accept: 'audio/mpeg' }, timeout }
       );
 
       const buffer = Buffer.from(response.data);

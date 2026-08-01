@@ -1,22 +1,27 @@
 /**
- * API PROCESS-CALL — 12-Step Pipeline para procesar llamadas ElevenLabs
+ * API PROCESS-CALL — Pipeline de 14 pasos para procesar llamadas de ElevenLabs
  *
- * Entrada: webhook data de ElevenLabs
- * Salida: Email con reporte HTML + PDF + MP3
+ * Entrada: webhook de ElevenLabs (o de N8N) + firma HMAC
+ * Salida:  correo con reporte HTML + PDF adjunto + MP3 de la sesión
  *
- * Flow:
- * 1. Validate conversation_id
- * 2. Fetch conversation (ElevenLabs API)
- * 3. Extract transcript
- * 4. Extract 25 data fields
- * 5. Validate scores (0-10)
- * 6. IA analyze transcript
- * 7. Generate charts data
- * 8. Merge data
- * 9. Validate integrity
- * 10. Generate HTML
- * 11. Generate PDF
- * 12. Send email
+ * Flujo:
+ *  1. Validar firma HMAC          (fail-closed: sin firma válida, 401)
+ *  2. Extraer y validar conversation_id
+ *  3. Traer la conversación de ElevenLabs
+ *  4. Extraer transcript + turnos con tiempo real
+ *  5. Mapear a los campos del reporte
+ *  6. Validar scores (número finito en 0-10)
+ *  7. Análisis IA + RAG sobre la KB   (opcional, no bloqueante)
+ *  8. Construir datos de los 6 gráficos
+ *  9. Fusionar todo
+ * 10. Validar integridad             (0 es un dato válido, no un hueco)
+ * 11. Generar el HTML del reporte
+ * 12. Generar el PDF                 (Chromium headless)
+ * 13. Descargar el MP3               (opcional, sujeto a presupuesto)
+ * 14. Enviar el correo con adjuntos
+ *
+ * PRESUPUESTO: la lambda muere a los 60s (vercel.json). Cada paso consulta
+ * `remaining()` y los opcionales se saltan antes que arriesgar el envío.
  */
 
 const crypto = require('crypto');
@@ -27,17 +32,116 @@ const { generatePDF } = require('./pdf-generator');
 const { sendEmailWithAttachments, buildEmailPackage } = require('./email-sender');
 const ElevenLabsAPI = require('./elevenlabs-api');
 const { buildTranscriptContext, queryRAG, getAgentMeta } = require('./rag-query');
+const { cacheReport } = require('./report-cache');
+
+/** Las 7 competencias que el reporte puntúa de 0 a 10. */
+const SCORE_FIELDS = [
+  'score_rapport',
+  'score_pnl',
+  'score_postura',
+  'score_objecciones',
+  'score_lectura_sala',
+  'score_cierre',
+  'score_overall'
+];
+
+/**
+ * Campos sin los que el reporte no se puede emitir.
+ * `numeric: true` marca los que aceptan 0 como valor legítimo.
+ */
+const CRITICAL_FIELDS = [
+  { key: 'nombre', numeric: false },
+  { key: 'empleado_id', numeric: false },
+  { key: 'modulo', numeric: false },
+  { key: 'fecha_sesion', numeric: false },
+  { key: 'duracion_texto', numeric: false },
+  { key: 'score_overall', numeric: true },
+  { key: 'scoreTotal', numeric: true }
+];
+
+/**
+ * Verifica que los datos alcancen para renderizar el reporte.
+ *
+ * Clave: "falta" significa null / undefined / cadena vacía. NUNCA el número 0.
+ * Un asesor con score 0 es un dato válido — y el más importante de reportar.
+ *
+ * @param {object} data
+ * @returns {{ok:boolean, missing:string[], warnings:string[]}}
+ */
+function validateReportData(data) {
+  const d = data || {};
+  const missing = [];
+  const warnings = [];
+
+  for (const { key, numeric } of CRITICAL_FIELDS) {
+    const value = d[key];
+    if (value === null || value === undefined || value === '') {
+      missing.push(key);
+      continue;
+    }
+    if (numeric && !Number.isFinite(Number(value))) {
+      missing.push(`${key} (no numérico: ${JSON.stringify(value)})`);
+    }
+  }
+
+  // Avisos: no bloquean el envío, pero quedan en el log para diagnosticar
+  // un reporte pobre sin tener que reproducir la sesión.
+  if (!Array.isArray(d.competencias) || d.competencias.length < 3) {
+    warnings.push('Menos de 3 competencias: los gráficos saldrán degradados');
+  }
+  if (!Array.isArray(d.transcription) || !d.transcription.length) {
+    warnings.push('Sin transcripción: el reporte no mostrará el diálogo');
+  }
+  if (!d.charts || !d.charts.competencias) {
+    warnings.push('Sin datos de gráficos: se usarán los placeholders');
+  }
+  for (const campo of ['resumen', 'fortalezas', 'areas_mejora', 'recomendacion_coach']) {
+    if (!d[campo] || String(d[campo]).trim() === '-') {
+      warnings.push(`Campo narrativo vacío: ${campo} (se usará el texto por defecto)`);
+    }
+  }
+
+  return { ok: missing.length === 0, missing, warnings };
+}
+
+/**
+ * Presupuesto total del pipeline dentro de la lambda.
+ *
+ * Vercel corta la función a los 60s (ver vercel.json). Reservamos 5s para que
+ * el handler pueda serializar y devolver la respuesta: si la lambda muere en
+ * seco, N8N no recibe nada y no sabe si el correo salió o no.
+ */
+const PIPELINE_BUDGET_MS = Number(process.env.PIPELINE_BUDGET_MS || 55000);
+/** Por debajo de esto no se intenta ningún paso opcional. */
+const MIN_SLACK_MS = 10000;
+/** El audio es opcional: solo se busca si sobra este margen. */
+const AUDIO_MIN_SLACK_MS = 14000;
+/** Margen mínimo para intentar el envío del correo (paso final, obligatorio). */
+const EMAIL_MIN_SLACK_MS = 6000;
 
 async function processCallWebhook(webhookBody, hmacSignature, rawBody) {
-  console.log('[PROCESS] Starting 12-step pipeline...');
+  console.log('[PROCESS] Starting 14-step pipeline...');
 
   const startTime = Date.now();
+  /** Milisegundos que quedan antes de que Vercel mate la lambda. */
+  const remaining = () => PIPELINE_BUDGET_MS - (Date.now() - startTime);
+
   const results = {
     steps: [],
     errors: [],
     success: false,
     data: null,
     conversationId: null
+  };
+
+  /** Registra un paso con su marca de tiempo relativa — trazable en los logs. */
+  const step = (n, status, action, extra) => {
+    const elapsed = Date.now() - startTime;
+    const entry = { step: n, status, action, elapsed_ms: elapsed, ...(extra || {}) };
+    results.steps.push(entry);
+    const icon = status === 'success' ? '✓' : status === 'warning' ? '!' : '×';
+    console.log(`[STEP ${n}] ${icon} ${action} (+${elapsed}ms, quedan ${remaining()}ms)`);
+    return entry;
   };
 
   try {
@@ -53,9 +157,13 @@ async function processCallWebhook(webhookBody, hmacSignature, rawBody) {
       process.env.VTC_SHARED_SECRET
     );
     if (!isValid) {
-      throw new Error('Invalid HMAC signature');
+      // 401 (no 422): la petición es correcta en forma, lo que falla es la autenticación.
+      const err = new Error('Invalid HMAC signature');
+      err.statusCode = 401;
+      err.code = 'UNAUTHORIZED';
+      throw err;
     }
-    results.steps.push({ step: 1, status: 'success', action: 'HMAC validated' });
+    step(1, 'success', 'HMAC validated');
 
     // ════════════════════════════════════════════
     // STEP 2: EXTRACT & VALIDATE conversation_id
@@ -69,20 +177,21 @@ async function processCallWebhook(webhookBody, hmacSignature, rawBody) {
     if (!conversationId) {
       throw new Error('Missing conversation_id');
     }
-    console.log(`[STEP 2] conversation_id = ${conversationId}`);
     results.conversationId = conversationId;
-    results.steps.push({ step: 2, status: 'success', action: 'conversation_id validated' });
+    step(2, 'success', 'conversation_id validated', { conversation_id: conversationId });
 
     // ════════════════════════════════════════════
     // STEP 3: FETCH CONVERSATION FROM ELEVENLABS
     // ════════════════════════════════════════════
-    console.log('[STEP 3] Fetching conversation from ElevenLabs...');
+    if (!process.env.ELEVENLABS_API_KEY) {
+      throw new Error('Missing ELEVENLABS_API_KEY');
+    }
     const elevenLabsAPI = new ElevenLabsAPI(process.env.ELEVENLABS_API_KEY);
     const conversation = await elevenLabsAPI.getConversation(conversationId);
     if (!conversation) {
       throw new Error('Could not fetch conversation from ElevenLabs');
     }
-    results.steps.push({ step: 3, status: 'success', action: 'Conversation fetched from ElevenLabs' });
+    step(3, 'success', 'Conversation fetched from ElevenLabs');
 
     // ════════════════════════════════════════════
     // STEP 4: EXTRACT TRANSCRIPT
@@ -96,10 +205,9 @@ async function processCallWebhook(webhookBody, hmacSignature, rawBody) {
     }
     // Los turnos crudos conservan time_in_call_secs -> timestamps reales en el reporte
     const transcriptTurns = ElevenLabsAPI.extractTurns(conversation);
-    results.steps.push({
-      step: 4,
-      status: 'success',
-      action: `Transcript extracted (${transcript.length} chars, ${transcriptTurns.length} turnos)`
+    step(4, 'success', `Transcript extracted (${transcript.length} chars, ${transcriptTurns.length} turnos)`, {
+      transcript_chars: transcript.length,
+      turns: transcriptTurns.length
     });
 
     // ════════════════════════════════════════════
@@ -122,23 +230,25 @@ async function processCallWebhook(webhookBody, hmacSignature, rawBody) {
       metadata: conversation.metadata || nestedPayload.metadata,
       audio_url: conversation.audio_url
     });
-    results.steps.push({ step: 5, status: 'success', action: '25 data fields mapped' });
+    step(5, 'success', `${Object.keys(mappedData).length} campos mapeados`, {
+      campos_del_agente: Object.keys(collected).length
+    });
 
     // ════════════════════════════════════════════
     // STEP 6: VALIDATE SCORES (0-10)
     // ════════════════════════════════════════════
-    console.log('[STEP 6] Validating scores...');
-    const scoreFields = [
-      'score_rapport', 'score_pnl', 'score_postura',
-      'score_objecciones', 'score_lectura_sala', 'score_cierre', 'score_overall'
-    ];
-    for (const field of scoreFields) {
+    // OJO: `typeof NaN === 'number'` y NaN falla toda comparación, así que la
+    // validación anterior (`score < 0 || score > 10`) dejaba pasar NaN entero.
+    // Number.isFinite es la única comprobación que lo atrapa.
+    for (const field of SCORE_FIELDS) {
       const score = mappedData[field];
-      if (score < 0 || score > 10 || typeof score !== 'number') {
-        throw new Error(`Invalid score for ${field}: ${score}`);
+      if (!Number.isFinite(score) || score < 0 || score > 10) {
+        throw new Error(`Invalid score for ${field}: ${JSON.stringify(score)}`);
       }
     }
-    results.steps.push({ step: 6, status: 'success', action: 'All scores validated (0-10 range)' });
+    step(6, 'success', 'Scores validados (número finito en 0-10)', {
+      scores: Object.fromEntries(SCORE_FIELDS.map((f) => [f, mappedData[f]]))
+    });
 
     // ════════════════════════════════════════════
     // STEP 7: IA ANALYZE TRANSCRIPT (opcional)
@@ -147,91 +257,113 @@ async function processCallWebhook(webhookBody, hmacSignature, rawBody) {
     let aiAnalysis = {};
     try {
       aiAnalysis = await analyzeTranscriptWithAI(transcript, mappedData);
-      results.steps.push({ step: 7, status: 'success', action: 'IA analysis completed' });
+      step(7, 'success', 'IA analysis completed');
     } catch (err) {
       console.warn('[STEP 7] IA analysis skipped:', err.message);
-      results.steps.push({ step: 7, status: 'warning', action: 'IA analysis skipped (non-critical)' });
+      step(7, 'warning', `IA analysis skipped (no crítico): ${err.message}`);
     }
 
     // ════════════════════════════════════════════
     // STEP 8: GENERATE CHARTS DATA
     // ════════════════════════════════════════════
-    console.log('[STEP 8] Generating charts data...');
     const chartsData = generateChartsData(mappedData, transcript, transcriptTurns);
-    results.steps.push({ step: 8, status: 'success', action: 'Charts data generated (6 charts)' });
+    step(8, 'success', 'Charts data generated (6 charts)');
 
     // ════════════════════════════════════════════
     // STEP 9: MERGE ALL DATA
     // ════════════════════════════════════════════
-    console.log('[STEP 9] Merging all data...');
     const mergedData = {
       ...mappedData,
       ...aiAnalysis,
       charts: chartsData,
       audio_url: conversation.audio_url
     };
-    results.steps.push({ step: 9, status: 'success', action: 'All data merged' });
+    step(9, 'success', 'All data merged');
 
     // ════════════════════════════════════════════
     // STEP 10: VALIDATE DATA INTEGRITY
     // ════════════════════════════════════════════
-    console.log('[STEP 10] Validating data integrity...');
-    const criticalFields = [
-      'nombre', 'empleado_id', 'modulo', 'fecha_sesion',
-      'duracion_texto', 'score_overall', 'scoreTotal'
-    ];
-    for (const field of criticalFields) {
-      if (!mergedData[field]) {
-        throw new Error(`Missing critical field: ${field}`);
-      }
+    // `!mergedData[field]` rechazaba un score_overall de 0 como "campo
+    // faltante" — un asesor con desempeño 0 no generaba reporte. Faltante es
+    // null / undefined / cadena vacía, nunca el número cero.
+    const validation = validateReportData(mergedData);
+    if (!validation.ok) {
+      throw new Error(`Datos incompletos para el reporte: ${validation.missing.join(', ')}`);
     }
-    results.steps.push({ step: 10, status: 'success', action: 'Data integrity validated' });
+    for (const aviso of validation.warnings) console.warn(`[STEP 10] ${aviso}`);
+    step(10, 'success', 'Data integrity validated', {
+      warnings: validation.warnings.length ? validation.warnings : undefined
+    });
 
     // ════════════════════════════════════════════
     // STEP 11: GENERATE HTML REPORT
     // ════════════════════════════════════════════
-    console.log('[STEP 11] Generating HTML report...');
     const htmlReport = await generateHTMLReport(mergedData);
     if (!htmlReport) {
       throw new Error('Failed to generate HTML report');
     }
-    results.steps.push({ step: 11, status: 'success', action: `HTML report generated (${htmlReport.length} chars)` });
+    step(11, 'success', `HTML report generated (${htmlReport.length} chars)`);
 
     // ════════════════════════════════════════════
     // STEP 12: GENERATE PDF
     // ════════════════════════════════════════════
-    console.log('[STEP 12] Generating PDF...');
+    if (remaining() < MIN_SLACK_MS) {
+      throw new Error(
+        `Sin presupuesto para generar el PDF (quedan ${remaining()}ms de ${PIPELINE_BUDGET_MS}ms)`
+      );
+    }
     const pdfBuffer = await generatePDF(htmlReport, mergedData);
-    if (!pdfBuffer) {
+    if (!pdfBuffer || !pdfBuffer.length) {
       throw new Error('Failed to generate PDF');
     }
-    results.steps.push({ step: 12, status: 'success', action: `PDF generated (${(pdfBuffer.length / 1024).toFixed(2)} KB)` });
+    step(12, 'success', `PDF generated (${(pdfBuffer.length / 1024).toFixed(2)} KB)`, {
+      pdf_bytes: pdfBuffer.length
+    });
+
+    // Cachea el reporte para que los CTAs (/api/pdf/:id, /player, /retrain)
+    // respondan sin repetir el pipeline completo.
+    cacheReport(conversationId, {
+      pdf: pdfBuffer,
+      html: htmlReport,
+      data: mergedData,
+      pdfFilename: null
+    });
 
     // ════════════════════════════════════════════
-    // STEP 13: FETCH AUDIO & CONVERT TO MP3
+    // STEP 13: FETCH AUDIO & CONVERT TO MP3 (opcional)
     // ════════════════════════════════════════════
-    console.log('[STEP 13] Fetching audio (MP3) from ElevenLabs...');
-    const mp3Buffer = await fetchAndConvertAudio(
-      conversation.audio_url,
-      conversationId,
-      elevenLabsAPI
-    );
-    if (mp3Buffer) {
-      results.steps.push({
-        step: 13,
-        status: 'success',
-        action: `Audio fetched (${(mp3Buffer.length / 1024 / 1024).toFixed(2)} MB)`
-      });
+    let mp3Buffer = null;
+    if (remaining() < AUDIO_MIN_SLACK_MS) {
+      // Salida temprana: el MP3 es un extra. Perderlo es aceptable; perder el
+      // correo por agotar la lambda descargándolo, no.
+      step(13, 'warning',
+        `Audio omitido por presupuesto (quedan ${remaining()}ms) — el email sale sin MP3`);
     } else {
-      // No bloqueante: el reporte + PDF se envían igual, solo sin el MP3.
-      console.warn('[STEP 13] Audio no disponible — el email se enviará sin MP3');
-      results.steps.push({ step: 13, status: 'warning', action: 'Audio no disponible (email sin MP3)' });
+      mp3Buffer = await fetchAndConvertAudio(
+        conversation.audio_url,
+        conversationId,
+        elevenLabsAPI,
+        // Dejamos siempre margen para el envío del correo.
+        Math.max(2000, remaining() - EMAIL_MIN_SLACK_MS - 2000)
+      );
+      if (mp3Buffer) {
+        step(13, 'success', `Audio fetched (${(mp3Buffer.length / 1024 / 1024).toFixed(2)} MB)`, {
+          mp3_bytes: mp3Buffer.length
+        });
+      } else {
+        // No bloqueante: el reporte + PDF se envían igual, solo sin el MP3.
+        step(13, 'warning', 'Audio no disponible (email sin MP3)');
+      }
     }
 
     // ════════════════════════════════════════════
     // STEP 14: SEND EMAIL
     // ════════════════════════════════════════════
-    console.log('[STEP 14] Sending email with attachments...');
+    if (remaining() < EMAIL_MIN_SLACK_MS) {
+      console.warn(
+        `[STEP 14] Margen ajustado (${remaining()}ms) — se intenta el envío igualmente`
+      );
+    }
     const recipients = resolveRecipients();
 
     // Asunto, cuerpos y nombres de archivo se derivan del mismo instante:
@@ -266,10 +398,15 @@ async function processCallWebhook(webhookBody, hmacSignature, rawBody) {
     if (!emailResult.success) {
       throw new Error(`Email sending failed: ${emailResult.error}`);
     }
-    results.steps.push({
-      step: 14,
-      status: 'success',
-      action: `Email sent to ${recipients.join(', ')} (${attachments.map((a) => a.filename).join(', ')})`
+    step(14, 'success',
+      `Email sent to ${recipients.join(', ')} (${attachments.map((a) => a.filename).join(', ')})`);
+
+    // El nombre del PDF ya es definitivo: lo guardamos para /api/pdf/:id
+    cacheReport(conversationId, {
+      pdf: pdfBuffer,
+      html: htmlReport,
+      data: mergedData,
+      pdfFilename: email.pdfFilename
     });
 
     results.email = {
@@ -308,13 +445,17 @@ async function processCallWebhook(webhookBody, hmacSignature, rawBody) {
     return results;
 
   } catch (error) {
-    console.error('[ERROR]', error.message);
+    console.error(`[ERROR] paso ${results.steps.length + 1}: ${error.message}`);
     results.errors.push({
       message: error.message,
+      code: error.code || 'PIPELINE_ERROR',
       step: results.steps.length + 1,
       timestamp: new Date().toISOString()
     });
     results.success = false;
+    // El HTTP status lo decide el error, no el handler: 401 para fallo de
+    // autenticación, 422 para payload que no se pudo procesar.
+    results.statusCode = Number(error.statusCode) || 422;
     const duration = Date.now() - startTime;
     results.duration = duration;
 
@@ -351,9 +492,15 @@ function resolveRecipients() {
  */
 function validateHMACSignature(body, signature, secret) {
   // ElevenLabs manda: "t=<timestamp>,v0=<hash>" o "X-HMAC-Signature: <hash>"
+  // FAIL-CLOSED: sin firma o sin secreto NO se procesa. Un webhook sin
+  // autenticar puede disparar llamadas a ElevenLabs, render de Chromium y
+  // envío de correo — es un vector de abuso y de fuga de datos.
   if (!signature || !secret) {
-    console.warn('HMAC validation skipped: missing signature or secret');
-    return true; // Permitir para debugging, cambiar a false en producción
+    console.error(
+      `[HMAC] Rechazado: falta ${!signature ? 'firma en la petición' : ''}` +
+      `${!signature && !secret ? ' y ' : ''}${!secret ? 'VTC_SHARED_SECRET en el servidor' : ''}`
+    );
+    return false;
   }
 
   try {
@@ -711,20 +858,25 @@ function extractDataCollection(conversation) {
  * @param {ElevenLabsAPI} elevenLabsAPI
  * @returns {Promise<Buffer|null>}
  */
-async function fetchAndConvertAudio(audioUrl, conversationId, elevenLabsAPI) {
+async function fetchAndConvertAudio(audioUrl, conversationId, elevenLabsAPI, budgetMs) {
+  // El audio nunca puede costar más de lo que queda de lambda.
+  const presupuesto = Math.max(2000, Number(budgetMs) || 15000);
+  const inicio = Date.now();
+  const restante = () => presupuesto - (Date.now() - inicio);
+
   // 1. Vía API oficial (recomendado — devuelve audio/mpeg)
   if (elevenLabsAPI) {
-    const buffer = await elevenLabsAPI.getAudio(conversationId);
+    const buffer = await elevenLabsAPI.getAudio(conversationId, restante());
     if (buffer && buffer.length) return buffer;
   }
 
   // 2. Fallback: URL directa incluida en el payload
-  if (audioUrl) {
+  if (audioUrl && restante() > 2000) {
     try {
-      console.log('[AUDIO] Fallback: descargando desde audio_url...');
+      console.log(`[AUDIO] Fallback: descargando desde audio_url (quedan ${restante()}ms)...`);
       const response = await axios.get(audioUrl, {
         responseType: 'arraybuffer',
-        timeout: 60000
+        timeout: restante()
       });
       const buffer = Buffer.from(response.data);
       if (buffer.length) {
@@ -740,4 +892,14 @@ async function fetchAndConvertAudio(audioUrl, conversationId, elevenLabsAPI) {
   return null;
 }
 
-module.exports = { processCallWebhook, validateHMACSignature, extractDataCollection };
+module.exports = {
+  processCallWebhook,
+  validateHMACSignature,
+  extractDataCollection,
+  validateReportData,
+  generateChartsData,
+  buildSpeechSplit,
+  buildEngagementCurve,
+  SCORE_FIELDS,
+  CRITICAL_FIELDS
+};

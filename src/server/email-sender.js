@@ -343,10 +343,34 @@ function nl2br(str) {
 // ENVÍO
 // ════════════════════════════════════════════════════════════
 
+/**
+ * Presupuesto de tiempo del envío.
+ *
+ * El correo es el ÚLTIMO paso de una lambda de 60s: cuando se ejecuta ya se
+ * consumieron ~40s en fetch + render. Con 3 intentos y backoff exponencial
+ * (2s + 4s de espera, más 3 llamadas sin techo) el paso podía tardar más que
+ * toda la lambda y morir SIN enviar nada. Un intento acotado a 8s siempre cabe.
+ * Resend además reintenta por su cuenta del lado del proveedor.
+ */
+const EMAIL_MAX_RETRIES = Number(process.env.EMAIL_MAX_RETRIES || 1);
+const EMAIL_ATTEMPT_TIMEOUT_MS = Number(process.env.EMAIL_TIMEOUT_MS || 8000);
+
+/** Corre una promesa con techo de tiempo, limpiando el temporizador siempre. */
+function withTimeout(promise, ms, etiqueta) {
+  let timer = null;
+  const limite = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${etiqueta} timeout tras ${ms}ms`)), ms);
+  });
+  return Promise.race([promise, limite]).finally(() => {
+    if (timer) clearTimeout(timer);
+  });
+}
+
 class EmailSender {
-  constructor(apiKey) {
+  constructor(apiKey, options = {}) {
     this.resend = new Resend(apiKey);
-    this.maxRetries = 3;
+    this.maxRetries = Math.max(1, Number(options.maxRetries) || EMAIL_MAX_RETRIES);
+    this.attemptTimeoutMs = Math.max(1000, Number(options.timeout) || EMAIL_ATTEMPT_TIMEOUT_MS);
   }
 
   /**
@@ -396,17 +420,22 @@ class EmailSender {
         // El texto plano mejora la entregabilidad y da fallback en clientes sin HTML
         if (textBody) payload.text = textBody;
 
-        const response = await this.resend.emails.send(payload);
+        const response = await withTimeout(
+          this.resend.emails.send(payload),
+          this.attemptTimeoutMs,
+          'resend.emails.send'
+        );
 
-        if (response.error) {
-          throw new Error(`Resend error: ${response.error.message}`);
+        if (response && response.error) {
+          throw new Error(`Resend error: ${response.error.message || response.error}`);
         }
 
-        console.log(`[EMAIL] ✓ Email sent successfully. ID: ${response.data.id}`);
+        const messageId = (response && response.data && response.data.id) || null;
+        console.log(`[EMAIL] ✓ Email sent successfully. ID: ${messageId || 'sin id'}`);
 
         return {
           success: true,
-          messageId: response.data.id,
+          messageId,
           subject,
           attachments: preparedAttachments.map((a) => a.filename),
           timestamp: new Date().toISOString(),
@@ -427,7 +456,7 @@ class EmailSender {
     console.error(`[EMAIL] All ${this.maxRetries} attempts failed`);
     return {
       success: false,
-      error: lastError.message,
+      error: (lastError && lastError.message) || 'Envío fallido sin detalle',
       attempts: attempt,
       timestamp: new Date().toISOString()
     };

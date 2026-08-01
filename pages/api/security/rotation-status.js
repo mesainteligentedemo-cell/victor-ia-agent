@@ -8,27 +8,46 @@
  *   - historial completo (Supabase, si está configurado)
  *   - salud de la configuración (qué secretos existen, qué falta)
  *
- * Nunca devuelve valores de secretos: solo presencia, longitud y prefijo.
+ * Nunca devuelve valores de secretos NI material derivado de ellos:
+ * solo presencia (configured) y longitud. Sin prefijo y sin fingerprint —
+ * ambos permiten confirmar un secreto candidato sin conocerlo.
  *
- * Acceso: público de solo lectura por defecto. Si se define
- * ROTATION_STATUS_TOKEN, exige `Authorization: Bearer <token>`.
+ * Acceso: SIEMPRE autenticado. Exige `Authorization: Bearer <ROTATION_STATUS_TOKEN>`.
+ * Si ROTATION_STATUS_TOKEN no está configurado, el endpoint responde 503:
+ * fail-closed, nunca público.
  */
 
+import crypto from 'crypto';
 import { getRotationStatus } from '../../../src/server/rotation-log';
 
 export const config = { api: { bodyParser: true } };
 
-/** Describe un secreto sin exponerlo. */
+/**
+ * Describe un secreto sin exponerlo ni permitir verificarlo.
+ * `length` es metadato operativo (detecta una key truncada); no reduce
+ * el espacio de búsqueda de forma útil.
+ */
 function describeSecret(name) {
   const v = process.env[name];
   if (!v) return { name, configured: false };
-  return {
-    name,
-    configured: true,
-    length: v.length,
-    prefix: v.slice(0, 4) + '…',
-    fingerprint: require('crypto').createHash('sha256').update(v).digest('hex').slice(0, 12)
-  };
+  return { name, configured: true, length: v.length };
+}
+
+/** Comparación en tiempo constante entre dos strings. */
+function safeEqual(a, b) {
+  if (typeof a !== 'string' || typeof b !== 'string') return false;
+  const bufA = Buffer.from(a, 'utf8');
+  const bufB = Buffer.from(b, 'utf8');
+  if (bufA.length !== bufB.length) return false;
+  return crypto.timingSafeEqual(bufA, bufB);
+}
+
+/** Extrae el token de Authorization: Bearer o del header X-Rotation-Token. */
+function extractToken(req) {
+  const auth = req.headers.authorization || '';
+  if (auth.startsWith('Bearer ')) return auth.slice(7).trim();
+  const header = req.headers['x-rotation-token'];
+  return header ? String(header).trim() : null;
 }
 
 export default async function handler(req, res) {
@@ -37,14 +56,24 @@ export default async function handler(req, res) {
     return res.status(405).json({ success: false, error: 'Method not allowed' });
   }
 
-  // Protección opcional por token
+  // Nunca cachear: la respuesta describe el estado de los secretos.
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+
+  // ── Autenticación obligatoria (fail-closed) ──────────────────
   const gate = process.env.ROTATION_STATUS_TOKEN;
-  if (gate) {
-    const auth = req.headers.authorization || '';
-    const provided = auth.startsWith('Bearer ') ? auth.slice(7) : null;
-    if (provided !== gate) {
-      return res.status(401).json({ success: false, error: 'Unauthorized' });
-    }
+  if (!gate) {
+    console.error('[ROTATION-STATUS] ROTATION_STATUS_TOKEN no configurado — endpoint deshabilitado');
+    return res.status(503).json({
+      success: false,
+      error: 'Endpoint deshabilitado: falta ROTATION_STATUS_TOKEN en el servidor'
+    });
+  }
+
+  const provided = extractToken(req);
+  if (!provided || !safeEqual(provided, gate)) {
+    console.warn('[ROTATION-STATUS] Acceso rechazado: token ausente o inválido');
+    res.setHeader('WWW-Authenticate', 'Bearer realm="rotation-status"');
+    return res.status(401).json({ success: false, error: 'Unauthorized' });
   }
 
   try {

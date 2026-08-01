@@ -3,80 +3,219 @@
   "nodes": [
     {
       "parameters": {
+        "httpMethod": "POST",
         "path": "webhook/elevenlabs-vic",
-        "responseMode": "immediately",
-        "responseData": "anotherObject",
-        "responseObject": "{\n  \"status\": \"received\",\n  \"processing\": true\n}"
+        "responseMode": "onReceived",
+        "options": {
+          "responseData": "{\"status\":\"received\",\"processing\":true}"
+        }
       },
+      "id": "a1000000-0000-4000-8000-000000000001",
       "name": "Webhook — ElevenLabs",
       "type": "n8n-nodes-base.webhook",
-      "typeVersion": 1,
-      "position": [250, 300],
+      "typeVersion": 2,
+      "position": [-160, 300],
       "webhookId": "webhook_vic_agent_v3"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ════════════════════════════════════════════════════════════\n// FIRMA HMAC-SHA256 DEL WEBHOOK\n//\n// REGLA DE ORO: la firma y el body enviado deben derivar del MISMO string.\n// Si el nodo HTTP re-serializa el JSON (por ejemplo mandando {{ $json }}),\n// los bytes cambian y el HMAC nunca coincide. Por eso aquí congelamos el\n// body en `rawBody` y el nodo HTTP envía EXACTAMENTE ese string.\n//\n// Requisito de entorno en N8N:\n//   N8N_BLOCK_ENV_ACCESS_IN_NODE=false   (para poder leer $env)\n//   VTC_SHARED_SECRET=<mismo valor que en Vercel>\n// ════════════════════════════════════════════════════════════\nconst crypto = require('crypto');\n\nconst secret = $env.VTC_SHARED_SECRET;\nif (!secret) {\n  throw new Error(\n    'VTC_SHARED_SECRET no está disponible en N8N. ' +\n    'Configúralo en las variables de entorno y asegúrate de que ' +\n    'N8N_BLOCK_ENV_ACCESS_IN_NODE=false.'\n  );\n}\n\nconst out = [];\n\nfor (const item of $input.all()) {\n  // El webhook de N8N entrega el payload en item.json.body; si viene plano,\n  // usamos item.json tal cual.\n  const payload =\n    item.json && item.json.body !== undefined && item.json.body !== null\n      ? item.json.body\n      : item.json;\n\n  // Bytes exactos que se van a transmitir y a firmar.\n  const rawBody = typeof payload === 'string' ? payload : JSON.stringify(payload);\n\n  const timestamp = Math.floor(Date.now() / 1000);\n  const hash = crypto\n    .createHmac('sha256', secret)\n    .update(`${timestamp}.${rawBody}`)\n    .digest('hex');\n\n  out.push({\n    json: {\n      signature: `t=${timestamp},v0=${hash}`,\n      rawBody,\n      body_bytes: Buffer.byteLength(rawBody, 'utf8'),\n      conversation_id:\n        (payload && (payload.conversation_id ||\n          (payload.data && payload.data.conversation_id))) || null,\n      signed_at: new Date(timestamp * 1000).toISOString()\n    }\n  });\n}\n\nreturn out;"
+      },
+      "id": "a1000000-0000-4000-8000-000000000002",
+      "name": "Firmar HMAC",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [60, 300]
     },
     {
       "parameters": {
         "method": "POST",
         "url": "={{ $env.PUBLIC_BASE_URL }}/api/process-call",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
-        "sendBody": true,
-        "bodyParametersUi": "json",
-        "bodyParameter": "={{ $json }}",
-        "options": {
-          "timeout": 60000
-        }
-      },
-      "name": "POST → Process Call",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.1,
-      "position": [500, 300],
-      "credentials": {
-        "httpHeaderAuth": "generic_auth_vic"
-      }
-    },
-    {
-      "parameters": {
-        "errorOnly": false
-      },
-      "name": "IF — Success?",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 1,
-      "position": [750, 300],
-      "conditions": {
-        "pass": "object",
-        "passObject": {
-          "conditions": [
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
             {
-              "value1": "={{ $json.success }}",
-              "value2": true,
-              "operation": "equals"
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "X-Webhook-Signature",
+              "value": "={{ $json.signature }}"
             }
           ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ $json.rawBody }}",
+        "options": {
+          "timeout": 60000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
         }
-      }
+      },
+      "id": "a1000000-0000-4000-8000-000000000003",
+      "name": "POST → Process Call",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [280, 300],
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
-        "items": "={\n  \"status\": \"success\",\n  \"conversationId\": \"{{ $json.conversationId }}\",\n  \"duration\": \"{{ $json.duration }}ms\",\n  \"steps\": \"{{ $json.steps.length }}\",\n  \"timestamp\": \"{{ now }}\"\n}"
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "cond-http-200",
+              "leftValue": "={{ $json.statusCode }}",
+              "rightValue": 200,
+              "operator": {
+                "type": "number",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "cond-body-success",
+              "leftValue": "={{ $json.body.success }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
       },
+      "id": "a1000000-0000-4000-8000-000000000004",
+      "name": "IF — Success?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [500, 300]
+    },
+    {
+      "parameters": {
+        "mode": "manual",
+        "assignments": {
+          "assignments": [
+            {
+              "id": "set-ok-status",
+              "name": "status",
+              "value": "success",
+              "type": "string"
+            },
+            {
+              "id": "set-ok-conv",
+              "name": "conversationId",
+              "value": "={{ $json.body.conversationId }}",
+              "type": "string"
+            },
+            {
+              "id": "set-ok-duration",
+              "name": "duration_ms",
+              "value": "={{ $json.body.duration }}",
+              "type": "number"
+            },
+            {
+              "id": "set-ok-steps",
+              "name": "steps",
+              "value": "={{ $json.body.steps ? $json.body.steps.length : 0 }}",
+              "type": "number"
+            },
+            {
+              "id": "set-ok-ts",
+              "name": "timestamp",
+              "value": "={{ $now.toISO() }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a1000000-0000-4000-8000-000000000005",
       "name": "Success Response",
       "type": "n8n-nodes-base.set",
-      "typeVersion": 3.3,
-      "position": [1000, 200]
+      "typeVersion": 3.4,
+      "position": [740, 190]
     },
     {
       "parameters": {
-        "items": "={\n  \"status\": \"error\",\n  \"error\": \"{{ $json.errors[0].message }}\",\n  \"conversationId\": \"{{ $json.conversationId }}\",\n  \"timestamp\": \"{{ now }}\"\n}"
+        "mode": "manual",
+        "assignments": {
+          "assignments": [
+            {
+              "id": "set-err-status",
+              "name": "status",
+              "value": "error",
+              "type": "string"
+            },
+            {
+              "id": "set-err-http",
+              "name": "http_status",
+              "value": "={{ $json.statusCode }}",
+              "type": "number"
+            },
+            {
+              "id": "set-err-reason",
+              "name": "reason",
+              "value": "={{ $json.statusCode === 401 ? 'HMAC inválido o ausente — revisa VTC_SHARED_SECRET en N8N y Vercel' : 'El pipeline no pudo procesar la llamada' }}",
+              "type": "string"
+            },
+            {
+              "id": "set-err-message",
+              "name": "error",
+              "value": "={{ $json.body && $json.body.errors && $json.body.errors[0] ? $json.body.errors[0].message : 'Error desconocido' }}",
+              "type": "string"
+            },
+            {
+              "id": "set-err-conv",
+              "name": "conversationId",
+              "value": "={{ $json.body ? $json.body.conversationId : null }}",
+              "type": "string"
+            },
+            {
+              "id": "set-err-ts",
+              "name": "timestamp",
+              "value": "={{ $now.toISO() }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
       },
+      "id": "a1000000-0000-4000-8000-000000000006",
       "name": "Error Response",
       "type": "n8n-nodes-base.set",
-      "typeVersion": 3.3,
-      "position": [1000, 400]
+      "typeVersion": 3.4,
+      "position": [740, 410]
     }
   ],
   "connections": {
     "Webhook — ElevenLabs": {
+      "main": [
+        [
+          {
+            "node": "Firmar HMAC",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Firmar HMAC": {
       "main": [
         [
           {
@@ -119,9 +258,14 @@
   },
   "active": true,
   "settings": {
-    "errorMessage": {
-      "enabled": true
-    },
-    "executionOrder": "v1"
-  }
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveExecutionProgress": true
+  },
+  "pinData": {},
+  "meta": {
+    "instanceId": "victor-ia-agent-v3"
+  },
+  "tags": []
 }
