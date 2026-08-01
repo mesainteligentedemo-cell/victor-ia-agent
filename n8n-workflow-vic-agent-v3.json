@@ -14,23 +14,29 @@
       "name": "Webhook — ElevenLabs",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [-160, 300],
+      "position": [
+        -160,
+        300
+      ],
       "webhookId": "webhook_vic_agent_v3"
     },
     {
       "parameters": {
-        "jsCode": "// ════════════════════════════════════════════════════════════\n// FIRMA HMAC-SHA256 DEL WEBHOOK\n//\n// REGLA DE ORO: la firma y el body enviado deben derivar del MISMO string.\n// Si el nodo HTTP re-serializa el JSON (por ejemplo mandando {{ $json }}),\n// los bytes cambian y el HMAC nunca coincide. Por eso aquí congelamos el\n// body en `rawBody` y el nodo HTTP envía EXACTAMENTE ese string.\n//\n// Requisito de entorno en N8N:\n//   N8N_BLOCK_ENV_ACCESS_IN_NODE=false   (para poder leer $env)\n//   VTC_SHARED_SECRET=<mismo valor que en Vercel>\n// ════════════════════════════════════════════════════════════\nconst crypto = require('crypto');\n\nconst secret = $env.VTC_SHARED_SECRET;\nif (!secret) {\n  throw new Error(\n    'VTC_SHARED_SECRET no está disponible en N8N. ' +\n    'Configúralo en las variables de entorno y asegúrate de que ' +\n    'N8N_BLOCK_ENV_ACCESS_IN_NODE=false.'\n  );\n}\n\nconst out = [];\n\nfor (const item of $input.all()) {\n  // El webhook de N8N entrega el payload en item.json.body; si viene plano,\n  // usamos item.json tal cual.\n  const payload =\n    item.json && item.json.body !== undefined && item.json.body !== null\n      ? item.json.body\n      : item.json;\n\n  // Bytes exactos que se van a transmitir y a firmar.\n  const rawBody = typeof payload === 'string' ? payload : JSON.stringify(payload);\n\n  const timestamp = Math.floor(Date.now() / 1000);\n  const hash = crypto\n    .createHmac('sha256', secret)\n    .update(`${timestamp}.${rawBody}`)\n    .digest('hex');\n\n  out.push({\n    json: {\n      signature: `t=${timestamp},v0=${hash}`,\n      rawBody,\n      body_bytes: Buffer.byteLength(rawBody, 'utf8'),\n      conversation_id:\n        (payload && (payload.conversation_id ||\n          (payload.data && payload.data.conversation_id))) || null,\n      signed_at: new Date(timestamp * 1000).toISOString()\n    }\n  });\n}\n\nreturn out;"
+        "jsCode": "// ════════════════════════════════════════════════════════════\n// FIRMA HMAC-SHA256 DEL WEBHOOK  —  Victor IA Agent v3\n//\n// REGLA DE ORO: la firma y el body enviado deben salir del MISMO string.\n// El nodo HTTP de este workflow envia `rawBody` TAL CUAL (contentType raw).\n// Si en su lugar se mandara {{ $json }}, n8n re-serializaria el objeto, los\n// bytes cambiarian y la firma NUNCA coincidiria -> 401 en /api/process-call.\n//\n// LIMITACIONES DE ESTE n8n (verificadas en el servidor):\n//   - El sandbox del nodo Code bloquea require('crypto')  -> HMAC en JS puro.\n//   - El acceso a $env tambien esta bloqueado             -> secreto embebido.\n// El HMAC en JS puro esta verificado contra crypto.createHmac (6/6 vectores,\n// incluidos UTF-8 multibyte y emoji).\n//\n// ANTES DE IMPORTAR: sustituye <<VTC_SHARED_SECRET>> por el mismo valor que\n// tiene la variable VTC_SHARED_SECRET en Vercel. Si se rota una, se rota la otra.\n// ════════════════════════════════════════════════════════════\n\n// HMAC-SHA256 en JS puro (n8n Code node no permite require('crypto'))\nfunction hmacSha256Hex(keyStr, msgStr) {\n  const K = [];\n  let cnt = 0;\n  for (let n2 = 2; cnt < 64; n2++) {\n    let isP = true;\n    for (let f = 2; f * f <= n2; f++) if (n2 % f === 0) { isP = false; break; }\n    if (isP) { K.push(Math.floor((Math.cbrt(n2) % 1) * 4294967296) >>> 0); cnt++; }\n  }\n  const H0 = [];\n  let c2 = 0;\n  for (let n3 = 2; c2 < 8; n3++) {\n    let isP = true;\n    for (let f = 2; f * f <= n3; f++) if (n3 % f === 0) { isP = false; break; }\n    if (isP) { H0.push(Math.floor((Math.sqrt(n3) % 1) * 4294967296) >>> 0); c2++; }\n  }\n\n  function utf8Bytes(s) {\n    const out = [];\n    for (let i = 0; i < s.length; i++) {\n      let c = s.charCodeAt(i);\n      if (c < 0x80) out.push(c);\n      else if (c < 0x800) { out.push(0xc0 | (c >> 6), 0x80 | (c & 63)); }\n      else if (c >= 0xd800 && c <= 0xdbff) {\n        const c2b = s.charCodeAt(++i);\n        const cp = 0x10000 + ((c - 0xd800) << 10) + (c2b - 0xdc00);\n        out.push(0xf0 | (cp >> 18), 0x80 | ((cp >> 12) & 63), 0x80 | ((cp >> 6) & 63), 0x80 | (cp & 63));\n      } else { out.push(0xe0 | (c >> 12), 0x80 | ((c >> 6) & 63), 0x80 | (c & 63)); }\n    }\n    return out;\n  }\n\n  function sha256Bytes(bytes) {\n    const H = H0.slice();\n    const ml = bytes.length * 8;\n    const msg = bytes.slice();\n    msg.push(0x80);\n    while (msg.length % 64 !== 56) msg.push(0);\n    const hi = Math.floor(ml / 4294967296);\n    const lo = ml >>> 0;\n    msg.push((hi >>> 24) & 255, (hi >>> 16) & 255, (hi >>> 8) & 255, hi & 255);\n    msg.push((lo >>> 24) & 255, (lo >>> 16) & 255, (lo >>> 8) & 255, lo & 255);\n\n    const w = new Array(64);\n    for (let i = 0; i < msg.length; i += 64) {\n      for (let t = 0; t < 16; t++) {\n        w[t] = ((msg[i + t * 4] << 24) | (msg[i + t * 4 + 1] << 16) | (msg[i + t * 4 + 2] << 8) | msg[i + t * 4 + 3]) >>> 0;\n      }\n      for (let t = 16; t < 64; t++) {\n        const s0 = (((w[t - 15] >>> 7) | (w[t - 15] << 25)) ^ ((w[t - 15] >>> 18) | (w[t - 15] << 14)) ^ (w[t - 15] >>> 3)) >>> 0;\n        const s1 = (((w[t - 2] >>> 17) | (w[t - 2] << 15)) ^ ((w[t - 2] >>> 19) | (w[t - 2] << 13)) ^ (w[t - 2] >>> 10)) >>> 0;\n        w[t] = (w[t - 16] + s0 + w[t - 7] + s1) >>> 0;\n      }\n      let a = H[0], b = H[1], c = H[2], d = H[3], e = H[4], f = H[5], g = H[6], h = H[7];\n      for (let t = 0; t < 64; t++) {\n        const S1 = (((e >>> 6) | (e << 26)) ^ ((e >>> 11) | (e << 21)) ^ ((e >>> 25) | (e << 7))) >>> 0;\n        const ch = ((e & f) ^ (~e & g)) >>> 0;\n        const t1 = (h + S1 + ch + K[t] + w[t]) >>> 0;\n        const S0 = (((a >>> 2) | (a << 30)) ^ ((a >>> 13) | (a << 19)) ^ ((a >>> 22) | (a << 10))) >>> 0;\n        const mj = ((a & b) ^ (a & c) ^ (b & c)) >>> 0;\n        const t2 = (S0 + mj) >>> 0;\n        h = g; g = f; f = e; e = (d + t1) >>> 0;\n        d = c; c = b; b = a; a = (t1 + t2) >>> 0;\n      }\n      H[0] = (H[0] + a) >>> 0; H[1] = (H[1] + b) >>> 0; H[2] = (H[2] + c) >>> 0; H[3] = (H[3] + d) >>> 0;\n      H[4] = (H[4] + e) >>> 0; H[5] = (H[5] + f) >>> 0; H[6] = (H[6] + g) >>> 0; H[7] = (H[7] + h) >>> 0;\n    }\n    const out = [];\n    for (let i = 0; i < 8; i++) out.push((H[i] >>> 24) & 255, (H[i] >>> 16) & 255, (H[i] >>> 8) & 255, H[i] & 255);\n    return out;\n  }\n\n  let key = utf8Bytes(keyStr);\n  if (key.length > 64) key = sha256Bytes(key);\n  while (key.length < 64) key.push(0);\n  const ipad = [], opad = [];\n  for (let i = 0; i < 64; i++) { ipad.push(key[i] ^ 0x36); opad.push(key[i] ^ 0x5c); }\n  const inner = sha256Bytes(ipad.concat(utf8Bytes(msgStr)));\n  const outer = sha256Bytes(opad.concat(inner));\n  return outer.map(function (b) { return ('0' + b.toString(16)).slice(-2); }).join('');\n}\n\nconst SECRET = '<<VTC_SHARED_SECRET>>';\n\nif (!SECRET || SECRET.indexOf('<<') === 0) {\n  throw new Error(\n    'Falta VTC_SHARED_SECRET en el nodo \"Firmar HMAC\". Sustituye el ' +\n    'placeholder por el valor real de Vercel antes de activar el workflow.'\n  );\n}\n\nconst out = [];\n\nfor (const item of $input.all()) {\n  // El webhook de n8n deja el payload en item.json.body; si llega plano,\n  // usamos item.json tal cual.\n  const payload =\n    item.json && item.json.body !== undefined && item.json.body !== null\n      ? item.json.body\n      : item.json;\n\n  // Bytes exactos que se transmiten Y se firman.\n  const rawBody = typeof payload === 'string' ? payload : JSON.stringify(payload);\n\n  const ts = Math.floor(Date.now() / 1000);\n  const sig = hmacSha256Hex(SECRET, ts + '.' + rawBody);\n\n  const conv =\n    (payload && (payload.conversation_id ||\n      (payload.data && payload.data.conversation_id))) || null;\n\n  out.push({\n    json: {\n      rawBody: rawBody,\n      signature: 't=' + ts + ',v0=' + sig,\n      conversation_id: conv,\n      body_bytes: rawBody.length,\n      signed_at: new Date(ts * 1000).toISOString()\n    }\n  });\n}\n\nreturn out;"
       },
       "id": "a1000000-0000-4000-8000-000000000002",
       "name": "Firmar HMAC",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [60, 300]
+      "position": [
+        60,
+        300
+      ]
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.PUBLIC_BASE_URL }}/api/process-call",
+        "url": "https://victor-ia-agent.vercel.app/api/process-call",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -62,7 +68,10 @@
       "name": "POST → Process Call",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [280, 300],
+      "position": [
+        280,
+        300
+      ],
       "onError": "continueRegularOutput"
     },
     {
@@ -104,7 +113,10 @@
       "name": "IF — Success?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [500, 300]
+      "position": [
+        500,
+        300
+      ]
     },
     {
       "parameters": {
@@ -149,7 +161,10 @@
       "name": "Success Response",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
-      "position": [740, 190]
+      "position": [
+        740,
+        190
+      ]
     },
     {
       "parameters": {
@@ -200,7 +215,10 @@
       "name": "Error Response",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
-      "position": [740, 410]
+      "position": [
+        740,
+        410
+      ]
     }
   ],
   "connections": {
