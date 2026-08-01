@@ -1,0 +1,317 @@
+{
+ "name": "Victor IA Agent - Auto Key Rotation (90d)",
+ "nodes": [
+  {
+   "parameters": {
+    "rule": {
+     "interval": [
+      {
+       "field": "cronExpression",
+       "expression": "0 0 1 */3 *"
+      }
+     ]
+    }
+   },
+   "id": "cron-90d",
+   "name": "Cron 90 dias",
+   "type": "n8n-nodes-base.scheduleTrigger",
+   "typeVersion": 1.2,
+   "position": [
+    -260,
+    300
+   ]
+  },
+  {
+   "parameters": {
+    "jsCode": "// n8n bloquea require('crypto') Y el acceso a $env, asi que:\n//  - el HMAC-SHA256 va en JS puro (verificado contra crypto.createHmac)\n//  - el secreto va embebido (n8n esta protegido por autenticacion)\n\n// HMAC-SHA256 en JS puro (n8n Code node no permite require('crypto'))\nfunction hmacSha256Hex(keyStr, msgStr) {\n  const K = [];\n  let cnt = 0;\n  for (let n2 = 2; cnt < 64; n2++) {\n    let isP = true;\n    for (let f = 2; f * f <= n2; f++) if (n2 % f === 0) { isP = false; break; }\n    if (isP) { K.push(Math.floor((Math.cbrt(n2) % 1) * 4294967296) >>> 0); cnt++; }\n  }\n  const H0 = [];\n  let c2 = 0;\n  for (let n3 = 2; c2 < 8; n3++) {\n    let isP = true;\n    for (let f = 2; f * f <= n3; f++) if (n3 % f === 0) { isP = false; break; }\n    if (isP) { H0.push(Math.floor((Math.sqrt(n3) % 1) * 4294967296) >>> 0); c2++; }\n  }\n\n  function utf8Bytes(s) {\n    const out = [];\n    for (let i = 0; i < s.length; i++) {\n      let c = s.charCodeAt(i);\n      if (c < 0x80) out.push(c);\n      else if (c < 0x800) { out.push(0xc0 | (c >> 6), 0x80 | (c & 63)); }\n      else if (c >= 0xd800 && c <= 0xdbff) {\n        const c2b = s.charCodeAt(++i);\n        const cp = 0x10000 + ((c - 0xd800) << 10) + (c2b - 0xdc00);\n        out.push(0xf0 | (cp >> 18), 0x80 | ((cp >> 12) & 63), 0x80 | ((cp >> 6) & 63), 0x80 | (cp & 63));\n      } else { out.push(0xe0 | (c >> 12), 0x80 | ((c >> 6) & 63), 0x80 | (c & 63)); }\n    }\n    return out;\n  }\n\n  function sha256Bytes(bytes) {\n    const H = H0.slice();\n    const ml = bytes.length * 8;\n    const msg = bytes.slice();\n    msg.push(0x80);\n    while (msg.length % 64 !== 56) msg.push(0);\n    const hi = Math.floor(ml / 4294967296);\n    const lo = ml >>> 0;\n    msg.push((hi >>> 24) & 255, (hi >>> 16) & 255, (hi >>> 8) & 255, hi & 255);\n    msg.push((lo >>> 24) & 255, (lo >>> 16) & 255, (lo >>> 8) & 255, lo & 255);\n\n    const w = new Array(64);\n    for (let i = 0; i < msg.length; i += 64) {\n      for (let t = 0; t < 16; t++) {\n        w[t] = ((msg[i + t * 4] << 24) | (msg[i + t * 4 + 1] << 16) | (msg[i + t * 4 + 2] << 8) | msg[i + t * 4 + 3]) >>> 0;\n      }\n      for (let t = 16; t < 64; t++) {\n        const s0 = (((w[t - 15] >>> 7) | (w[t - 15] << 25)) ^ ((w[t - 15] >>> 18) | (w[t - 15] << 14)) ^ (w[t - 15] >>> 3)) >>> 0;\n        const s1 = (((w[t - 2] >>> 17) | (w[t - 2] << 15)) ^ ((w[t - 2] >>> 19) | (w[t - 2] << 13)) ^ (w[t - 2] >>> 10)) >>> 0;\n        w[t] = (w[t - 16] + s0 + w[t - 7] + s1) >>> 0;\n      }\n      let a = H[0], b = H[1], c = H[2], d = H[3], e = H[4], f = H[5], g = H[6], h = H[7];\n      for (let t = 0; t < 64; t++) {\n        const S1 = (((e >>> 6) | (e << 26)) ^ ((e >>> 11) | (e << 21)) ^ ((e >>> 25) | (e << 7))) >>> 0;\n        const ch = ((e & f) ^ (~e & g)) >>> 0;\n        const t1 = (h + S1 + ch + K[t] + w[t]) >>> 0;\n        const S0 = (((a >>> 2) | (a << 30)) ^ ((a >>> 13) | (a << 19)) ^ ((a >>> 22) | (a << 10))) >>> 0;\n        const mj = ((a & b) ^ (a & c) ^ (b & c)) >>> 0;\n        const t2 = (S0 + mj) >>> 0;\n        h = g; g = f; f = e; e = (d + t1) >>> 0;\n        d = c; c = b; b = a; a = (t1 + t2) >>> 0;\n      }\n      H[0] = (H[0] + a) >>> 0; H[1] = (H[1] + b) >>> 0; H[2] = (H[2] + c) >>> 0; H[3] = (H[3] + d) >>> 0;\n      H[4] = (H[4] + e) >>> 0; H[5] = (H[5] + f) >>> 0; H[6] = (H[6] + g) >>> 0; H[7] = (H[7] + h) >>> 0;\n    }\n    const out = [];\n    for (let i = 0; i < 8; i++) out.push((H[i] >>> 24) & 255, (H[i] >>> 16) & 255, (H[i] >>> 8) & 255, H[i] & 255);\n    return out;\n  }\n\n  let key = utf8Bytes(keyStr);\n  if (key.length > 64) key = sha256Bytes(key);\n  while (key.length < 64) key.push(0);\n  const ipad = [], opad = [];\n  for (let i = 0; i < 64; i++) { ipad.push(key[i] ^ 0x36); opad.push(key[i] ^ 0x5c); }\n  const inner = sha256Bytes(ipad.concat(utf8Bytes(msgStr)));\n  const outer = sha256Bytes(opad.concat(inner));\n  return outer.map(function (b) { return ('0' + b.toString(16)).slice(-2); }).join('');\n}\n\n// ── Firma el disparador de rotacion con ROTATION_ADMIN_SECRET.\nconst SECRET = '<<ROTATION_ADMIN_SECRET>>';\n\nconst payload = {\n  triggered_by: 'n8n-cron-90d',\n  dry_run: false,\n  rotate_resend: true,\n  push_to_vercel: true,\n  redeploy: true,\n  return_values: false\n};\n\nconst rawBody = JSON.stringify(payload);\nconst ts = Math.floor(Date.now() / 1000);\nconst sig = hmacSha256Hex(SECRET, ts + '.' + rawBody);\n\nreturn [{ json: { rawBody: rawBody, signature: 't=' + ts + ',v0=' + sig } }];\n"
+   },
+   "id": "firmar-peticion",
+   "name": "Firmar peticion",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    -40,
+    300
+   ]
+  },
+  {
+   "parameters": {
+    "method": "POST",
+    "url": "https://victor-ia-agent.vercel.app/api/rotate-keys",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "Content-Type",
+       "value": "application/json"
+      },
+      {
+       "name": "X-Rotation-Signature",
+       "value": "={{ $json.signature }}"
+      }
+     ]
+    },
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ $json.rawBody }}",
+    "options": {
+     "timeout": 120000,
+     "response": {
+      "response": {
+       "neverError": true,
+       "responseFormat": "json"
+      }
+     }
+    }
+   },
+   "id": "post-rotate",
+   "name": "POST rotate-keys",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    180,
+    300
+   ]
+  },
+  {
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "typeValidation": "loose",
+      "version": 2
+     },
+     "conditions": [
+      {
+       "id": "ok",
+       "leftValue": "={{ $json.success }}",
+       "rightValue": true,
+       "operator": {
+        "type": "boolean",
+        "operation": "true",
+        "singleValue": true
+       }
+      }
+     ],
+     "combinator": "and"
+    },
+    "looseTypeValidation": true,
+    "options": {}
+   },
+   "id": "if-success",
+   "name": "Exito",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2,
+   "position": [
+    400,
+    300
+   ]
+  },
+  {
+   "parameters": {
+    "jsCode": "// Estado de la propagacion a Vercel.\n//\n// n8n tiene bloqueado el acceso a $env, por lo que NO puede guardar un\n// VERCEL_TOKEN de forma segura ni hacer el PATCH. La propagacion la realiza\n// el propio endpoint /api/rotate-keys cuando tiene VERCEL_TOKEN configurado.\nconst r = $json;\nconst already = r.details && r.details.vercel && r.details.vercel.updated;\n\nconst propagation = already\n  ? { done: true, results: (r.details.vercel.results || []).map(function (x) { return x.key + ':' + x.action; }), reason: null }\n  : { done: false, results: [], reason: 'El endpoint no propago las env vars (' +\n      ((r.details && r.details.vercel && r.details.vercel.reason) || 'motivo desconocido') +\n      '). Configura VERCEL_TOKEN en Vercel para que la rotacion sea 100% automatica.' };\n\nconst safe = Object.assign({}, r);\ndelete safe.new_values;\nsafe.propagation = propagation;\nreturn [{ json: safe }];\n"
+   },
+   "id": "propagar-a-vercel",
+   "name": "Propagar a Vercel",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    620,
+    180
+   ]
+  },
+  {
+   "parameters": {
+    "jsCode": "// Construye el reporte HTML de la rotacion (sin exponer secretos)\nconst r = $json;\nconst p = r.propagation || {};\nconst manual = (r.manual_action_required || []).map(function (m) {\n  return '<li><b>' + m.key + '</b> - ' + m.reason + '<br><span style=\"color:#666\">' + (m.action || '') + '</span></li>';\n}).join('');\nconst failed = (r.keys_failed || []).map(function (f) {\n  return '<li><b>' + f.key + '</b>: ' + f.reason + '</li>';\n}).join('');\nconst rotated = (r.keys_rotated || []).map(function (k) { return '<li>' + k + '</li>'; }).join('') || '<li>ninguna</li>';\nconst logTxt = (r.log && r.log.persisted) ? 'persistido' : ('NO persistido (' + ((r.log && r.log.reason) || 'n/a') + ')');\nconst STATUS_URL = 'https://victor-ia-agent.vercel.app/api/security/rotation-status';\n\nconst html =\n  '<div style=\"font-family:system-ui,Segoe UI,Arial;max-width:640px\">' +\n  '<h2 style=\"color:#0f172a\">Rotacion automatica de keys - ' + String(r.status).toUpperCase() + '</h2>' +\n  '<p><b>Ejecutada:</b> ' + r.rotated_at + '<br>' +\n  '<b>Proxima rotacion:</b> ' + r.next_rotation + ' (' + r.days_until_next + ' dias)<br>' +\n  '<b>Duracion:</b> ' + r.duration_ms + ' ms</p>' +\n  '<h3>Rotadas automaticamente</h3><ul>' + rotated + '</ul>' +\n  (failed ? '<h3 style=\"color:#b91c1c\">Fallos</h3><ul>' + failed + '</ul>' : '') +\n  '<h3>Requiere accion manual</h3><ul>' + (manual || '<li>ninguna</li>') + '</ul>' +\n  '<h3>Propagacion a Vercel</h3><p>' + (p.done ? 'OK: ' + (p.results || []).join(', ') : (p.reason || 'sin datos')) + '</p>' +\n  '<h3>Auditoria</h3><p><a href=\"' + STATUS_URL + '\">' + STATUS_URL + '</a></p>' +\n  '<p style=\"color:#64748b;font-size:12px\">Log en Supabase: ' + logTxt + '</p>' +\n  '</div>';\n\nreturn [{ json: {\n  subject: '[Victor IA] Rotacion de keys ' + String(r.status).toUpperCase() + ' - proxima ' + String(r.next_rotation).slice(0, 10),\n  html: html\n} }];\n"
+   },
+   "id": "reporte-rotacion",
+   "name": "Reporte rotacion",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    840,
+    180
+   ]
+  },
+  {
+   "parameters": {
+    "method": "POST",
+    "url": "https://api.resend.com/emails",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "Authorization",
+       "value": "=Bearer <<RESEND_API_KEY>>"
+      },
+      {
+       "name": "Content-Type",
+       "value": "application/json"
+      }
+     ]
+    },
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify({ from: 'Victor IA Agent <info@victor-ia.xyz>', to: ['mesainteligentedemo@gmail.com'], subject: $json.subject, html: $json.html }) }}",
+    "options": {
+     "timeout": 30000,
+     "response": {
+      "response": {
+       "neverError": true,
+       "responseFormat": "json"
+      }
+     }
+    }
+   },
+   "id": "email-reporte",
+   "name": "Email reporte",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    1060,
+    180
+   ]
+  },
+  {
+   "parameters": {
+    "jsCode": "// Reporte de FALLO CRITICO\nconst r = $json || {};\nconst err = (r.errors && r.errors[0] && r.errors[0].message) || r.error || r.reason || JSON.stringify(r).slice(0, 500);\nconst STATUS_URL = 'https://victor-ia-agent.vercel.app/api/security/rotation-status';\n\nconst html =\n  '<div style=\"font-family:system-ui,Segoe UI,Arial;max-width:640px\">' +\n  '<h2 style=\"color:#b91c1c\">FALLO CRITICO - Rotacion automatica de keys</h2>' +\n  '<p>El workflow <b>Victor IA Agent - Auto Key Rotation (90d)</b> no pudo completar la rotacion.</p>' +\n  '<p><b>Error:</b><br><code style=\"background:#f1f5f9;padding:8px;display:block\">' + err + '</code></p>' +\n  '<p><b>Accion requerida:</b> revisar el workflow en n8n y ejecutar manualmente:<br>' +\n  '<code>node scripts/trigger-rotation.js</code></p>' +\n  '<p>Estado actual: <a href=\"' + STATUS_URL + '\">' + STATUS_URL + '</a></p>' +\n  '</div>';\n\nreturn [{ json: { subject: '[CRITICO] Fallo en rotacion automatica de keys - Victor IA Agent', html: html } }];\n"
+   },
+   "id": "reporte-de-error",
+   "name": "Reporte de error",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    620,
+    420
+   ]
+  },
+  {
+   "parameters": {
+    "method": "POST",
+    "url": "https://api.resend.com/emails",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "Authorization",
+       "value": "=Bearer <<RESEND_API_KEY>>"
+      },
+      {
+       "name": "Content-Type",
+       "value": "application/json"
+      }
+     ]
+    },
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify({ from: 'Victor IA Agent <info@victor-ia.xyz>', to: ['mesainteligentedemo@gmail.com'], subject: $json.subject, html: $json.html }) }}",
+    "options": {
+     "timeout": 30000,
+     "response": {
+      "response": {
+       "neverError": true,
+       "responseFormat": "json"
+      }
+     }
+    }
+   },
+   "id": "email-error",
+   "name": "Email ERROR",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    840,
+    420
+   ]
+  }
+ ],
+ "connections": {
+  "Cron 90 dias": {
+   "main": [
+    [
+     {
+      "node": "Firmar peticion",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Firmar peticion": {
+   "main": [
+    [
+     {
+      "node": "POST rotate-keys",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "POST rotate-keys": {
+   "main": [
+    [
+     {
+      "node": "Exito",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Exito": {
+   "main": [
+    [
+     {
+      "node": "Propagar a Vercel",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "Reporte de error",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Propagar a Vercel": {
+   "main": [
+    [
+     {
+      "node": "Reporte rotacion",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Reporte rotacion": {
+   "main": [
+    [
+     {
+      "node": "Email reporte",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Reporte de error": {
+   "main": [
+    [
+     {
+      "node": "Email ERROR",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  }
+ },
+ "settings": {
+  "executionOrder": "v1"
+ }
+}
