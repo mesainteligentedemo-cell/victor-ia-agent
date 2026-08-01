@@ -26,6 +26,7 @@ const { generateHTMLReport } = require('./report-generator');
 const { generatePDF } = require('./pdf-generator');
 const { sendEmailWithAttachments } = require('./email-sender');
 const ElevenLabsAPI = require('./elevenlabs-api');
+const { buildTranscriptContext, queryRAG, getAgentMeta } = require('./rag-query');
 
 async function processCallWebhook(webhookBody, hmacSignature, rawBody) {
   console.log('[PROCESS] Starting 12-step pipeline...');
@@ -346,15 +347,115 @@ function safeEqual(a, b) {
 }
 
 /**
- * Analyze transcript with AI (optional enhancement)
+ * Analyze transcript with AI + RAG sobre la Knowledge Base del agente.
+ *
+ * El agente `agent_4001kyww2ysve4ns6qhajvd6xrc8` entrena con una KB literal
+ * (Victor/Jorge/George recitan textualmente). Para que el reporte pueda medir
+ * fidelidad al guion, recuperamos los fragmentos de KB correspondientes al
+ * módulo/objeciones detectados y los adjuntamos al análisis.
+ *
+ * @param {string} transcript
+ * @param {object} mappedData
  */
 async function analyzeTranscriptWithAI(transcript, mappedData) {
-  // Placeholder for AI analysis
-  // Could integrate with OpenAI, Claude, etc.
-  return {
+  const base = {
     emotional_arc: generateEmotionalArc(transcript),
     key_moments: extractKeyMoments(transcript),
     engagement_score: calculateEngagementScore(transcript)
+  };
+
+  try {
+    const rag = buildTranscriptContext(transcript, mappedData);
+    const meta = rag.agent;
+
+    console.log(
+      `[RAG] topics=[${rag.topics.slice(0, 6).join(', ')}] ` +
+      `matches=${rag.matches.length}/${meta.kb_chunks} chunks ` +
+      `context=${rag.context.length} chars`
+    );
+
+    return {
+      ...base,
+      // Contexto de KB para el análisis y para la sección extra del reporte
+      kb_context: rag.context,
+      kb_matches: rag.matches,
+      kb_topics: rag.topics,
+      kb_query: rag.query,
+      // Fidelidad al guion: cuánto del lenguaje literal de la KB aparece en el transcript
+      kb_fidelity: computeKBFidelity(transcript, rag),
+      agent_meta: meta
+    };
+  } catch (error) {
+    console.warn('[RAG] No se pudo construir contexto de KB:', error.message);
+    return { ...base, kb_context: '', kb_matches: [], agent_meta: safeAgentMeta() };
+  }
+}
+
+function safeAgentMeta() {
+  try {
+    return getAgentMeta();
+  } catch (_) {
+    return {};
+  }
+}
+
+/**
+ * Estima la fidelidad al guion comparando n-gramas (5 palabras) de los chunks
+ * de KB recuperados contra el transcript. Es una heurística, no una nota final:
+ * sirve como señal de "recitó la KB" vs "improvisó".
+ *
+ * @returns {{score:number, matched_ngrams:number, total_ngrams:number, per_chunk:Array}}
+ */
+function computeKBFidelity(transcript, rag) {
+  const norm = (s) =>
+    String(s || '')
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/\p{Diacritic}/gu, '')
+      .replace(/[^a-z0-9ñ\s]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+  const t = norm(transcript);
+  if (!t || !rag.context) {
+    return { score: 0, matched_ngrams: 0, total_ngrams: 0, per_chunk: [] };
+  }
+
+  const tSet = new Set();
+  const tw = t.split(' ');
+  for (let i = 0; i + 5 <= tw.length; i++) tSet.add(tw.slice(i, i + 5).join(' '));
+
+  let matched = 0;
+  let total = 0;
+  const perChunk = [];
+
+  // El contexto viene con cabeceras "### [id] título" — las separamos por bloque
+  for (const block of rag.context.split(/\n\n(?=### )/)) {
+    const header = (block.match(/^###\s*\[([^\]]+)\]\s*(.*)$/m) || [null, '?', '']).slice(1);
+    const body = norm(block.replace(/^###.*$/m, ''));
+    const bw = body.split(' ');
+    let m = 0;
+    let n = 0;
+    for (let i = 0; i + 5 <= bw.length; i += 3) {
+      n++;
+      if (tSet.has(bw.slice(i, i + 5).join(' '))) m++;
+    }
+    matched += m;
+    total += n;
+    perChunk.push({
+      id: header[0],
+      title: header[1],
+      matched: m,
+      total: n,
+      score: n ? Number(((m / n) * 10).toFixed(1)) : 0
+    });
+  }
+
+  return {
+    score: total ? Number(((matched / total) * 10).toFixed(1)) : 0,
+    matched_ngrams: matched,
+    total_ngrams: total,
+    per_chunk: perChunk.sort((a, b) => b.score - a.score).slice(0, 6)
   };
 }
 

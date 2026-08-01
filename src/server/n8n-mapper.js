@@ -200,8 +200,48 @@ function mapElevenLabsData(webhookBody) {
 
     // Metadata
     timestamp: new Date().toISOString(),
-    version: 'v3.0'
+    version: 'v3.0',
+
+    // ===== CONTEXTO DEL AGENTE (KB + RAG) =====
+    // Enriquecimiento desde el snapshot de agent_4001kyww2ysve4ns6qhajvd6xrc8.
+    // Permite al reporte mostrar contra qué guion se evaluó al asesor.
+    agente: agentContext(modulo)
   };
+}
+
+/**
+ * Contexto del agente ElevenLabs para enriquecer el mapeo.
+ * Degrada a un objeto vacío si el snapshot de KB no está disponible.
+ *
+ * @param {string} modulo Módulo detectado en la sesión
+ */
+function agentContext(modulo) {
+  try {
+    // require perezoso: si falta el JSON, el mapper sigue funcionando
+    const { getAgentMeta, queryRAG } = require('./rag-query');
+    const meta = getAgentMeta();
+    const rag = modulo ? queryRAG(String(modulo), { topK: 3, maxChars: 3000 }) : { matches: [] };
+
+    return {
+      agent_id: meta.agent_id,
+      agent_name: meta.agent_name,
+      llm: meta.llm,
+      rag_enabled: meta.rag_enabled,
+      embedding_model: meta.embedding_model,
+      kb_document: meta.kb_document,
+      kb_chunks: meta.kb_chunks,
+      kb_chars: meta.kb_chars,
+      // Secciones de KB que corresponden al módulo evaluado
+      kb_referencias: (rag.matches || []).map((m) => ({
+        id: m.id,
+        titulo: m.title,
+        relevancia: m.score
+      }))
+    };
+  } catch (error) {
+    console.warn('[MAPPER] Contexto de agente no disponible:', error.message);
+    return {};
+  }
 }
 
 /**

@@ -800,6 +800,47 @@
         </div>
     </div>
 
+    <!-- CONTEXTO ADICIONAL DEL AGENTE (Knowledge Base + RAG) -->
+    {{#if agente.agent_id}}
+    <div class="neuro-section" style="background:#0f172a;border-left:4px solid #38bdf8;">
+        <div class="neuro-title">Contexto de Evaluación — Knowledge Base del Agente</div>
+
+        <ul class="neuro-list">
+            <li><strong>Agente:</strong> {{agente.agent_name}} <span style="opacity:.6">({{agente.agent_id}})</span></li>
+            <li><strong>Modelo:</strong> {{agente.llm}} · <strong>RAG:</strong> {{#if agente.rag_enabled}}activo ({{agente.embedding_model}}){{else}}inactivo{{/if}}</li>
+            <li><strong>Guion de referencia:</strong> {{agente.kb_document}} — {{agente.kb_chunks}} secciones, {{agente.kb_chars}} caracteres</li>
+        </ul>
+
+        {{#if agente.kb_referencias}}
+        <div style="margin-top:14px;">
+            <div class="compliance-label">Secciones de KB usadas para evaluar este módulo</div>
+            <ul class="neuro-list" style="margin-top:8px;">
+                {{#each agente.kb_referencias}}
+                <li><strong>{{this.titulo}}</strong> <span style="opacity:.6">[{{this.id}}] · relevancia {{this.relevancia}}</span></li>
+                {{/each}}
+            </ul>
+        </div>
+        {{/if}}
+
+        {{#if kb_fidelity}}
+        <div class="compliance-box" style="margin-top:14px;">
+            <div class="compliance-label">Fidelidad al Guion (literalidad KB)</div>
+            <div class="compliance-value">{{kb_fidelity.score}}/10</div>
+            <div style="font-size:11px;opacity:.65;margin-top:6px;">
+                {{kb_fidelity.matched_ngrams}} de {{kb_fidelity.total_ngrams}} secuencias de la KB detectadas textualmente en la sesión.
+            </div>
+        </div>
+        {{/if}}
+
+        {{#if kb_topics}}
+        <div style="margin-top:12px;font-size:11px;opacity:.7;">
+            <strong>Temas detectados:</strong>
+            {{#each kb_topics}}<span>{{this}}</span>{{#unless @last}} · {{/unless}}{{/each}}
+        </div>
+        {{/if}}
+    </div>
+    {{/if}}
+
     <!-- TRANSCRIPTION CHAT BUBBLES -->
     {{#if transcription}}
     <div class="transcription-section">
