@@ -87,7 +87,9 @@ async function processCallWebhook(webhookBody, hmacSignature, rawBody) {
     // STEP 4: EXTRACT TRANSCRIPT
     // ════════════════════════════════════════════
     console.log('[STEP 4] Extracting transcript...');
-    const transcript = await elevenLabsAPI.getTranscript(conversationId);
+    // Reutilizamos la conversación del paso 3 en vez de volver a pedirla
+    // (getTranscript haría un segundo GET innecesario y cuesta latencia).
+    const transcript = ElevenLabsAPI.normalizeTranscript(conversation);
     if (!transcript) {
       throw new Error('Could not extract transcript');
     }
