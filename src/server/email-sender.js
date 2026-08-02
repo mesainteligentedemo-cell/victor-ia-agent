@@ -207,16 +207,28 @@ function buildAttachmentBasename(input, when, idFallback) {
   const p = cancunParts(when);
 
   const esObjeto = input !== null && typeof input === 'object';
-  const nombre = esObjeto ? (input.nombre_completo || input.nombre) : input;
+  // Prioridad: nombre_completo > nombre (siempre el nombre COMPLETO del roster)
+  const nombreCompleto = esObjeto ? (input.nombre_completo || input.nombre) : input;
   const id = esObjeto ? (input.empleado_id || idFallback) : idFallback;
 
-  const safeName = slugFilePart(nombre, 'Asesor');
-  const safeId = slugFilePart(id, '');
+  // Convertir nombre completo a formato seguro para archivo:
+  // "Andrés Mateos" → "Andres_Mateos"
+  // "Christian Soria" → "Christian_Soria"
+  // Elimina acentos y reemplaza espacios por guiones bajos
+  const safeName = String(nombreCompleto || 'Asesor')
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')      // Quitar acentos
+    .replace(/\s+/g, '_')                // Espacios → guiones bajos
+    .replace(/[^A-Za-z0-9_]/g, '')       // Eliminar otros caracteres especiales
+    .replace(/^_+|_+$/g, '');            // Quitar guiones al inicio/final
+
+  const safeId = String(id || '').trim();
 
   const fecha = `${p.day}${p.month}${p.year}`;   // DDMMAAAA
   const hora = `${p.hour24}${p.minute}`;         // HHMM en 24 h
 
-  // Sin ID (integraciones viejas) el nombre no debe quedar con "__" en medio.
+  // Siempre incluir nombre_completo + ID + fecha + hora
+  // Nunca dejar nombres de archivo genéricos como "Asesor"
   return [safeName, safeId, fecha, hora].filter(Boolean).join('_');
 }
 
