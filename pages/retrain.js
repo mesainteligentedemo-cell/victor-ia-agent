@@ -9,32 +9,62 @@
  * gerente a abrir el PDF en otra pestaña para acordarse de los números.
  *
  * Al enviar: POST /api/retrain-request, que registra la solicitud y notifica
- * a los gerentes. Las competencias son opcionales — si no se marca ninguna,
- * el servidor toma las que están por debajo del estándar.
+ * al correo que se haya elegido en el formulario. Se exige al menos una
+ * competencia marcada y un correo válido: una solicitud sin foco ni destino no
+ * le sirve a nadie, y es mejor detenerla aquí que descubrirlo en el buzón.
  */
 
 import React, { useEffect, useMemo, useState } from 'react';
 
+/**
+ * Paleta VTC v4.0 — la misma del reporte y de los correos.
+ * Negro puro + oro cálido; sin azules. Si el formulario se ve distinto del
+ * reporte del que viene, el gerente duda de que sea el mismo sistema.
+ */
 const C = {
-  bg: '#0a1721',
-  panel: '#102435',
-  navy: '#1a3a52',
-  gold: '#d4af37',
-  goldSoft: '#e6c869',
-  text: '#eef2f6',
-  muted: '#9db0c2',
-  good: '#009E73',
-  goodLit: '#3fd7ae',
-  warn: '#E69F00',
-  warnLit: '#ffc457',
-  bad: '#D55E00',
-  border: 'rgba(212,175,55,.22)'
+  bg: '#0D0D0D',        // fondo principal — negro puro
+  panel: '#1A1A1A',     // tarjetas y contenedores
+  navy: '#262626',      // badges, cabecera y campos (gris grafito)
+  gold: '#E5B33E',      // acento único
+  goldSoft: '#F2C766',
+  text: '#FFFFFF',
+  muted: '#B8B8B8',
+  good: '#10B981',      // score ≥ 8 — cumple la meta VTC
+  goodLit: '#34D399',
+  warn: '#F59E0B',      // score 6 – 7.99
+  warnLit: '#FBBF24',
+  bad: '#EF4444',       // score < 6
+  badLit: '#F87171',
+  prose: '#E4E4E4',     // cuerpo de texto largo
+  border: 'rgba(229,179,62,.28)'
 };
 
 const FONT = "Inter, 'Segoe UI', Helvetica, Arial, sans-serif";
 
 /** Estándar VTC: por debajo de esto la competencia es área crítica. */
 const META = 8;
+
+/** Tope de cada campo de notas. El servidor recorta al mismo número. */
+const MAX_NOTAS = 5000;
+
+/** Buzón que se propone por defecto; el gerente puede cambiarlo por cualquiera. */
+const EMAIL_DEFAULT = 'mesainteligentedemo@gmail.com';
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/**
+ * Las seis competencias del modelo VTC.
+ * Sirven de respaldo cuando la sesión no trae el desglose: el gerente igual
+ * tiene que poder pedir el reentrenamiento, aunque falte el score.
+ */
+const COMPETENCIAS_VTC = [
+  'Rapport',
+  'PNL',
+  'Postura',
+  'Objeciones',
+  'Lectura de Sala',
+  'Cierre'
+];
 
 const PRIORIDADES = [
   { value: 'alta', label: 'Alta — antes de volver a piso' },
@@ -52,9 +82,12 @@ export default function Retrain() {
 
   const [competencias, setCompetencias] = useState([]);
   const [prioridad, setPrioridad] = useState('media');
-  const [notas, setNotas] = useState('');
+  const [notasCoach, setNotasCoach] = useState('');
+  const [notasGerente, setNotasGerente] = useState('');
+  const [emailDestino, setEmailDestino] = useState(EMAIL_DEFAULT);
   const [enviando, setEnviando] = useState(false);
   const [resultado, setResultado] = useState(null);
+  const [tocoEmail, setTocoEmail] = useState(false);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -85,7 +118,14 @@ export default function Retrain() {
         if (cancelled) return;
         const conversation = body.conversation || null;
         setData(conversation);
-        setDestinatarios(Array.isArray(body.retrain_destinatarios) ? body.retrain_destinatarios : []);
+
+        const gerentes = Array.isArray(body.retrain_destinatarios) ? body.retrain_destinatarios : [];
+        setDestinatarios(gerentes);
+
+        // Proponemos el buzón configurado en el servidor en vez del literal de
+        // fábrica: si alguien ya cambió RETRAIN_REQUEST_EMAIL, ese es el destino
+        // correcto. Sigue siendo editable.
+        if (gerentes.length && EMAIL_RE.test(gerentes[0])) setEmailDestino(gerentes[0]);
 
         // Preseleccionamos TODO lo que está por debajo del estándar: es lo que
         // el gerente marcaría a mano después de mirar los scores.
@@ -117,19 +157,36 @@ export default function Retrain() {
     return () => { cancelled = true; };
   }, [conv, token]);
 
-  const listaCompetencias = useMemo(
-    () => (data && Array.isArray(data.competencias) ? data.competencias : []),
-    [data]
-  );
+  /**
+   * Las seis competencias, siempre las seis.
+   * Las evaluadas van con su score; si la sesión no trajo alguna, aparece igual
+   * pero sin número — que falte el dato no es motivo para no poder pedir que se
+   * refuerce.
+   */
+  const listaCompetencias = useMemo(() => {
+    const evaluadas = data && Array.isArray(data.competencias) ? data.competencias : [];
+    const vistos = new Set(evaluadas.map((c) => String(c.name).toLowerCase()));
+
+    const faltantes = COMPETENCIAS_VTC
+      .filter((name) => !vistos.has(name.toLowerCase()))
+      .map((name) => ({ name, score: null }));
+
+    return [...evaluadas, ...faltantes];
+  }, [data]);
 
   const criticas = useMemo(
-    () => listaCompetencias.filter((c) => Number(c.score) < META).sort((a, b) => a.score - b.score),
+    () => listaCompetencias
+      .filter((c) => Number.isFinite(Number(c.score)) && Number(c.score) < META)
+      .sort((a, b) => a.score - b.score),
     [listaCompetencias]
   );
 
-  const destinoTexto = destinatarios.length
-    ? destinatarios.join(', ')
-    : 'los gerentes de VTC Elite Training';
+  const emailValido = EMAIL_RE.test(emailDestino.trim());
+  const puedeEnviar = competencias.length > 0 && emailValido && !enviando;
+
+  const destinoTexto = emailValido
+    ? emailDestino.trim()
+    : (destinatarios.join(', ') || 'los gerentes de VTC Elite Training');
 
   function toggleCompetencia(name) {
     setCompetencias((prev) =>
@@ -139,8 +196,23 @@ export default function Retrain() {
 
   async function onSubmit(e) {
     e.preventDefault();
+
+    // Se valida aquí además de deshabilitar el botón: el submit también entra
+    // por Enter en el input de correo, y ahí el botón deshabilitado no protege.
+    if (!competencias.length) {
+      setResultado({ ok: false, message: 'Marca al menos una competencia a reforzar.' });
+      return;
+    }
+    if (!emailValido) {
+      setTocoEmail(true);
+      setResultado({ ok: false, message: 'Escribe un correo de destino válido.' });
+      return;
+    }
+
     setEnviando(true);
     setResultado(null);
+
+    const destino = emailDestino.trim();
 
     try {
       const r = await fetch('/api/retrain-request', {
@@ -149,9 +221,13 @@ export default function Retrain() {
         body: JSON.stringify({
           conversation_id: conv,
           token,
+          emailDestino: destino,
           competencias,
+          competenciasMarcadas: competencias,
           prioridad,
-          notas: notas.trim()
+          notas: notasCoach.trim(),
+          notasCoach: notasCoach.trim(),
+          notasGerente: notasGerente.trim()
         })
       });
       const body = await r.json().catch(() => ({}));
@@ -164,7 +240,9 @@ export default function Retrain() {
         ok: true,
         message: body.confirmacion || body.message,
         folio: body.folio || null,
-        destinatarios: Array.isArray(body.destinatarios) ? body.destinatarios : destinatarios,
+        destinatarios: Array.isArray(body.destinatarios) && body.destinatarios.length
+          ? body.destinatarios
+          : [destino],
         competencias: Array.isArray(body.competencias) ? body.competencias : competencias,
         prioridad: body.prioridad || prioridad
       });
@@ -242,7 +320,7 @@ export default function Retrain() {
               {criticas.length > 0 && (
                 <div style={{ ...cardBox, borderLeft: `3px solid ${C.warn}` }}>
                   <p style={cardTitle}>Áreas críticas de esta sesión</p>
-                  <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13.5, lineHeight: 1.75, color: '#dbe4ec' }}>
+                  <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13.5, lineHeight: 1.75, color: C.prose }}>
                     {criticas.map((c) => (
                       <li key={c.name}>
                         <strong style={{ color: C.warnLit }}>{c.name}</strong>: {c.score}/10
@@ -256,7 +334,7 @@ export default function Retrain() {
               {data.recomendacion_coach && (
                 <div style={cardBox}>
                   <p style={cardTitle}>Recomendación del coach</p>
-                  <p style={{ margin: 0, fontSize: 13.5, lineHeight: 1.75, color: '#dbe4ec' }}>
+                  <p style={{ margin: 0, fontSize: 13.5, lineHeight: 1.75, color: C.prose }}>
                     {data.recomendacion_coach}
                   </p>
                 </div>
@@ -266,34 +344,47 @@ export default function Retrain() {
               <fieldset style={{ border: 'none', padding: 0, margin: '26px 0 0' }}>
                 <legend style={legendStyle}>Competencias a reforzar</legend>
                 <p style={{ margin: '0 0 12px', fontSize: 13, color: C.muted, lineHeight: 1.6 }}>
-                  Vienen preseleccionadas las que están por debajo de {META}/10. Si no marcas ninguna,
-                  el sistema toma esas mismas.
+                  Vienen preseleccionadas las que están por debajo de {META}/10. Puedes marcar o
+                  desmarcar las que quieras — al menos una.
                 </p>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(210px,1fr))', gap: 10 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 10 }}>
                   {listaCompetencias.map((c) => {
                     const activo = competencias.includes(c.name);
+                    const score = Number(c.score);
+                    const tieneScore = Number.isFinite(score);
+                    const critica = tieneScore && score < META;
                     return (
                       <label
                         key={c.name}
                         style={{
                           display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer',
-                          background: activo ? 'rgba(212,175,55,.14)' : 'rgba(255,255,255,.04)',
+                          background: activo ? 'rgba(229,179,62,.16)' : 'rgba(255,255,255,.04)',
                           border: `1px solid ${activo ? C.gold : 'rgba(255,255,255,.08)'}`,
+                          borderLeft: critica ? `3px solid ${C.warn}` : undefined,
                           borderRadius: 9, padding: '12px 14px', fontSize: 14
                         }}
                       >
                         <input
                           type="checkbox"
+                          name="competency"
+                          value={c.name}
                           checked={activo}
                           onChange={() => toggleCompetencia(c.name)}
-                          style={{ accentColor: C.gold, width: 17, height: 17 }}
+                          style={{ accentColor: C.gold, width: 17, height: 17, flexShrink: 0 }}
                         />
-                        <span style={{ flex: 1 }}>{c.name}</span>
-                        <strong style={{ color: scoreColor(c.score) }}>{c.score}/10</strong>
+                        <span style={{ flex: 1, color: critica ? C.warnLit : C.text }}>{c.name}</span>
+                        <strong style={{ color: scoreColor(c.score), whiteSpace: 'nowrap' }}>
+                          {tieneScore ? `${c.score}/10` : 'sin score'}
+                        </strong>
                       </label>
                     );
                   })}
                 </div>
+                {!competencias.length && (
+                  <p style={{ margin: '10px 0 0', fontSize: 12.5, color: C.warnLit }}>
+                    Marca al menos una competencia para poder enviar la solicitud.
+                  </p>
+                )}
               </fieldset>
 
               <fieldset style={{ border: 'none', padding: 0, margin: '24px 0 0' }}>
@@ -311,33 +402,65 @@ export default function Retrain() {
                 </select>
               </fieldset>
 
+              {/* El nombre del campo dice a quién le llega lo que se escribe.
+                  "Notas para el coach" hacía que el gerente escribiera sobre el
+                  asesor en tercera persona; el texto se le entrega al propio
+                  colaborador, así que se redacta dirigiéndose a él. */}
               <fieldset style={{ border: 'none', padding: 0, margin: '24px 0 0' }}>
-                <legend style={legendStyle}>Notas para el coach (opcional)</legend>
-                <textarea
-                  value={notas}
-                  onChange={(e) => setNotas(e.target.value)}
-                  rows={5}
-                  maxLength={2000}
-                  placeholder="Qué observaste en la sesión y qué esperas que cambie. Se envía tal cual al gerente."
-                  style={{ ...inputStyle, resize: 'vertical', lineHeight: 1.6 }}
-                />
-                <p style={{ margin: '6px 0 0', fontSize: 12, color: C.muted, textAlign: 'right' }}>
-                  {notas.length}/2000
+                <legend style={legendStyle}>Notas para el colaborador (opcional)</legend>
+                <p style={{ margin: '0 0 10px', fontSize: 13, color: C.goldSoft, lineHeight: 1.6, fontWeight: 600 }}>
+                  Estas notas se enviarán directamente al colaborador.
                 </p>
+                <textarea
+                  value={notasCoach}
+                  onChange={(e) => setNotasCoach(e.target.value.slice(0, MAX_NOTAS))}
+                  maxLength={MAX_NOTAS}
+                  placeholder="Qué observaste en la sesión y qué esperas que cambie. Esta nota se envía tal cual al colaborador."
+                  style={textareaStyle}
+                />
+                <Contador n={notasCoach.length} />
               </fieldset>
 
-              {/* ── A dónde llega ──────────────────────────────── */}
-              <div style={{
-                marginTop: 24, padding: '14px 16px', borderRadius: 10,
-                background: 'linear-gradient(120deg, rgba(212,175,55,.14), rgba(212,175,55,.04))',
-                border: `1px solid ${C.border}`
-              }}>
-                <p style={{ margin: 0, fontSize: 13.5, lineHeight: 1.7, color: '#dbe4ec' }}>
-                  La solicitud se registra y llega por correo a{' '}
-                  <strong style={{ color: C.goldSoft }}>{destinoTexto}</strong> con el resumen del
-                  asesor, los scores, las áreas críticas, tus notas y el enlace a este reporte.
+              <fieldset style={{ border: 'none', padding: 0, margin: '24px 0 0' }}>
+                <legend style={legendStyle}>Notas adicionales para el gerente (opcional)</legend>
+                <textarea
+                  value={notasGerente}
+                  onChange={(e) => setNotasGerente(e.target.value.slice(0, MAX_NOTAS))}
+                  maxLength={MAX_NOTAS}
+                  placeholder="Contexto adicional, recomendaciones, etc"
+                  style={textareaStyle}
+                />
+                <Contador n={notasGerente.length} />
+              </fieldset>
+
+              <fieldset style={{ border: 'none', padding: 0, margin: '24px 0 0' }}>
+                <legend style={legendStyle}>Enviar reporte a</legend>
+                <input
+                  type="email"
+                  required
+                  value={emailDestino}
+                  onChange={(e) => setEmailDestino(e.target.value)}
+                  onBlur={() => setTocoEmail(true)}
+                  placeholder="correo@ejemplo.com"
+                  aria-invalid={tocoEmail && !emailValido ? 'true' : 'false'}
+                  aria-describedby="email-destino-ayuda"
+                  style={{
+                    ...inputStyle,
+                    borderColor: tocoEmail && !emailValido ? C.bad : 'rgba(255,255,255,.12)'
+                  }}
+                />
+                <p
+                  id="email-destino-ayuda"
+                  style={{
+                    margin: '6px 0 0', fontSize: 12.5, lineHeight: 1.6,
+                    color: tocoEmail && !emailValido ? C.bad : C.muted
+                  }}
+                >
+                  {tocoEmail && !emailValido
+                    ? 'Escribe un correo con formato válido (nombre@dominio.com).'
+                    : 'La solicitud llega a este buzón. Cámbialo si le toca a otro gerente.'}
                 </p>
-              </div>
+              </fieldset>
 
               {resultado && !resultado.ok && (
                 <div role="alert" style={{ ...alertBox(C.bad), marginTop: 20 }}>
@@ -347,10 +470,25 @@ export default function Retrain() {
               )}
 
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginTop: 24 }}>
-                <button type="submit" disabled={enviando} style={{ ...btnPrimary, opacity: enviando ? 0.6 : 1 }}>
+                <button
+                  type="submit"
+                  className="vtc-btn vtc-btn-primary"
+                  disabled={!puedeEnviar}
+                  title={
+                    competencias.length === 0 ? 'Marca al menos una competencia'
+                      : !emailValido ? 'Escribe un correo de destino válido'
+                        : undefined
+                  }
+                  style={{
+                    ...btnPrimary,
+                    opacity: puedeEnviar ? 1 : 0.45,
+                    cursor: puedeEnviar ? 'pointer' : 'not-allowed'
+                  }}
+                >
                   {enviando ? 'Enviando…' : 'Solicitar reentrenamiento'}
                 </button>
                 <a
+                  className="vtc-btn vtc-btn-ghost"
                   href={`/player?conv=${encodeURIComponent(conv)}${token ? `&t=${encodeURIComponent(token)}` : ''}`}
                   style={btnGhost}
                 >
@@ -363,7 +501,7 @@ export default function Retrain() {
           {resultado?.ok && (
             <div role="status" style={alertBox(C.good)}>
               <p style={{ margin: 0, fontWeight: 700, fontSize: 17, color: C.goodLit }}>
-                Solicitud enviada
+                ✓ Solicitud enviada a {(resultado.destinatarios || []).join(', ') || destinoTexto}
               </p>
               <p style={{ margin: '10px 0 0', fontSize: 14.5, lineHeight: 1.7, color: C.text }}>
                 {resultado.message}
@@ -383,18 +521,20 @@ export default function Retrain() {
               </div>
 
               <p style={{ margin: '18px 0 0', fontSize: 13, color: C.muted, lineHeight: 1.65 }}>
-                El gerente recibió el resumen del asesor, los scores de la sesión, las áreas críticas,
-                tus notas y el enlace al reporte completo.
+                Recibió el resumen del asesor, los scores de la sesión, las competencias marcadas con
+                su score, las áreas críticas, tus notas para el colaborador, las notas para el gerente y el
+                enlace al reporte completo.
               </p>
 
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginTop: 20 }}>
                 <a
+                  className="vtc-btn vtc-btn-ghost"
                   href={`/player?conv=${encodeURIComponent(conv)}${token ? `&t=${encodeURIComponent(token)}` : ''}`}
                   style={btnGhost}
                 >
                   Volver al reproductor
                 </a>
-                <button type="button" onClick={() => setResultado(null)} style={btnGhost}>
+                <button type="button" className="vtc-btn vtc-btn-ghost" onClick={() => setResultado(null)} style={btnGhost}>
                   Enviar otra solicitud
                 </button>
               </div>
@@ -405,6 +545,37 @@ export default function Retrain() {
         <footer style={{ textAlign: 'center', color: C.muted, fontSize: 12, marginTop: 22 }}>
           Victor IA · Entrenamiento VTC Capacitación · victor-ia.xyz
         </footer>
+
+        {/* Los estados del cursor no caben en un `style` inline. Sin ellos un
+            botón se lee como texto: no se sabe que se puede pulsar, ni queda
+            constancia de que el clic entró. Mismos tiempos y mismo oro que los
+            CTAs del reporte. */}
+        <style jsx global>{`
+          .vtc-btn { transition: background .18s ease, border-color .18s ease,
+                                 color .18s ease, transform .12s ease, box-shadow .18s ease; }
+          .vtc-btn:focus-visible { outline: 2px solid #F2C766; outline-offset: 3px; }
+
+          .vtc-btn-primary:hover:not(:disabled) {
+            background: #F2C766;
+            box-shadow: 0 10px 26px rgba(229,179,62,.32);
+            transform: translateY(-1px);
+          }
+          .vtc-btn-primary:active:not(:disabled) {
+            background: #B8862A;
+            transform: translateY(1px) scale(.985);
+            box-shadow: 0 2px 8px rgba(229,179,62,.28);
+          }
+
+          .vtc-btn-ghost:hover {
+            background: rgba(229,179,62,.14);
+            border-color: #E5B33E;
+            color: #FFFFFF;
+          }
+          .vtc-btn-ghost:active {
+            background: rgba(229,179,62,.24);
+            transform: translateY(1px) scale(.985);
+          }
+        `}</style>
       </main>
     </div>
   );
@@ -425,14 +596,38 @@ function Dato({ k, v }) {
   );
 }
 
-/** Color del score con la misma escala que el reporte. */
+/**
+ * Contador de caracteres de un campo de notas.
+ * Se pone rojo al tocar el tope para que se note por qué dejó de escribir:
+ * el `maxLength` corta en silencio y sin aviso parece que el teclado falla.
+ */
+function Contador({ n, max = MAX_NOTAS }) {
+  const lleno = n >= max;
+  return (
+    <p
+      aria-live="polite"
+      style={{
+        margin: '6px 0 0', fontSize: 12, textAlign: 'right',
+        color: lleno ? C.bad : C.muted, fontWeight: lleno ? 700 : 400
+      }}
+    >
+      {n} / {max}{lleno ? ' — límite alcanzado' : ''}
+    </p>
+  );
+}
+
+/**
+ * Color del score con los mismos cortes que el reporte, los gráficos y el
+ * correo: verde ≥ 8 (meta VTC), naranja 6–7.99, rojo < 6. Un corte distinto
+ * aquí haría que la misma competencia se leyera verde en un sitio y ámbar en
+ * el otro.
+ */
 function scoreColor(score) {
   const n = Number(score);
   if (!Number.isFinite(n)) return C.goldSoft;
-  if (n >= 9) return C.goodLit;
-  if (n >= 8) return C.goldSoft;
-  if (n >= 6.5) return C.warnLit;
-  return '#ff9257';
+  if (n >= META) return C.goodLit;
+  if (n >= 6) return C.warnLit;
+  return C.badLit;
 }
 
 const cardBox = {
@@ -459,8 +654,17 @@ const inputStyle = {
   padding: '12px 14px', fontSize: 14, fontFamily: FONT
 };
 
+/** Campo de notas: arranca cómodo y crece hasta un techo, no hasta el infinito. */
+const textareaStyle = {
+  ...inputStyle,
+  minHeight: 150,
+  maxHeight: 400,
+  resize: 'vertical',
+  lineHeight: 1.6
+};
+
 const btnPrimary = {
-  background: C.gold, color: '#0d1b26', fontWeight: 700, fontSize: 14,
+  background: C.gold, color: C.bg, fontWeight: 700, fontSize: 14,
   padding: '13px 24px', borderRadius: 8, border: 'none', cursor: 'pointer'
 };
 

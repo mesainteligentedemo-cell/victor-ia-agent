@@ -189,16 +189,16 @@ function buildEmailText(data, when) {
     `Idioma: ${d.idioma || '—'}`,
     '',
     'ANÁLISIS:',
-    plain(d.resumen),
+    listaTexto(d.resumen),
     '',
     'FORTALEZAS IDENTIFICADAS:',
-    plain(d.fortalezas),
+    listaTexto(d.fortalezas),
     '',
     'AREAS A MEJORAR:',
-    plain(d.areas_mejora),
+    listaTexto(d.areas_mejora),
     '',
     'RECOMENDACIÓN DEL COACH:',
-    plain(d.recomendacion_coach),
+    listaTexto(d.recomendacion_coach),
     '',
     DIVIDER,
     '',
@@ -221,11 +221,131 @@ function buildEmailText(data, when) {
   ].join('\n');
 }
 
+// ════════════════════════════════════════════════════════════
+// PALETA — la misma del reporte (negro + oro, sin azules)
+// ════════════════════════════════════════════════════════════
+const COLOR = {
+  bg: '#0D0D0D',        // fondo principal
+  surface: '#1A1A1A',   // tarjeta del correo
+  surface2: '#262626',  // badges y botones
+  gold: '#E5B33E',      // acento
+  goldSoft: '#F2C766',
+  text: '#FFFFFF',
+  muted: '#B8B8B8',
+  good: '#10B981',      // score ≥ 8
+  warn: '#F59E0B',      // score 6 – 7.99
+  bad: '#EF4444'        // score < 6
+};
+
+/** Meta VTC: mismo umbral que el reporte y que los gráficos. */
+const META_VTC = 8;
+
+/** Color de estado de un score, con los cortes de la meta VTC. */
+function scoreColor(score) {
+  const n = Number(score);
+  if (!Number.isFinite(n)) return COLOR.gold;
+  if (n >= META_VTC) return COLOR.good;
+  if (n >= 6) return COLOR.warn;
+  return COLOR.bad;
+}
+
+/**
+ * Prosa larga -> HTML legible dentro del correo.
+ *
+ * Mismo criterio que el reporte: si el texto trae la enumeración embebida
+ * ("… (1) … (2) … (3) …") se parte en intro + puntos numerados con salto de
+ * línea entre cada uno. Una parrafada de ocho renglones en el teléfono no se
+ * lee; una lista de tres puntos sí.
+ *
+ * Se usan tablas de una celda por punto porque `display:block` sobre un <span>
+ * no es fiable en Outlook; el margen de un <p> anidado, tampoco.
+ */
+function formatBlocks(text, estilos) {
+  const raw = plain(text);
+  if (raw === '—') return `<p style="${estilos.para}">—</p>`;
+
+  const { intro, items } = splitEnumeracion(raw);
+
+  let html = '';
+  if (intro) html += `<p style="${estilos.para}">${nl2br(intro)}</p>`;
+
+  for (const it of items) {
+    html += `
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:10px 0 0">
+        <tr>
+          <td valign="top" style="${estilos.num}">${escapeHtml(it.n)}.-</td>
+          <td valign="top" style="${estilos.para};margin:0">${nl2br(it.texto)}</td>
+        </tr>
+      </table>`;
+  }
+  return html;
+}
+
+/**
+ * Separa "intro + (1) … (2) …" en sus partes.
+ *
+ * Reglas iguales a las del reporte:
+ *   - Hacen falta AL MENOS DOS marcadores; con uno suele ser una cita.
+ *   - La secuencia debe ir 1, 2, 3… — así "subió (2) puntos en (3) días" no se
+ *     confunde con una lista.
+ *
+ * @returns {{intro:string, items:Array<{n:string,texto:string}>}}
+ */
+function splitEnumeracion(raw) {
+  const LINEA_NUMERADA = /^(?:\((\d{1,2})\)|(\d{1,2})\s*[.)\-–—]+)\s*(.*)$/;
+
+  // Caso A: ya viene una línea por punto
+  const lineas = raw.split('\n').map((l) => l.trim()).filter(Boolean);
+  if (lineas.length > 1 && lineas.filter((l) => LINEA_NUMERADA.test(l)).length >= 2) {
+    const intro = [];
+    const items = [];
+    for (const linea of lineas) {
+      const m = linea.match(LINEA_NUMERADA);
+      if (m) items.push({ n: m[1] || m[2], texto: String(m[3] || '').trim() });
+      else if (!items.length) intro.push(linea);
+      else items[items.length - 1].texto += ` ${linea}`;
+    }
+    return { intro: intro.join(' '), items };
+  }
+
+  // Caso B: un solo párrafo con la enumeración embebida
+  if (lineas.length > 1) return { intro: raw, items: [] };
+
+  // El separador va como lookbehind y no como grupo que consume: si se consume,
+  // "…a las 04:42. (1) El usuario…" pierde el marcador (1) —el "42. " se come
+  // el espacio— y el párrafo entero se queda sin partir. Mismo criterio que
+  // formatRichText en report-generator.js; los dos tienen que coincidir o el
+  // correo y el PDF dirían lo mismo con distinta forma.
+  const marcadores = [];
+  const re = /(?<=^|[\s;:,.])\(?(\d{1,2})\)\s*|(?<=^|[\s;:,.])(\d{1,2})[.)]-?\s+/g;
+  let m;
+  while ((m = re.exec(raw)) !== null) {
+    marcadores.push({
+      n: Number(m[1] || m[2]),
+      inicio: m.index,
+      fin: m.index + m[0].length
+    });
+  }
+
+  const secuencia = [];
+  for (const mk of marcadores) {
+    if (mk.n === secuencia.length + 1) secuencia.push(mk);
+  }
+  if (secuencia.length < 2) return { intro: raw, items: [] };
+
+  const items = secuencia.map((mk, i) => {
+    const fin = i + 1 < secuencia.length ? secuencia[i + 1].inicio : raw.length;
+    return { n: String(mk.n), texto: raw.slice(mk.fin, fin).trim().replace(/[;,]+$/, '') };
+  });
+
+  return { intro: raw.slice(0, secuencia[0].inicio).trim(), items };
+}
+
 /**
  * Cuerpo del correo en HTML.
  * Layout de tabla y estilos inline: es lo único que Outlook y Gmail renderizan
- * igual. Mantiene la paleta VTC (navy #1a3a52 / dorado #d4af37) sin depender
- * de imágenes ni de fuentes externas.
+ * igual. Paleta VTC v4.0 (negro #0D0D0D / oro #E5B33E), la misma del reporte y
+ * del formulario, sin depender de imágenes ni de fuentes externas.
  *
  * @param {object} data
  * @param {Date|string|number} [when]
@@ -242,46 +362,52 @@ function buildEmailHTML(data, when) {
     : Math.round(((Number(d.score_overall) || 0) / 10) * 100);
 
   const font = "font-family:'Segoe UI',Helvetica,Arial,sans-serif";
-  const label = `${font};font-size:11px;letter-spacing:2px;text-transform:uppercase;color:#d4af37;font-weight:700;margin:0 0 8px`;
-  const para = `${font};font-size:14px;line-height:1.7;color:#dfe6ed;margin:0 0 6px`;
+  const label = `${font};font-size:11px;letter-spacing:2px;text-transform:uppercase;color:${COLOR.gold};font-weight:700;margin:0 0 8px`;
+  const para = `${font};font-size:14px;line-height:1.7;color:#E4E4E4;margin:0 0 6px`;
+  const num = `${font};font-size:14px;line-height:1.7;color:${COLOR.gold};font-weight:800;padding-right:8px;white-space:nowrap`;
 
   const block = (titulo, contenido) => `
       <p style="${label}">${escapeHtml(titulo)}</p>
-      <p style="${para}">${nl2br(plain(contenido))}</p>
+      ${formatBlocks(contenido, { para, num })}
       <div style="height:22px"></div>`;
 
-  const row = (k, v) => `
+  const row = (k, v, color) => `
         <tr>
-          <td style="${font};font-size:13px;color:#9db0c2;padding:7px 0;border-bottom:1px solid rgba(255,255,255,.08)">${escapeHtml(k)}</td>
-          <td style="${font};font-size:14px;color:#ffffff;font-weight:600;text-align:right;padding:7px 0;border-bottom:1px solid rgba(255,255,255,.08)">${escapeHtml(v)}</td>
+          <td style="${font};font-size:13px;color:${COLOR.muted};padding:8px 0;border-bottom:1px solid rgba(255,255,255,.09)">${escapeHtml(k)}</td>
+          <td style="${font};font-size:14px;color:${color || COLOR.text};font-weight:600;text-align:right;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.09)">${escapeHtml(v)}</td>
         </tr>`;
+
+  // El desempeño se colorea con el mismo criterio que el reporte: si el gerente
+  // ve verde en el correo y rojo en el PDF deja de confiar en los dos.
+  const colorScore = scoreColor(d.score_overall);
 
   return `<!DOCTYPE html>
 <html lang="es"><head><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Reporte de Capacitación — ${nombre}</title></head>
-<body style="margin:0;padding:0;background:#0a1721;">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#0a1721;padding:28px 12px">
+<body style="margin:0;padding:0;background:${COLOR.bg};">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${COLOR.bg};padding:28px 12px">
 <tr><td align="center">
-<table role="presentation" width="640" cellpadding="0" cellspacing="0" style="max-width:640px;width:100%;background:#102435;border-radius:14px;overflow:hidden;border:1px solid rgba(212,175,55,.22)">
+<table role="presentation" width="640" cellpadding="0" cellspacing="0" style="max-width:640px;width:100%;background:${COLOR.surface};border-radius:14px;overflow:hidden;border:1px solid rgba(229,179,62,.28)">
 
-  <tr><td style="background:#1a3a52;padding:32px 34px;border-bottom:3px solid #d4af37">
-    <p style="${font};font-size:10px;letter-spacing:3px;text-transform:uppercase;color:#d4af37;font-weight:700;margin:0 0 10px">Victorious Travelers Club · Elite Training</p>
-    <h1 style="${font};font-size:24px;color:#ffffff;margin:0;font-weight:700">Reporte de Capacitación</h1>
-    <p style="${font};font-size:14px;color:#9db0c2;margin:6px 0 0">${nombre} · ${escapeHtml(formatDateLocal(when))} · ${escapeHtml(hora)}</p>
+  <tr><td style="background:${COLOR.surface2};padding:32px 34px;border-bottom:3px solid ${COLOR.gold}">
+    <p style="${font};font-size:10px;letter-spacing:3px;text-transform:uppercase;color:${COLOR.gold};font-weight:700;margin:0 0 10px">Victorious Travelers Club · Elite Training</p>
+    <h1 style="${font};font-size:24px;color:${COLOR.text};margin:0;font-weight:700">Reporte de Capacitación</h1>
+    <p style="${font};font-size:14px;color:${COLOR.muted};margin:6px 0 0">${nombre} · ${escapeHtml(formatDateLocal(when))} · ${escapeHtml(hora)}</p>
   </td></tr>
 
   <tr><td style="padding:32px 34px">
 
     <p style="${para}">Estimados,</p>
-    <p style="${para}">Les envío el resumen de la sesión de entrenamiento de <strong style="color:#e6c869">${nombre}</strong> el día ${escapeHtml(fechaEmail)} a las ${escapeHtml(hora)}</p>
+    <p style="${para}">Les envío el resumen de la sesión de entrenamiento de <strong style="color:${COLOR.goldSoft}">${nombre}</strong> el día ${escapeHtml(fechaEmail)} a las ${escapeHtml(hora)}</p>
     <div style="height:26px"></div>
 
     <p style="${label}">Resumen de la sesión</p>
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 26px">
       ${row('Duración', `${d.duracion_texto || '—'} min`)}
       ${row('Módulo', String(d.modulo || '—'))}
-      ${row('Desempeño general', `${d.score_overall != null ? d.score_overall : '—'}/10 (${scoreTotal}%)`)}
+      ${row('Desempeño general', `${d.score_overall != null ? d.score_overall : '—'}/10 (${scoreTotal}%)`, colorScore)}
+      ${row('Meta VTC', `${META_VTC}.0/10`, COLOR.gold)}
       ${row('Idioma', String(d.idioma || '—'))}
     </table>
 
@@ -290,30 +416,80 @@ function buildEmailHTML(data, when) {
     ${block('Áreas a mejorar', d.areas_mejora)}
     ${block('Recomendación del coach', d.recomendacion_coach)}
 
-    <div style="border-top:1px solid rgba(212,175,55,.22);margin:8px 0 26px"></div>
+    <div style="border-top:1px solid rgba(229,179,62,.28);margin:8px 0 26px"></div>
 
     <p style="${label}">Próximos pasos</p>
-    <p style="${para}">Para acceder al reporte completo con gráficos, análisis detallado de competencias y plan de acción personalizado, descargue el archivo <strong style="color:#e6c869">PDF adjunto</strong>.</p>
-    <p style="${para}">Para revisar la transcripción completa de la sesión, descargue el archivo de <strong style="color:#e6c869">audio (MP3) adjunto</strong>.</p>
+    <p style="${para}">Para acceder al reporte completo con gráficos, análisis detallado de competencias y plan de acción personalizado, descargue el archivo <strong style="color:${COLOR.goldSoft}">PDF adjunto</strong>.</p>
+    <p style="${para}">Para revisar la transcripción completa de la sesión, descargue el archivo de <strong style="color:${COLOR.goldSoft}">audio (MP3) adjunto</strong>.</p>
+    ${buildEmailCtas(d, { font })}
 
-    <div style="border-top:1px solid rgba(212,175,55,.22);margin:26px 0"></div>
+    <div style="border-top:1px solid rgba(229,179,62,.28);margin:26px 0"></div>
 
     <p style="${para}">Quedo atento a cualquier pregunta.</p>
     <p style="${para}">Saludos cordiales,</p>
     <div style="height:14px"></div>
-    <p style="${para};margin:0"><strong style="color:#ffffff">El equipo de Victor-IA</strong></p>
-    <p style="${font};font-size:13px;color:#9db0c2;margin:2px 0 0">Entrenamiento VTC Capacitación</p>
-    <p style="${font};font-size:13px;color:#d4af37;margin:2px 0 0">victor-ia.xyz</p>
+    <p style="${para};margin:0"><strong style="color:${COLOR.text}">El equipo de Victor-IA</strong></p>
+    <p style="${font};font-size:13px;color:${COLOR.muted};margin:2px 0 0">Entrenamiento VTC Capacitación</p>
+    <p style="${font};font-size:13px;color:${COLOR.gold};margin:2px 0 0">victor-ia.xyz</p>
 
   </td></tr>
 
-  <tr><td style="background:#0a1721;padding:18px 34px;text-align:center;border-top:1px solid rgba(212,175,55,.18)">
-    <p style="${font};font-size:11px;color:#6f8298;margin:0">Generado automáticamente por Victor IA · ${escapeHtml(formatDateLocal(when))} ${escapeHtml(hora)} (America/Cancún)</p>
+  <tr><td style="background:${COLOR.bg};padding:18px 34px;text-align:center;border-top:1px solid rgba(229,179,62,.22)">
+    <p style="${font};font-size:11px;color:${COLOR.muted};margin:0">Generado automáticamente por Victor IA · ${escapeHtml(formatDateLocal(when))} ${escapeHtml(hora)} (America/Cancún)</p>
   </td></tr>
 
 </table>
 </td></tr></table>
 </body></html>`;
+}
+
+/**
+ * Los tres CTAs del correo, en dorado sólido.
+ *
+ * Solo se pintan los que tienen destino real: un botón que lleva a "#" desde
+ * el buzón del gerente es peor que no tenerlo. Si el pipeline no pudo firmar
+ * los enlaces (falta el secreto), el bloque entero desaparece y quedan los
+ * adjuntos, que siempre viajan.
+ */
+function buildEmailCtas(d, { font }) {
+  const acciones = [
+    { url: d.pop_up_url, texto: 'Escuchar la sesión', principal: true },
+    { url: d.pdf_download_url, texto: 'Descargar el reporte', principal: false },
+    { url: d.retrain_url, texto: 'Repetir el entrenamiento', principal: false }
+  ].filter((a) => typeof a.url === 'string' && /^https?:\/\//i.test(a.url));
+
+  if (!acciones.length) return '';
+
+  const botones = acciones
+    .map((a) => {
+      const estilo = a.principal
+        ? `background:${COLOR.gold};color:${COLOR.bg};border:1px solid ${COLOR.gold}`
+        : `background:${COLOR.surface2};color:${COLOR.gold};border:1px solid ${COLOR.gold}`;
+      return `<a href="${escapeHtml(a.url)}" style="${font};display:inline-block;${estilo};`
+        + `font-weight:700;font-size:14px;padding:12px 20px;border-radius:8px;`
+        + `text-decoration:none;margin:0 8px 10px 0">${escapeHtml(a.texto)}</a>`;
+    })
+    .join('');
+
+  return `<div style="margin-top:20px">${botones}</div>`;
+}
+
+/**
+ * Versión en texto plano de la misma enumeración que arma `formatBlocks`.
+ * El cuerpo de texto es el fallback de entregabilidad: si dice lo mismo que el
+ * HTML pero apelmazado, el que lo lee ahí sale perdiendo sin motivo.
+ */
+function listaTexto(text) {
+  const raw = plain(text);
+  if (raw === '—') return raw;
+
+  const { intro, items } = splitEnumeracion(raw);
+  if (!items.length) return raw;
+
+  const partes = [];
+  if (intro) partes.push(intro, '');
+  for (const it of items) partes.push(`${it.n}.- ${it.texto}`);
+  return partes.join('\n');
 }
 
 /** Aplana texto: quita viñetas heredadas y normaliza saltos. */

@@ -10,8 +10,9 @@
  *   distintas y el gerente recibe dos formatos de la misma cosa. Aquí está la
  *   única definición: destinatarios, registro y cuerpo del correo.
  *
- * Destino: SIEMPRE los gerentes. Por defecto mesainteligentedemo@gmail.com.
- *   Configurable con RETRAIN_REQUEST_EMAIL (lista separada por comas).
+ * Destino: el correo que elija quien llena el formulario. Si no manda ninguno,
+ *   caen los gerentes de RETRAIN_REQUEST_EMAIL (lista separada por comas) y,
+ *   en última instancia, mesainteligentedemo@gmail.com.
  *
  * Registro: se guarda en Supabase si hay credenciales; si no, en memoria del
  *   proceso. El registro NUNCA bloquea el correo — que la notificación llegue
@@ -27,8 +28,11 @@ const {
 const { buildReportLinks } = require('./report-links');
 
 const DEFAULT_MANAGER = 'mesainteligentedemo@gmail.com';
-const MAX_NOTAS = 2000;
+const MAX_NOTAS = 5000;
 const MAX_MEMORIA = 100;
+
+/** Formato de correo aceptado. El mismo regex que valida el formulario. */
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const PRIORIDADES = { alta: 'ALTA', media: 'MEDIA', baja: 'BAJA' };
 
@@ -39,23 +43,45 @@ const memoria = [];
 // DESTINATARIOS
 // ════════════════════════════════════════════════════════════
 
+/** Parte una cadena "a@x.com, b@y.com" en correos válidos. */
+function parseEmails(raw) {
+  return String(raw == null ? '' : raw)
+    .split(/[,;]/)
+    .map((s) => s.trim())
+    .filter((s) => EMAIL_RE.test(s));
+}
+
 /**
  * A quién llega una solicitud de reentrenamiento.
  *
- * Orden: RETRAIN_REQUEST_EMAIL → EMAIL_TO_PRIMARY → default de fábrica.
+ * Orden: destino elegido en el formulario → RETRAIN_REQUEST_EMAIL →
+ * EMAIL_TO_PRIMARY → default de fábrica.
+ *
+ * El destino del formulario manda porque quien solicita el reentrenamiento
+ * sabe mejor que la variable de entorno a qué gerente le toca esta sesión.
  * Nunca devuelve una lista vacía: una solicitud sin destinatario es una
  * solicitud perdida, y eso es peor que mandarla al buzón por defecto.
  *
+ * @param {string|string[]} [override] Correo(s) pedidos explícitamente
  * @returns {string[]}
  */
-function managerRecipients() {
+function managerRecipients(override) {
+  if (override) {
+    const elegidos = Array.isArray(override)
+      ? override.flatMap((e) => parseEmails(e))
+      : parseEmails(override);
+    if (elegidos.length) return [...new Set(elegidos)].slice(0, 5);
+  }
+
   const raw = process.env.RETRAIN_REQUEST_EMAIL || process.env.EMAIL_TO_PRIMARY || DEFAULT_MANAGER;
-  const lista = String(raw)
-    .split(/[,;]/)
-    .map((s) => s.trim())
-    .filter((s) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s));
+  const lista = parseEmails(raw);
 
   return lista.length ? lista : [DEFAULT_MANAGER];
+}
+
+/** ¿Es un correo con forma válida? Se usa antes de aceptar el destino del formulario. */
+function isValidEmail(value) {
+  return EMAIL_RE.test(String(value == null ? '' : value).trim());
 }
 
 // ════════════════════════════════════════════════════════════
@@ -83,50 +109,74 @@ async function persistirEnSupabase(record) {
   const tabla = process.env.SUPABASE_RETRAIN_TABLE || 'retrain_requests';
   const endpoint = `${String(url).replace(/\/+$/, '')}/rest/v1/${tabla}`;
 
-  // Techo corto: el registro es secundario, el correo es lo que importa.
-  const controller = typeof AbortController === 'function' ? new AbortController() : null;
-  const timer = controller ? setTimeout(() => controller.abort(), 4000) : null;
+  // Columnas base (existen desde la primera versión de la tabla) y las nuevas,
+  // que van aparte para poder reintentar sin ellas si el esquema aún no las tiene.
+  const base = {
+    request_id: record.id,
+    conversation_id: record.conversation_id,
+    asesor: record.asesor,
+    empleado_id: record.empleado_id,
+    modulo: record.modulo,
+    score_overall: record.score_overall,
+    competencias: record.competencias,
+    prioridad: record.prioridad,
+    notas: record.notas,
+    solicitante: record.solicitante,
+    destinatarios: record.destinatarios,
+    created_at: record.created_at
+  };
+  const extras = {
+    notas_gerente: record.notas_gerente,
+    email_destino: record.destinatarios[0] || null
+  };
 
-  try {
-    const response = await fetch(endpoint, {
-      method: 'POST',
-      headers: {
-        apikey: key,
-        Authorization: `Bearer ${key}`,
-        'Content-Type': 'application/json',
-        Prefer: 'return=minimal'
-      },
-      body: JSON.stringify([
-        {
-          request_id: record.id,
-          conversation_id: record.conversation_id,
-          asesor: record.asesor,
-          empleado_id: record.empleado_id,
-          modulo: record.modulo,
-          score_overall: record.score_overall,
-          competencias: record.competencias,
-          prioridad: record.prioridad,
-          notas: record.notas,
-          solicitante: record.solicitante,
-          destinatarios: record.destinatarios,
-          created_at: record.created_at
-        }
-      ]),
-      signal: controller ? controller.signal : undefined
-    });
+  async function intentar(fila) {
+    // Techo corto: el registro es secundario, el correo es lo que importa.
+    const controller = typeof AbortController === 'function' ? new AbortController() : null;
+    const timer = controller ? setTimeout(() => controller.abort(), 4000) : null;
 
-    if (!response.ok) {
-      const detalle = await response.text().catch(() => '');
-      console.warn(`[RETRAIN] Supabase respondió ${response.status}: ${detalle.slice(0, 200)}`);
-      return false;
+    try {
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          apikey: key,
+          Authorization: `Bearer ${key}`,
+          'Content-Type': 'application/json',
+          Prefer: 'return=minimal'
+        },
+        body: JSON.stringify([fila]),
+        signal: controller ? controller.signal : undefined
+      });
+
+      if (!response.ok) {
+        const detalle = await response.text().catch(() => '');
+        return { ok: false, status: response.status, detalle };
+      }
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, status: 0, detalle: error.message };
+    } finally {
+      if (timer) clearTimeout(timer);
     }
-    return true;
-  } catch (error) {
-    console.warn('[RETRAIN] No se pudo escribir en Supabase:', error.message);
-    return false;
-  } finally {
-    if (timer) clearTimeout(timer);
   }
+
+  const primero = await intentar({ ...base, ...extras });
+  if (primero.ok) return true;
+
+  // Columna inexistente (PGRST204 / 42703): la tabla es de antes de las notas
+  // del gerente. Se reintenta con el esquema viejo en vez de perder la fila.
+  if (/PGRST204|42703|column/i.test(primero.detalle || '')) {
+    const segundo = await intentar(base);
+    if (segundo.ok) {
+      console.warn('[RETRAIN] Supabase sin columnas notas_gerente/email_destino: fila escrita sin ellas');
+      return true;
+    }
+    console.warn(`[RETRAIN] Supabase respondió ${segundo.status}: ${String(segundo.detalle).slice(0, 200)}`);
+    return false;
+  }
+
+  console.warn(`[RETRAIN] Supabase respondió ${primero.status}: ${String(primero.detalle).slice(0, 200)}`);
+  return false;
 }
 
 /**
@@ -147,6 +197,7 @@ async function createRetrainRecord(input) {
     competencias: Array.isArray(input.competencias) ? input.competencias : [],
     prioridad: input.prioridad || 'MEDIA',
     notas: input.notas || '',
+    notas_gerente: input.notasGerente || '',
     solicitante: input.solicitante || null,
     destinatarios: Array.isArray(input.destinatarios) ? input.destinatarios : managerRecipients(),
     created_at: new Date().toISOString(),
@@ -245,15 +296,31 @@ function areasCriticas(summary) {
 function buildRetrainEmail({ summary, record, links, origenCompetencias }) {
   const s = summary || {};
   const ahora = new Date(record.created_at);
-  const competencias = record.competencias.length ? record.competencias.join(', ') : 'Sin foco definido';
+
+  // Las competencias marcadas viajan CON su score: el gerente no debería tener
+  // que abrir el PDF para saber de qué número parte cada una.
+  const scorePorNombre = new Map(
+    (Array.isArray(s.competencias) ? s.competencias : [])
+      .filter((c) => c && c.name != null)
+      .map((c) => [String(c.name).toLowerCase(), c.score])
+  );
+  const marcadas = record.competencias.map((name) => {
+    const score = scorePorNombre.get(String(name).toLowerCase());
+    return Number.isFinite(Number(score)) ? `${name} (${score}/10)` : String(name);
+  });
+
+  const competencias = marcadas.length ? marcadas.join(', ') : 'Sin foco definido';
   const criticas = areasCriticas(s);
 
   const fortalezas = Array.isArray(s.fortalezas_list) ? s.fortalezas_list : [];
   const areas = Array.isArray(s.areas_list) ? s.areas_list : [];
 
+  // El asunto va con los nombres pelados: con los scores dentro se corta en el
+  // inbox y el gerente pierde justo la parte que dice de quién es.
   const subject =
     `Reentrenamiento ${record.prioridad}: ${s.nombre || 'Asesor VTC'} — ` +
-    `${competencias} (${formatDateLocal(ahora)})`;
+    `${record.competencias.length ? record.competencias.join(', ') : 'Sin foco definido'} ` +
+    `(${formatDateLocal(ahora)})`;
 
   const notaOrigen = origenCompetencias === 'automatico'
     ? ' (deducidas de los scores de la sesión — el solicitante no marcó ninguna)'
@@ -280,8 +347,11 @@ function buildRetrainEmail({ summary, record, links, origenCompetencias }) {
     `PRIORIDAD: ${record.prioridad}`,
     `COMPETENCIAS A REFORZAR: ${competencias}${notaOrigen}`,
     '',
-    'NOTAS DEL SOLICITANTE',
+    'NOTAS PARA EL COLABORADOR',
     record.notas || '(sin notas)',
+    '',
+    'NOTAS ADICIONALES PARA EL GERENTE',
+    record.notas_gerente || '(sin notas adicionales)',
     ...(fortalezas.length ? ['', 'FORTALEZAS DE LA SESIÓN', ...fortalezas.map((f) => `  · ${f}`)] : []),
     ...(areas.length ? ['', 'ÁREAS DE MEJORA DETECTADAS', ...areas.map((a) => `  · ${a}`)] : []),
     '',
@@ -300,16 +370,16 @@ function buildRetrainEmail({ summary, record, links, origenCompetencias }) {
 
   // ── HTML ────────────────────────────────────────────────────
   const font = "font-family:'Segoe UI',Helvetica,Arial,sans-serif";
-  const label = `${font};font-size:11px;letter-spacing:2px;text-transform:uppercase;color:#d4af37;font-weight:700;margin:0 0 8px`;
-  const para = `${font};font-size:14px;line-height:1.7;color:#dfe6ed;margin:0 0 18px`;
+  const label = `${font};font-size:11px;letter-spacing:2px;text-transform:uppercase;color:#E5B33E;font-weight:700;margin:0 0 8px`;
+  const para = `${font};font-size:14px;line-height:1.7;color:#E4E4E4;margin:0 0 18px`;
 
   const row = (k, v) => `<tr>
-      <td style="${font};font-size:13px;color:#9db0c2;padding:7px 0;border-bottom:1px solid rgba(255,255,255,.08)">${escapeHtml(k)}</td>
+      <td style="${font};font-size:13px;color:#B8B8B8;padding:7px 0;border-bottom:1px solid rgba(255,255,255,.08)">${escapeHtml(k)}</td>
       <td style="${font};font-size:14px;color:#fff;font-weight:600;text-align:right;padding:7px 0;border-bottom:1px solid rgba(255,255,255,.08)">${escapeHtml(v)}</td>
     </tr>`;
 
   const lista = (items, color) => items.length
-    ? `<ul style="${font};font-size:14px;line-height:1.7;color:#dfe6ed;margin:0 0 18px;padding-left:20px">${
+    ? `<ul style="${font};font-size:14px;line-height:1.7;color:#E4E4E4;margin:0 0 18px;padding-left:20px">${
       items.map((i) => `<li style="margin-bottom:5px;color:${color}">${escapeHtml(i)}</li>`).join('')
     }</ul>`
     : `<p style="${para}">—</p>`;
@@ -320,14 +390,14 @@ function buildRetrainEmail({ summary, record, links, origenCompetencias }) {
 
   const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(subject)}</title></head>
-<body style="margin:0;background:#0a1721;padding:26px 12px">
-<table role="presentation" width="640" cellpadding="0" cellspacing="0" style="max-width:640px;width:100%;margin:0 auto;background:#102435;border-radius:14px;overflow:hidden;border:1px solid rgba(212,175,55,.22)">
+<body style="margin:0;background:#0D0D0D;padding:26px 12px">
+<table role="presentation" width="640" cellpadding="0" cellspacing="0" style="max-width:640px;width:100%;margin:0 auto;background:#1A1A1A;border-radius:14px;overflow:hidden;border:1px solid rgba(229,179,62,.28)">
 
-  <tr><td style="background:#1a3a52;padding:28px 32px;border-bottom:3px solid #d4af37">
-    <p style="${font};font-size:10px;letter-spacing:3px;text-transform:uppercase;color:#d4af37;font-weight:700;margin:0 0 8px">Victorious Travelers Club · Elite Training</p>
+  <tr><td style="background:#262626;padding:28px 32px;border-bottom:3px solid #E5B33E">
+    <p style="${font};font-size:10px;letter-spacing:3px;text-transform:uppercase;color:#E5B33E;font-weight:700;margin:0 0 8px">Victorious Travelers Club · Elite Training</p>
     <h1 style="${font};font-size:22px;color:#fff;margin:0;font-weight:700">Solicitud de reentrenamiento</h1>
-    <p style="${font};font-size:14px;color:#9db0c2;margin:6px 0 0">${escapeHtml(s.nombre || 'Asesor VTC')} · ${escapeHtml(s.modulo || '—')} · prioridad ${escapeHtml(record.prioridad)}</p>
-    <p style="${font};font-size:11px;color:#6f8298;margin:8px 0 0">Folio ${escapeHtml(record.id)}</p>
+    <p style="${font};font-size:14px;color:#B8B8B8;margin:6px 0 0">${escapeHtml(s.nombre || 'Asesor VTC')} · ${escapeHtml(s.modulo || '—')} · prioridad ${escapeHtml(record.prioridad)}</p>
+    <p style="${font};font-size:11px;color:#B8B8B8;margin:8px 0 0">Folio ${escapeHtml(record.id)}</p>
   </td></tr>
 
   <tr><td style="padding:28px 32px">
@@ -349,29 +419,32 @@ function buildRetrainEmail({ summary, record, links, origenCompetencias }) {
 
     <p style="${label}">Áreas críticas</p>
     ${criticas.length
-      ? lista(criticas, '#ffc457')
+      ? lista(criticas, '#FBBF24')
       : `<p style="${para}">Ninguna competencia por debajo del estándar de 8/10.</p>`}
 
     <p style="${label}">Competencias a reforzar</p>
-    <p style="${para}"><strong style="color:#e6c869">${escapeHtml(competencias)}</strong>${escapeHtml(notaOrigen)}</p>
+    <p style="${para}"><strong style="color:#F2C766">${escapeHtml(competencias)}</strong>${escapeHtml(notaOrigen)}</p>
 
-    <p style="${label}">Notas del solicitante</p>
+    <p style="${label}">Notas para el colaborador</p>
     <p style="${para}">${escapeHtml(record.notas || '(sin notas)').replace(/\n/g, '<br>')}</p>
 
-    ${fortalezas.length ? `<p style="${label}">Fortalezas de la sesión</p>${lista(fortalezas, '#3fd7ae')}` : ''}
+    <p style="${label}">Notas adicionales para el gerente</p>
+    <p style="${para}">${escapeHtml(record.notas_gerente || '(sin notas adicionales)').replace(/\n/g, '<br>')}</p>
+
+    ${fortalezas.length ? `<p style="${label}">Fortalezas de la sesión</p>${lista(fortalezas, '#34D399')}` : ''}
 
     <p style="${label}">Recomendación del coach</p>
     <p style="${para}">${escapeHtml(s.recomendacion_coach || '—')}</p>
 
-    <div style="border-top:1px solid rgba(212,175,55,.22);margin:8px 0 22px"></div>
+    <div style="border-top:1px solid rgba(229,179,62,.28);margin:8px 0 22px"></div>
 
-    <a href="${escapeHtml(links.pdf_download_url)}" style="${font};display:inline-block;background:#d4af37;color:#0d1b26;font-weight:700;font-size:14px;padding:12px 22px;border-radius:8px;text-decoration:none;margin:0 10px 10px 0">Ver el reporte completo</a>
-    <a href="${escapeHtml(links.pop_up_url)}" style="${font};display:inline-block;color:#e6c869;font-weight:600;font-size:14px;padding:12px 22px;border-radius:8px;text-decoration:none;border:1px solid rgba(212,175,55,.22)">Escuchar la sesión</a>
+    <a href="${escapeHtml(links.pdf_download_url)}" style="${font};display:inline-block;background:#E5B33E;color:#0D0D0D;font-weight:700;font-size:14px;padding:12px 22px;border-radius:8px;text-decoration:none;margin:0 10px 10px 0">Ver el reporte completo</a>
+    <a href="${escapeHtml(links.pop_up_url)}" style="${font};display:inline-block;color:#F2C766;font-weight:600;font-size:14px;padding:12px 22px;border-radius:8px;text-decoration:none;border:1px solid rgba(229,179,62,.28)">Escuchar la sesión</a>
 
   </td></tr>
 
-  <tr><td style="background:#0a1721;padding:16px 32px;text-align:center;border-top:1px solid rgba(212,175,55,.18)">
-    <p style="${font};font-size:11px;color:#6f8298;margin:0">Solicitado el ${escapeHtml(formatDateLocal(ahora))} ${escapeHtml(formatTimezoneCancun(ahora))} (America/Cancún) · Folio ${escapeHtml(record.id)}</p>
+  <tr><td style="background:#0D0D0D;padding:16px 32px;text-align:center;border-top:1px solid rgba(229,179,62,.22)">
+    <p style="${font};font-size:11px;color:#B8B8B8;margin:0">Solicitado el ${escapeHtml(formatDateLocal(ahora))} ${escapeHtml(formatTimezoneCancun(ahora))} (America/Cancún) · Folio ${escapeHtml(record.id)}</p>
   </td></tr>
 
 </table></body></html>`;
@@ -389,10 +462,13 @@ function buildRetrainEmail({ summary, record, links, origenCompetencias }) {
  * @param {object} options
  * @param {string} options.conversationId
  * @param {object} options.summary       Resumen de la sesión (buildReportSummary)
- * @param {string} [options.notas]
+ * @param {string} [options.notas]         Notas para el colaborador
+ * @param {string} [options.notasGerente]  Notas adicionales para el gerente
  * @param {Array}  [options.competencias]
  * @param {string} [options.prioridad]
  * @param {string} [options.solicitante]
+ * @param {string} [options.emailDestino]  A dónde mandar el correo; si no viene,
+ *                                         se usan los gerentes de siempre
  * @returns {Promise<{success:boolean, record:object, recipients:string[], messageId:string|null, message:string}>}
  */
 async function submitRetrainRequest(options = {}) {
@@ -400,7 +476,7 @@ async function submitRetrainRequest(options = {}) {
   if (!conversationId) throw new Error('submitRetrainRequest: falta conversationId');
 
   const summary = options.summary || {};
-  const recipients = managerRecipients();
+  const recipients = managerRecipients(options.emailDestino);
   const { competencias, origen } = resolveCompetencias(options.competencias, summary);
 
   const record = await createRetrainRecord({
@@ -412,6 +488,7 @@ async function submitRetrainRequest(options = {}) {
     competencias,
     prioridad: normalizePrioridad(options.prioridad),
     notas: normalizeNotas(options.notas),
+    notasGerente: normalizeNotas(options.notasGerente),
     solicitante: options.solicitante || null,
     destinatarios: recipients
   });
@@ -451,6 +528,7 @@ async function submitRetrainRequest(options = {}) {
 
 module.exports = {
   managerRecipients,
+  isValidEmail,
   submitRetrainRequest,
   createRetrainRecord,
   buildRetrainEmail,

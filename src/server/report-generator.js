@@ -146,36 +146,48 @@ class ReportGenerator {
       ring_color: nivel.color,
       nivel_desempeno: nivel.label,
       nivel_clase: nivel.cls,
+      // La métrica "Score global" llevaba la clase `good` fija en el template:
+      // un 68% salía en verde junto a un anillo ámbar y a un semáforo rojo, y
+      // el mismo número decía dos cosas distintas en la misma pantalla.
+      score_clase: nivel.metric,
 
       // ── Narrativa ──────────────────────────────────────────
-      resumen: this.v(data.resumen, 'Sesión de entrenamiento completada.'),
-      actividad_sesion: this.v(data.actividad_sesion, 'Sesión completada.'),
-      recomendacion_coach: this.v(
+      // Todo lo que es prosa larga pasa por formatRichText: si el agente
+      // devolvió "(1) … (2) … (3) …" en un solo bloque, aquí se convierte en
+      // lista numerada con saltos de línea. Se inyecta con triple stash en el
+      // template, por eso el escape de HTML ocurre dentro del formateador.
+      resumen: this.formatRichText(this.v(data.resumen, 'Sesión de entrenamiento completada.')),
+      actividad_sesion: this.formatRichText(this.v(data.actividad_sesion, 'Sesión completada.')),
+      recomendacion_coach: this.formatRichText(this.v(
         data.recomendacion_coach,
         this.recomendacionFallback(score, competencias)
+      )),
+      analisis_pnl: this.formatRichText(
+        this.v(data.analisis_pnl, 'Sin observaciones de PNL registradas en esta sesión.')
       ),
-      analisis_pnl: this.v(data.analisis_pnl, 'Sin observaciones de PNL registradas en esta sesión.'),
-      objeciones_trabajadas: this.v(data.objeciones_trabajadas, 'No se registraron objeciones.'),
+      objeciones_trabajadas: this.formatRichText(
+        this.v(data.objeciones_trabajadas, 'No se registraron objeciones.')
+      ),
 
       // Texto plano (fallback) + listas (presentación preferida)
-      fortalezas: this.formatText(data.fortalezas),
-      areas_mejora: this.formatText(data.areas_mejora),
+      fortalezas: this.formatRichText(data.fortalezas),
+      areas_mejora: this.formatRichText(data.areas_mejora),
       fortalezas_list,
       areas_list,
       objeciones_list,
 
       // ── Neurociencia ───────────────────────────────────────
-      principios_neuro: Array.isArray(data.principios_neuro) ? data.principios_neuro : [],
+      principios_neuro: this.formatPrincipios(data.principios_neuro),
       cumplimiento_neuro: this.num(data.cumplimiento_neuro, 85),
 
       // ── Plan de acción ─────────────────────────────────────
       // Los tres campos históricos siguen existiendo (el correo y N8N los
       // leen), pero ahora se derivan del plan expandido en vez de ser texto
       // suelto. `plan` trae los bloques A–F que pinta la sección 09.
-      plan_1: this.v(data.plan_1, accion.plan_1),
-      plan_2: this.v(data.plan_2, accion.plan_2),
-      plan_3: this.v(data.plan_3, accion.plan_3),
-      plan: accion.plan,
+      plan_1: this.formatRichText(this.v(data.plan_1, accion.plan_1)),
+      plan_2: this.formatRichText(this.v(data.plan_2, accion.plan_2)),
+      plan_3: this.formatRichText(this.v(data.plan_3, accion.plan_3)),
+      plan: this.formatPlan(accion.plan),
 
       // ── Flujo de reentrenamiento ───────────────────────────
       gerente_email: gerentes.join(', '),
@@ -189,14 +201,18 @@ class ReportGenerator {
       ...metricas,
 
       // ── CTAs ───────────────────────────────────────────────
-      pop_up_url: this.v(data.pop_up_url, '#'),
-      pdf_download_url: this.v(data.pdf_download_url, '#'),
-      retrain_url: this.v(data.retrain_url, '#'),
+      // Van por safeUrl y no por `v()`: los tres son enlaces firmados con
+      // `?conv=…&t=…` y el escape por defecto de Handlebars los deforma.
+      pop_up_url: this.safeUrl(data.pop_up_url),
+      pdf_download_url: this.safeUrl(data.pdf_download_url),
+      retrain_url: this.safeUrl(data.retrain_url),
 
-      // ── Contexto del agente (KB / RAG) ─────────────────────
-      agente: data.agente || {},
-      kb_fidelity: data.kb_fidelity || null,
-      kb_topics: data.kb_topics || [],
+      // Aquí viajaban `agente`, `kb_fidelity` y `kb_topics`, que alimentaban la
+      // sección "Contexto de evaluación" (modelo, Knowledge Base, fidelidad al
+      // guion). Esa sección se retiró del reporte: era telemetría del sistema,
+      // no información con la que el gerente pueda decidir algo sobre el asesor,
+      // y un "fidelidad 38%" sin escala se leía como una calificación más.
+      // El RAG sigue corriendo — alimenta el análisis, ya no la pantalla.
 
       // ── Competencias + gráficos SVG ────────────────────────
       competencias,
@@ -219,6 +235,46 @@ class ReportGenerator {
   num(value, def) {
     const n = Number(value);
     return Number.isFinite(n) ? n : def;
+  }
+
+  /**
+   * URL de un CTA, lista para ir dentro de un `href`.
+   *
+   * El problema que resuelve: `Handlebars.escapeExpression` escapa TAMBIÉN el
+   * signo igual. Un enlace firmado
+   *
+   *   /player?conv=abc&t=1793.8340d6
+   *
+   * salía del template como
+   *
+   *   /player?conv&#x3D;abc&amp;t&#x3D;1793.8340d6
+   *
+   * El navegador decodifica esas entidades y el clic funciona, pero el enlace
+   * deja de ser legible y todo lo que no sea un parser de HTML completo se lo
+   * come mal: copiar la dirección a mano, un cliente de correo que reescribe
+   * enlaces, un extractor de anotaciones del PDF. Y los tres CTAs (audio, PDF,
+   * reentrenamiento) son justamente lo único accionable del reporte.
+   *
+   * Qué hace en su lugar: valida el esquema y escapa solo lo que rompería el
+   * atributo, dejando `=` intacto. Devuelve SafeString para que Handlebars no
+   * vuelva a escapar lo ya escapado (`&amp;` -> `&amp;amp;`).
+   *
+   * Seguridad: solo pasan `http://` y `https://`. El pipeline construye estas
+   * URLs, pero el reporte viaja por correo — un `javascript:` aquí sería XSS
+   * servido con la firma de la empresa. Cualquier otra cosa cae a '#'.
+   */
+  safeUrl(value) {
+    const raw = this.v(value, '#');
+    if (!/^https?:\/\//i.test(raw)) return new Handlebars.SafeString('#');
+
+    const escaped = raw
+      .replace(/&/g, '&amp;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+
+    return new Handlebars.SafeString(escaped);
   }
 
   /**
@@ -314,12 +370,22 @@ class ReportGenerator {
     };
   }
 
-  /** Clasificación del desempeño (etiqueta + color + clase CSS del badge). */
+  /**
+   * Clasificación del desempeño (etiqueta + color + clase CSS del badge).
+   *
+   * Los colores son los de la paleta VTC v4.0 — los mismos que pintan los
+   * gráficos, el correo y el formulario. El `color` alimenta `ring_color`, que
+   * el template usa en el anillo de la portada y en el score de objeciones: si
+   * aquí se quedara la paleta vieja, el anillo saldría verde bosque sobre un
+   * reporte cuyo verde es #10B981.
+   *
+   * Los cortes siguen la meta VTC de 8.0: por debajo de 8 hay brecha.
+   */
   nivelDesempeno(score) {
-    if (score >= 9) return { label: 'Desempeño élite', cls: 'b-good', color: '#009E73' };
-    if (score >= 8) return { label: 'Desempeño sólido', cls: 'b-gold', color: '#d4af37' };
-    if (score >= 6.5) return { label: 'En desarrollo', cls: 'b-warn', color: '#E69F00' };
-    return { label: 'Requiere refuerzo', cls: 'b-bad', color: '#D55E00' };
+    if (score >= 9) return { label: 'Desempeño élite', cls: 'b-good', metric: 'good', color: '#10B981' };
+    if (score >= 8) return { label: 'Desempeño sólido', cls: 'b-gold', metric: 'gold', color: '#E5B33E' };
+    if (score >= 6) return { label: 'En desarrollo', cls: 'b-warn', metric: 'warn', color: '#F59E0B' };
+    return { label: 'Requiere refuerzo', cls: 'b-bad', metric: 'bad', color: '#EF4444' };
   }
 
   /**
@@ -371,6 +437,161 @@ class ReportGenerator {
       .split('\n')
       .filter((l) => l.trim())
       .join('<br>');
+  }
+
+  /**
+   * Prosa larga -> HTML legible.
+   *
+   * El agente devuelve el resumen y el análisis como una parrafada única con
+   * la enumeración embebida:
+   *
+   *   "La sesión comenzó a las 04:42 … (1) El usuario solicitó … (2) Nivel de
+   *    participación: 5/10 … (3) …"
+   *
+   * Eso nadie lo lee: se escanea y se abandona. Aquí se parte en intro + puntos
+   * numerados con salto de línea entre cada uno:
+   *
+   *   La sesión comenzó a las 04:42 …
+   *
+   *   1.- El usuario solicitó …
+   *   2.- Nivel de participación: 5/10 …
+   *
+   * Qué se reconoce como marcador de punto:
+   *   (1)   1)   1.-   1.   ①…  — al inicio de línea o embebido en el párrafo
+   *
+   * Reglas de seguridad:
+   *   - Se exigen AL MENOS DOS marcadores. Con uno solo casi siempre es una
+   *     cita ("el estándar (1 de 10)") o una referencia, no una lista.
+   *   - Los marcadores embebidos deben ir en orden ascendente empezando en 1.
+   *     Sin esto, "cerró en (3) minutos … subió (2) puntos" se partía en lista.
+   *   - Todo se escapa aquí dentro: la salida se inyecta con triple stash.
+   *
+   * @param {string} text
+   * @returns {string} HTML seguro, listo para {{{ }}}
+   */
+  formatRichText(text) {
+    if (text === null || text === undefined) return '';
+    const raw = String(text).replace(/<br\s*\/?>/gi, '\n').trim();
+    if (!raw) return '';
+
+    const esc = (s) => Handlebars.escapeExpression(s);
+
+    // ── Caso A: la lista ya viene en líneas separadas ────────────────
+    // El marcador exige terminador explícito — "(1)", "1)", "1.", "1.-".
+    // Sin él, "10 personas asistieron" se leía como el punto número 10.
+    const LINEA_NUMERADA = /^(?:\((\d{1,2})\)|(\d{1,2})\s*[.)\-–—]+)\s*(.*)$/;
+
+    const lineas = raw.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+    if (lineas.length > 1) {
+      const numeradas = lineas.filter((l) => LINEA_NUMERADA.test(l));
+      if (numeradas.length >= 2) {
+        const intro = [];
+        const items = [];
+        for (const linea of lineas) {
+          const m = linea.match(LINEA_NUMERADA);
+          if (m) items.push({ n: m[1] || m[2], texto: String(m[3] || '').trim() });
+          else if (!items.length) intro.push(linea);
+          else items[items.length - 1].texto += ` ${linea}`;
+        }
+        return this.renderPuntos(intro.join(' '), items);
+      }
+      // Varias líneas sin numerar: se respetan los saltos, nada más.
+      return lineas.map((l) => `<span class="p-line">${esc(l)}</span>`).join('');
+    }
+
+    // ── Caso B: un solo párrafo con "(1) … (2) …" embebido ───────────
+    //
+    // El separador de la izquierda va como lookbehind, NO como grupo que
+    // consume. Con un grupo que consume, un texto tan común como
+    //
+    //   "La sesión comenzó a las 04:42. (1) El usuario solicitó…"
+    //
+    // se rompía: el "42. " de la hora casaba como marcador y se tragaba el
+    // espacio anterior al "(1)", que a partir de ahí ya no encontraba su propio
+    // separador y quedaba invisible. La secuencia empezaba en el 2, el filtro
+    // "debe arrancar en 1" la descartaba entera y el párrafo se imprimía en un
+    // solo bloque — justo el caso que este formateador existe para arreglar.
+    // El lookbehind mira el carácter sin consumirlo, así que cada marcador
+    // conserva el suyo. Los falsos positivos (el "42") siguen cayendo por el
+    // filtro de secuencia de más abajo.
+    const marcadores = [];
+    const re = /(?<=^|[\s;:,.])\(?(\d{1,2})\)\s*|(?<=^|[\s;:,.])(\d{1,2})[.)]-?\s+/g;
+    let m;
+    while ((m = re.exec(raw)) !== null) {
+      marcadores.push({
+        n: Number(m[1] || m[2]),
+        inicio: m.index,
+        fin: m.index + m[0].length
+      });
+    }
+
+    // Solo aceptamos la secuencia 1,2,3… completa desde el principio.
+    const secuencia = [];
+    for (const mk of marcadores) {
+      if (mk.n === secuencia.length + 1) secuencia.push(mk);
+    }
+    if (secuencia.length < 2) return esc(raw);
+
+    const intro = raw.slice(0, secuencia[0].inicio).trim();
+    const items = secuencia.map((mk, i) => {
+      const fin = i + 1 < secuencia.length ? secuencia[i + 1].inicio : raw.length;
+      return { n: String(mk.n), texto: raw.slice(mk.fin, fin).trim().replace(/[;,]+$/, '') };
+    });
+
+    return this.renderPuntos(intro, items);
+  }
+
+  /** Pinta intro + puntos numerados. El CSS del reporte hace la sangría. */
+  renderPuntos(intro, items) {
+    const esc = (s) => Handlebars.escapeExpression(s);
+    const partes = [];
+
+    const introLimpio = String(intro || '').trim();
+    if (introLimpio) partes.push(`<span class="p-intro">${esc(introLimpio)}</span>`);
+
+    for (const it of items) {
+      if (!it.texto) continue;
+      partes.push(
+        `<span class="p-item"><b class="p-num">${esc(it.n)}.-</b>${esc(it.texto)}</span>`
+      );
+    }
+    return partes.join('');
+  }
+
+  /** Aplica el formateo de listas a las descripciones de neurociencia. */
+  formatPrincipios(principios) {
+    if (!Array.isArray(principios)) return [];
+    return principios.map((p) => ({
+      ...p,
+      descripcion: this.formatRichText(p && p.descripcion)
+    }));
+  }
+
+  /**
+   * Aplica el formateo de listas a los textos largos del plan de acción.
+   * Solo toca los campos que se inyectan con triple stash en el template;
+   * el resto del plan sigue escapándose por Handlebars como siempre.
+   */
+  formatPlan(plan) {
+    if (!plan || typeof plan !== 'object') return plan;
+
+    const out = { ...plan };
+
+    if (Array.isArray(plan.diagnostico)) {
+      out.diagnostico = plan.diagnostico.map((d) => ({
+        ...d,
+        detalle: this.formatRichText(d && d.detalle)
+      }));
+    }
+
+    if (plan.pasos && typeof plan.pasos === 'object') {
+      out.pasos = {
+        ...plan.pasos,
+        reevaluacion: this.formatRichText(plan.pasos.reevaluacion)
+      };
+    }
+
+    return out;
   }
 }
 

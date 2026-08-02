@@ -12,8 +12,9 @@
  *   4. Envía el correo al gerente con TODO el contexto
  *   5. Devuelve la confirmación con el folio y los destinatarios
  *
- * Destino del correo: RETRAIN_REQUEST_EMAIL (por defecto
- * mesainteligentedemo@gmail.com). Ver src/server/retrain-request.js.
+ * Destino del correo: el `emailDestino` que manda el formulario. Si no viene,
+ * RETRAIN_REQUEST_EMAIL (por defecto mesainteligentedemo@gmail.com).
+ * Ver src/server/retrain-request.js.
  *
  * No re-dispara el pipeline de reportes: reprocesar la misma conversación
  * generaría un PDF idéntico. Lo que falta es que alguien AGENDE el coaching,
@@ -22,7 +23,12 @@
 
 import { verifyReportToken, extractRequestToken } from '../../src/server/report-links';
 import { buildReportSummary } from '../../src/server/rebuild-report';
-import { submitRetrainRequest, managerRecipients, MAX_NOTAS } from '../../src/server/retrain-request';
+import {
+  submitRetrainRequest,
+  managerRecipients,
+  isValidEmail,
+  MAX_NOTAS
+} from '../../src/server/retrain-request';
 
 export const config = { maxDuration: 30 };
 
@@ -55,11 +61,31 @@ export default async function handler(req, res) {
     });
   }
 
-  const notas = String(body.notas || body.notes || '');
+  const notas = String(body.notas || body.notasCoach || body.notes || '');
   if (notas.length > MAX_NOTAS) {
     return res.status(400).json({
       success: false,
-      error: `Las notas superan el máximo de ${MAX_NOTAS} caracteres`
+      error: `Las notas para el colaborador superan el máximo de ${MAX_NOTAS} caracteres`
+    });
+  }
+
+  const notasGerente = String(body.notas_gerente || body.notasGerente || '');
+  if (notasGerente.length > MAX_NOTAS) {
+    return res.status(400).json({
+      success: false,
+      error: `Las notas para el gerente superan el máximo de ${MAX_NOTAS} caracteres`
+    });
+  }
+
+  // Destino del correo. Es opcional en el contrato — las integraciones viejas no
+  // lo mandan — pero si viene y está mal escrito se rechaza en vez de caer al
+  // buzón por defecto: el solicitante creería que llegó a quien él puso.
+  const emailDestino = String(body.emailDestino || body.email_destino || '').trim();
+  if (emailDestino && !isValidEmail(emailDestino)) {
+    return res.status(400).json({
+      success: false,
+      error: 'El correo de destino no tiene un formato válido',
+      campo: 'emailDestino'
     });
   }
 
@@ -71,7 +97,9 @@ export default async function handler(req, res) {
       conversationId,
       summary,
       notas,
-      competencias: body.competencias,
+      notasGerente,
+      emailDestino,
+      competencias: body.competencias || body.competenciasMarcadas,
       prioridad: body.prioridad,
       solicitante: body.solicitante || null
     });
@@ -90,6 +118,8 @@ export default async function handler(req, res) {
       destinatarios: result.recipients,
       prioridad: result.record.prioridad,
       competencias: result.record.competencias,
+      notas: result.record.notas,
+      notas_gerente: result.record.notas_gerente,
       registrado_en: result.record.persisted,
       messageId: result.messageId,
       asesor: {
@@ -112,7 +142,7 @@ export default async function handler(req, res) {
       error: 'No se pudo completar la solicitud',
       detail: error.message,
       folio,
-      destinatarios: managerRecipients()
+      destinatarios: managerRecipients(emailDestino)
     });
   }
 }

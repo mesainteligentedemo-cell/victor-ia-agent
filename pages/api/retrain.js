@@ -16,7 +16,12 @@
 
 import { verifyReportToken, extractRequestToken } from '../../src/server/report-links';
 import { buildReportSummary } from '../../src/server/rebuild-report';
-import { submitRetrainRequest, managerRecipients, MAX_NOTAS } from '../../src/server/retrain-request';
+import {
+  submitRetrainRequest,
+  managerRecipients,
+  isValidEmail,
+  MAX_NOTAS
+} from '../../src/server/retrain-request';
 
 export const config = { maxDuration: 30 };
 
@@ -40,9 +45,10 @@ export default async function handler(req, res) {
     return res.status(401).json({ success: false, error: 'Unauthorized', reason: auth.reason });
   }
 
-  const competencias = Array.isArray(body.competencias)
-    ? body.competencias.map((c) => String(c).slice(0, 60)).filter(Boolean).slice(0, 12)
-    : [];
+  const elegidas = Array.isArray(body.competencias)
+    ? body.competencias
+    : (Array.isArray(body.competenciasMarcadas) ? body.competenciasMarcadas : []);
+  const competencias = elegidas.map((c) => String(c).slice(0, 60)).filter(Boolean).slice(0, 12);
 
   if (!competencias.length) {
     return res.status(400).json({
@@ -51,11 +57,28 @@ export default async function handler(req, res) {
     });
   }
 
-  const notas = String(body.notas || '');
+  const notas = String(body.notas || body.notasCoach || '');
   if (notas.length > MAX_NOTAS) {
     return res.status(400).json({
       success: false,
-      error: `Las notas superan el máximo de ${MAX_NOTAS} caracteres`
+      error: `Las notas para el colaborador superan el máximo de ${MAX_NOTAS} caracteres`
+    });
+  }
+
+  const notasGerente = String(body.notas_gerente || body.notasGerente || '');
+  if (notasGerente.length > MAX_NOTAS) {
+    return res.status(400).json({
+      success: false,
+      error: `Las notas para el gerente superan el máximo de ${MAX_NOTAS} caracteres`
+    });
+  }
+
+  const emailDestino = String(body.emailDestino || body.email_destino || '').trim();
+  if (emailDestino && !isValidEmail(emailDestino)) {
+    return res.status(400).json({
+      success: false,
+      error: 'El correo de destino no tiene un formato válido',
+      campo: 'emailDestino'
     });
   }
 
@@ -66,6 +89,8 @@ export default async function handler(req, res) {
       conversationId,
       summary,
       notas,
+      notasGerente,
+      emailDestino,
       competencias,
       prioridad: body.prioridad,
       solicitante: body.solicitante || null
@@ -95,7 +120,7 @@ export default async function handler(req, res) {
       error: 'No se pudo registrar la solicitud',
       detail: error.message,
       folio: error.record ? error.record.id : null,
-      destinatarios: managerRecipients()
+      destinatarios: managerRecipients(emailDestino)
     });
   }
 }

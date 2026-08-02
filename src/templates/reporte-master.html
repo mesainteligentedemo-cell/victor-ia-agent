@@ -9,8 +9,8 @@
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700;900&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 /* ══════════════════════════════════════════════════════════════
-   VTC ELITE — REPORTE DE CAPACITACIÓN  ·  v3.2 (layout fluido)
-   Paleta de marca: navy #1a3a52 · dorado #d4af37
+   VTC ELITE — REPORTE DE CAPACITACIÓN  ·  v4.0 (negro + oro)
+   Paleta de marca: negro #0D0D0D · oro cálido #E5B33E
 
    Principios del rediseño:
    1. NADA tiene altura fija. Todo se dimensiona por su contenido.
@@ -22,28 +22,42 @@
       partirse por la mitad (una tarjeta, una burbuja, un paso del plan).
    4. Todo el CSS va inline: el reporte viaja como PDF y como email,
       ninguno de los dos contextos garantiza hojas de estilo externas.
+   5. Sin azules. El único acento cromático es el oro; el resto es
+      escala de grises más los tres colores de estado (verde/naranja/rojo).
    ══════════════════════════════════════════════════════════════ */
 
 :root{
-  --navy:#1a3a52;
-  --navy-deep:#102435;
-  --navy-abyss:#0a1721;
-  --gold:#d4af37;
-  --gold-soft:#e6c869;
-  --gold-pale:#f2e3b0;
-  --good:#009E73;
-  --good-lit:#3fd7ae;
-  --warn:#E69F00;
-  --warn-lit:#ffc457;
-  --bad:#D55E00;
-  --bad-lit:#ff9257;
-  --sky:#56B4E9;
-  --paper:#eef2f6;
-  --muted:#9db0c2;
-  --hair:rgba(212,175,55,.22);
-  --hair-soft:rgba(255,255,255,.08);
-  --shadow-lg:0 20px 48px rgba(0,0,0,.42), 0 1px 0 rgba(255,255,255,.05) inset;
-  --shadow-md:0 8px 24px rgba(0,0,0,.28), 0 1px 0 rgba(255,255,255,.06) inset;
+  /* Superficies */
+  --bg:#0D0D0D;          /* fondo principal — negro puro elegante */
+  --surface:#1A1A1A;     /* tarjetas y contenedores */
+  --surface-2:#262626;   /* badges, botones y labels */
+
+  /* Acento */
+  --gold:#E5B33E;        /* oro cálido — títulos, bordes, progreso */
+  --gold-soft:#F2C766;   /* oro claro — hover y texto secundario dorado */
+  --gold-pale:#FFE0A3;
+  --gold-deep:#B8862A;
+
+  /* Texto */
+  --paper:#FFFFFF;       /* texto principal */
+  --muted:#B8B8B8;       /* labels y descripciones */
+  --muted-dim:#8A8A8A;
+
+  /* Estados */
+  --good:#10B981;        /* score ≥ 8 */
+  --good-lit:#34D399;
+  --warn:#F59E0B;        /* score 6 – 7.99 */
+  --warn-lit:#FBBF24;
+  --bad:#EF4444;         /* score < 6 */
+  --bad-lit:#F87171;
+
+  /* Neutro de apoyo (reemplaza al antiguo azul informativo) */
+  --neutral:#B8B8B8;
+
+  --hair:rgba(229,179,62,.28);
+  --hair-soft:rgba(255,255,255,.09);
+  --shadow-lg:0 20px 48px rgba(0,0,0,.62), 0 1px 0 rgba(255,255,255,.05) inset;
+  --shadow-md:0 8px 24px rgba(0,0,0,.45), 0 1px 0 rgba(255,255,255,.06) inset;
   --radius:13px;
 
   /* Ritmo vertical único: cambiar aquí cambia todo el documento */
@@ -56,7 +70,7 @@
 
 body{
   font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI','Helvetica Neue',Helvetica,Arial,sans-serif;
-  background:var(--navy-abyss);
+  background:var(--bg);
   color:var(--paper);
   font-size:13px;
   line-height:1.62;
@@ -69,9 +83,9 @@ body{
   max-width:860px;
   margin:0 auto;
   background:
-    radial-gradient(900px 420px at 12% -8%, rgba(212,175,55,.10), transparent 62%),
-    radial-gradient(760px 380px at 92% 4%, rgba(86,180,233,.07), transparent 60%),
-    linear-gradient(180deg,var(--navy-deep) 0%, var(--navy-abyss) 100%);
+    radial-gradient(900px 420px at 12% -8%, rgba(229,179,62,.10), transparent 62%),
+    radial-gradient(760px 380px at 92% 4%, rgba(255,255,255,.035), transparent 60%),
+    linear-gradient(180deg,#141414 0%, var(--bg) 100%);
 }
 
 /* ─── Tipografía de sistema ─────────────────────────────────── */
@@ -84,14 +98,14 @@ body{
   position:relative;
   padding:52px var(--pad-x) 34px;
   background:
-    linear-gradient(155deg, rgba(212,175,55,.14) 0%, rgba(26,58,82,0) 46%),
-    linear-gradient(180deg, var(--navy) 0%, var(--navy-deep) 100%);
+    linear-gradient(155deg, rgba(229,179,62,.16) 0%, rgba(13,13,13,0) 48%),
+    linear-gradient(180deg, var(--surface) 0%, var(--bg) 100%);
   border-bottom:3px solid var(--gold);
   overflow:hidden;
 }
 .crest{
   display:inline-block;padding:6px 15px;border:1px solid var(--hair);
-  border-radius:999px;background:rgba(212,175,55,.09);
+  border-radius:999px;background:var(--surface-2);
   box-shadow:var(--shadow-md);margin-bottom:20px;
 }
 .cover h1{
@@ -136,17 +150,17 @@ body{
 .block-head{display:flex;align-items:baseline;gap:10px;margin-top:22px}
 .block-letter{
   font-family:'Playfair Display',Georgia,serif;font-size:15px;font-weight:900;
-  color:#14202b;background:linear-gradient(145deg,var(--gold),#a8842a);
+  color:#0D0D0D;background:linear-gradient(145deg,var(--gold),var(--gold-deep));
   width:26px;height:26px;border-radius:7px;flex:0 0 26px;
   display:flex;align-items:center;justify-content:center;line-height:1;
-  box-shadow:0 3px 10px rgba(212,175,55,.3);
+  box-shadow:0 3px 10px rgba(229,179,62,.32);
 }
 .block-title{font-size:14.5px;font-weight:700;color:var(--gold-soft);letter-spacing:.2px;flex:1}
 .block-note{font-size:10.5px;color:var(--muted)}
 
 /* ─── TARJETAS ──────────────────────────────────────────────── */
 .card{
-  background:linear-gradient(165deg, rgba(255,255,255,.065) 0%, rgba(255,255,255,.018) 100%);
+  background:var(--surface);
   border:1px solid var(--hair-soft);
   border-radius:var(--radius);
   box-shadow:var(--shadow-md);
@@ -155,7 +169,7 @@ body{
 }
 .card-gold{border-left:3px solid var(--gold)}
 .card-warn{border-left:3px solid var(--warn)}
-.card-sky{border-left:3px solid var(--sky)}
+.card-sky{border-left:3px solid var(--neutral)}
 .card-title{
   font-size:10px;letter-spacing:2.2px;text-transform:uppercase;
   color:var(--gold);font-weight:700;margin-bottom:12px;
@@ -181,8 +195,8 @@ body{
 .hero{
   display:grid;grid-template-columns:minmax(132px,158px) 1fr;gap:24px;align-items:center;
   background:
-    radial-gradient(420px 220px at 8% 50%, rgba(212,175,55,.16), transparent 70%),
-    linear-gradient(160deg, rgba(255,255,255,.07), rgba(255,255,255,.015));
+    radial-gradient(420px 220px at 8% 50%, rgba(229,179,62,.18), transparent 70%),
+    var(--surface);
   border:1px solid var(--hair);
   border-radius:16px;
   box-shadow:var(--shadow-lg);
@@ -210,14 +224,14 @@ body{
   font-size:10px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;
   margin-bottom:9px;
 }
-.badge.b-good{background:rgba(0,158,115,.18);color:var(--good-lit);border:1px solid rgba(0,158,115,.45)}
-.badge.b-gold{background:rgba(212,175,55,.16);color:var(--gold-soft);border:1px solid rgba(212,175,55,.45)}
-.badge.b-warn{background:rgba(230,159,0,.16);color:var(--warn-lit);border:1px solid rgba(230,159,0,.45)}
-.badge.b-bad{background:rgba(213,94,0,.18);color:var(--bad-lit);border:1px solid rgba(213,94,0,.5)}
+.badge.b-good{background:var(--surface-2);color:var(--good-lit);border:1px solid rgba(16,185,129,.5)}
+.badge.b-gold{background:var(--surface-2);color:var(--gold-soft);border:1px solid rgba(229,179,62,.5)}
+.badge.b-warn{background:var(--surface-2);color:var(--warn-lit);border:1px solid rgba(245,158,11,.5)}
+.badge.b-bad{background:var(--surface-2);color:var(--bad-lit);border:1px solid rgba(239,68,68,.55)}
 
 /* ─── MÉTRICAS ──────────────────────────────────────────────── */
 .metric{
-  background:linear-gradient(170deg, rgba(255,255,255,.07), rgba(255,255,255,.015));
+  background:var(--surface);
   border:1px solid var(--hair-soft);border-radius:11px;
   box-shadow:var(--shadow-md);
   padding:13px 12px;text-align:center;
@@ -232,15 +246,16 @@ body{
 
 /* ─── GRÁFICOS ──────────────────────────────────────────────── */
 .chart-card{
-  background:linear-gradient(168deg, rgba(255,255,255,.055), rgba(255,255,255,.012));
+  background:var(--surface);
   border:1px solid var(--hair-soft);
   border-radius:var(--radius);
   box-shadow:var(--shadow-md);
   padding:16px 18px 14px;
 }
+/* Sin "kicker": la etiqueta "GRÁFICO N · TIPO" nombraba la técnica, no el
+   hallazgo. El título ya dice qué se está viendo. */
 .chart-head{display:flex;justify-content:space-between;align-items:baseline;gap:14px;margin-bottom:4px}
-.chart-title{font-size:14px;font-weight:700;color:#fff;letter-spacing:.2px}
-.chart-kicker{font-size:9.5px;letter-spacing:1.6px;text-transform:uppercase;color:var(--gold);font-weight:700;white-space:nowrap}
+.chart-title{font-size:14px;font-weight:700;color:var(--paper);letter-spacing:.2px}
 .chart-sub{font-size:11px;color:var(--muted);margin-bottom:10px;line-height:1.5}
 /* El SVG llega con viewBox: escala solo, sin alto fijo que deje aire debajo */
 .chart-card svg{width:100%;height:auto;display:block}
@@ -258,41 +273,50 @@ body{
   position:absolute;left:0;top:8px;width:18px;height:18px;border-radius:50%;
   font-size:10px;font-weight:800;line-height:18px;text-align:center;
 }
-.list-good li::before{content:'✓';background:rgba(0,158,115,.2);color:var(--good-lit);border:1px solid rgba(0,158,115,.5)}
-.list-warn li::before{content:'▲';background:rgba(230,159,0,.18);color:var(--warn-lit);border:1px solid rgba(230,159,0,.5);font-size:8px}
-.list-info li::before{content:'◆';background:rgba(86,180,233,.16);color:var(--sky);border:1px solid rgba(86,180,233,.45);font-size:8px}
-.list-gold li::before{content:'●';background:rgba(212,175,55,.16);color:var(--gold);border:1px solid rgba(212,175,55,.5);font-size:7px}
+.list-good li::before{content:'✓';background:var(--surface-2);color:var(--good-lit);border:1px solid rgba(16,185,129,.55)}
+.list-warn li::before{content:'▲';background:var(--surface-2);color:var(--warn-lit);border:1px solid rgba(245,158,11,.55);font-size:8px}
+.list-info li::before{content:'◆';background:var(--surface-2);color:var(--neutral);border:1px solid rgba(184,184,184,.4);font-size:8px}
+.list-gold li::before{content:'●';background:var(--surface-2);color:var(--gold);border:1px solid rgba(229,179,62,.55);font-size:7px}
 .list-step{counter-reset:paso}
 .list-step li::before{
   counter-increment:paso;content:counter(paso);
-  background:rgba(212,175,55,.16);color:var(--gold-soft);border:1px solid rgba(212,175,55,.5);font-size:9.5px;
+  background:var(--surface-2);color:var(--gold-soft);border:1px solid rgba(229,179,62,.55);font-size:9.5px;
 }
 
-.prose{font-size:12.8px;line-height:1.72;color:#dbe4ec}
+.prose{font-size:12.8px;line-height:1.72;color:#E4E4E4}
 .prose strong{color:var(--gold-soft)}
 .prose + .prose{margin-top:8px}
+
+/* ─── PÁRRAFOS ENUMERADOS ───────────────────────────────────
+   Un texto que trae "(1) … (2) … (3) …" en una sola parrafada no se lee:
+   se escanea y se abandona. El generador lo parte y aquí se pinta como
+   lista con sangría francesa, para que el ojo encuentre cada punto. */
+.p-intro{display:block}
+.p-item{display:block;margin-top:11px;padding-left:26px;text-indent:-26px}
+.p-num{color:var(--gold);font-weight:800;margin-right:7px}
+.p-line{display:block;margin-top:6px}
 
 /* ─── NEUROCIENCIA ──────────────────────────────────────────── */
 .neuro-item{
   padding:11px 15px;
-  background:rgba(86,180,233,.055);
-  border-left:3px solid var(--sky);
+  background:var(--surface-2);
+  border-left:3px solid var(--gold-deep);
   border-radius:0 9px 9px 0;
 }
 .neuro-item + .neuro-item{margin-top:8px}
 .stack > .neuro-item + .neuro-item{margin-top:0}
-.neuro-item h4{font-size:12.5px;color:#8fd0f5;margin-bottom:3px;font-weight:700}
-.neuro-item p{font-size:12px;color:#c6d4e0;line-height:1.58}
+.neuro-item h4{font-size:12.5px;color:var(--gold-soft);margin-bottom:3px;font-weight:700}
+.neuro-item p{font-size:12px;color:#D4D4D4;line-height:1.58}
 
 .gauge{
   padding:16px 20px;border-radius:11px;
-  background:linear-gradient(120deg, rgba(212,175,55,.16), rgba(212,175,55,.04));
+  background:linear-gradient(120deg, rgba(229,179,62,.18), rgba(229,179,62,.05));
   border:1px solid var(--hair);text-align:center;box-shadow:var(--shadow-md);
 }
 .gauge-label{font-size:9.5px;letter-spacing:2px;text-transform:uppercase;color:var(--gold);font-weight:700}
-.gauge-value{font-family:'Playfair Display',Georgia,serif;font-size:32px;font-weight:900;color:#fff;line-height:1.1;margin:2px 0 8px}
-.gauge-track{height:8px;border-radius:999px;background:rgba(255,255,255,.09);overflow:hidden;box-shadow:inset 0 1px 3px rgba(0,0,0,.4)}
-.gauge-fill{height:100%;border-radius:999px;background:linear-gradient(90deg,var(--gold),var(--gold-pale));box-shadow:0 0 12px rgba(212,175,55,.5)}
+.gauge-value{font-family:'Playfair Display',Georgia,serif;font-size:32px;font-weight:900;color:var(--paper);line-height:1.1;margin:2px 0 8px}
+.gauge-track{height:8px;border-radius:999px;background:var(--surface-2);overflow:hidden;box-shadow:inset 0 1px 3px rgba(0,0,0,.55)}
+.gauge-fill{height:100%;border-radius:999px;background:linear-gradient(90deg,var(--gold-deep),var(--gold));box-shadow:0 0 12px rgba(229,179,62,.55)}
 
 /* ═══ PLAN DE ACCIÓN (bloques A–F) ═══════════════════════════ */
 
@@ -301,18 +325,18 @@ body{
   display:grid;grid-template-columns:auto 1fr;gap:14px;align-items:center;
   padding:15px 18px;border-radius:12px;box-shadow:var(--shadow-md);
 }
-.semaforo.sem-verde{background:rgba(0,158,115,.13);border:1px solid rgba(0,158,115,.45)}
-.semaforo.sem-amarillo{background:rgba(230,159,0,.12);border:1px solid rgba(230,159,0,.45)}
-.semaforo.sem-rojo{background:rgba(213,94,0,.13);border:1px solid rgba(213,94,0,.5)}
+.semaforo.sem-verde{background:var(--surface);border:1px solid rgba(16,185,129,.5)}
+.semaforo.sem-amarillo{background:var(--surface);border:1px solid rgba(245,158,11,.5)}
+.semaforo.sem-rojo{background:var(--surface);border:1px solid rgba(239,68,68,.55)}
 .semaforo-dot{width:15px;height:15px;border-radius:50%}
-.sem-verde .semaforo-dot{background:var(--good-lit);box-shadow:0 0 14px rgba(63,215,174,.7)}
-.sem-amarillo .semaforo-dot{background:var(--warn-lit);box-shadow:0 0 14px rgba(255,196,87,.7)}
-.sem-rojo .semaforo-dot{background:var(--bad-lit);box-shadow:0 0 14px rgba(255,146,87,.7)}
+.sem-verde .semaforo-dot{background:var(--good);box-shadow:0 0 14px rgba(16,185,129,.75)}
+.sem-amarillo .semaforo-dot{background:var(--warn);box-shadow:0 0 14px rgba(245,158,11,.75)}
+.sem-rojo .semaforo-dot{background:var(--bad);box-shadow:0 0 14px rgba(239,68,68,.75)}
 .semaforo h4{font-size:13.5px;font-weight:800;letter-spacing:.6px;margin-bottom:2px}
 .sem-verde h4{color:var(--good-lit)}
 .sem-amarillo h4{color:var(--warn-lit)}
 .sem-rojo h4{color:var(--bad-lit)}
-.semaforo p{font-size:12.3px;color:#dbe4ec;line-height:1.58}
+.semaforo p{font-size:12.3px;color:#E4E4E4;line-height:1.58}
 
 /* Rejilla de bloques cortos: diagnósticos, criterios y principios son
    párrafos de 2-3 líneas. En una sola columna a 712px de ancho desperdiciaban
@@ -322,7 +346,7 @@ body{
 /* A · Diagnóstico */
 .diag{
   padding:10px 13px;border-radius:9px;
-  background:rgba(255,255,255,.038);
+  background:var(--surface-2);
   border-left:3px solid var(--hair-soft);
 }
 .stack > .diag + .diag{margin-top:0}
@@ -330,40 +354,40 @@ body{
 .diag.tono-ok{border-left-color:var(--good)}
 .diag.tono-warn{border-left-color:var(--warn)}
 .diag.tono-bad{border-left-color:var(--bad)}
-.diag h5{font-size:11.5px;font-weight:700;color:#fff;margin-bottom:3px;letter-spacing:.2px}
-.diag p{font-size:12.2px;color:#c9d5e0;line-height:1.6}
+.diag h5{font-size:11.5px;font-weight:700;color:var(--paper);margin-bottom:3px;letter-spacing:.2px}
+.diag p{font-size:12.2px;color:#D4D4D4;line-height:1.6}
 
 /* B · Plan de mejora por competencia */
 .comp{
   border:1px solid var(--hair-soft);border-radius:12px;
-  background:linear-gradient(160deg, rgba(255,255,255,.055), rgba(255,255,255,.012));
+  background:var(--surface);
   box-shadow:var(--shadow-md);padding:16px 18px;
 }
 .comp + .comp{margin-top:12px}
 .comp-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:8px 12px;margin-bottom:10px}
-.comp-name{font-size:14.5px;font-weight:700;color:#fff;flex:1;min-width:130px}
+.comp-name{font-size:14.5px;font-weight:700;color:var(--paper);flex:1;min-width:130px}
 .comp-scores{font-size:12px;color:var(--muted);white-space:nowrap}
 .comp-scores b{color:var(--gold-soft);font-size:13.5px}
 .pill{
   font-size:9px;letter-spacing:1.3px;text-transform:uppercase;font-weight:800;
   padding:3px 9px;border-radius:999px;white-space:nowrap;
 }
-.pill.p-alta{background:rgba(213,94,0,.18);color:var(--bad-lit);border:1px solid rgba(213,94,0,.5)}
-.pill.p-media{background:rgba(230,159,0,.16);color:var(--warn-lit);border:1px solid rgba(230,159,0,.5)}
-.pill.p-baja{background:rgba(0,158,115,.16);color:var(--good-lit);border:1px solid rgba(0,158,115,.45)}
+.pill.p-alta{background:var(--surface-2);color:var(--bad-lit);border:1px solid rgba(239,68,68,.55)}
+.pill.p-media{background:var(--surface-2);color:var(--warn-lit);border:1px solid rgba(245,158,11,.55)}
+.pill.p-baja{background:var(--surface-2);color:var(--good-lit);border:1px solid rgba(16,185,129,.5)}
 
 /* Barra actual vs meta: se lee la brecha sin hacer la resta */
-.bar{position:relative;height:9px;border-radius:999px;background:rgba(255,255,255,.075);overflow:hidden;margin-bottom:5px}
-.bar-fill{position:absolute;inset:0 auto 0 0;border-radius:999px;background:linear-gradient(90deg,#a8842a,var(--gold))}
-.bar-meta{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--gold-pale);box-shadow:0 0 6px rgba(242,227,176,.8)}
+.bar{position:relative;height:9px;border-radius:999px;background:var(--surface-2);overflow:hidden;margin-bottom:5px}
+.bar-fill{position:absolute;inset:0 auto 0 0;border-radius:999px;background:linear-gradient(90deg,var(--gold-deep),var(--gold))}
+.bar-meta{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--gold-pale);box-shadow:0 0 6px rgba(255,224,163,.85)}
 .bar-legend{display:flex;justify-content:space-between;font-size:9.5px;color:var(--muted);letter-spacing:.3px;margin-bottom:11px}
 
 .comp-tecnica{font-size:12.3px;color:var(--gold-soft);font-weight:600;margin-bottom:8px}
 .comp-meta{
   display:grid;gap:8px;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
-  margin-top:11px;padding-top:11px;border-top:1px dashed rgba(255,255,255,.09);
+  margin-top:11px;padding-top:11px;border-top:1px dashed rgba(255,255,255,.1);
 }
-.comp-meta div{font-size:11.3px;color:#c1cedb;line-height:1.5}
+.comp-meta div{font-size:11.3px;color:#D4D4D4;line-height:1.5}
 .comp-meta span{display:block;font-size:9px;letter-spacing:1.4px;text-transform:uppercase;color:var(--gold);font-weight:700;margin-bottom:2px}
 
 /* C · Hitos */
@@ -374,14 +398,14 @@ body{
 .hito:first-of-type{padding-top:0}
 .hito:last-child{border-bottom:0;padding-bottom:0}
 .hito-momento{font-size:11.5px;font-weight:800;color:var(--gold);letter-spacing:.4px;line-height:1.4}
-.hito p{font-size:12.3px;color:#dbe4ec;line-height:1.58}
+.hito p{font-size:12.3px;color:#E4E4E4;line-height:1.58}
 .hito-metrica{font-size:11.2px;color:var(--muted);margin-top:4px;line-height:1.5}
-.hito-metrica b{color:#c9d5e0;font-weight:600}
+.hito-metrica b{color:#D4D4D4;font-weight:600}
 
 /* D · Criterios de aprobación */
 .criterio{
   display:grid;grid-template-columns:1fr;gap:5px;
-  padding:11px 14px;border-radius:9px;background:rgba(255,255,255,.038);
+  padding:11px 14px;border-radius:9px;background:var(--surface-2);
   border-left:3px solid var(--hair-soft);
 }
 .criterio + .criterio{margin-top:8px}
@@ -390,8 +414,8 @@ body{
 .criterio.warn{border-left-color:var(--warn)}
 .criterio.bad{border-left-color:var(--bad)}
 .criterio-si{font-size:11px;letter-spacing:1.2px;text-transform:uppercase;color:var(--gold);font-weight:700}
-.criterio-si b{color:#fff;letter-spacing:0;text-transform:none;font-size:12.3px;font-weight:600}
-.criterio p{font-size:12.3px;color:#dbe4ec;line-height:1.55}
+.criterio-si b{color:var(--paper);letter-spacing:0;text-transform:none;font-size:12.3px;font-weight:600}
+.criterio p{font-size:12.3px;color:#E4E4E4;line-height:1.55}
 .criterio-estado{font-size:11.2px;font-weight:600}
 .criterio.ok .criterio-estado{color:var(--good-lit)}
 .criterio.warn .criterio-estado{color:var(--warn-lit)}
@@ -402,47 +426,66 @@ body{
 .mon:first-of-type{padding-top:0}
 .mon:last-child{border-bottom:0;padding-bottom:0}
 .mon-freq{font-size:10px;letter-spacing:1.4px;text-transform:uppercase;color:var(--gold);font-weight:700;line-height:1.6}
-.mon p{font-size:12.2px;color:#dbe4ec;line-height:1.55}
+.mon p{font-size:12.2px;color:#E4E4E4;line-height:1.55}
 
 .callout{
   padding:13px 16px;border-radius:10px;
-  background:linear-gradient(120deg, rgba(212,175,55,.14), rgba(212,175,55,.035));
+  background:linear-gradient(120deg, rgba(229,179,62,.16), rgba(229,179,62,.04));
   border:1px solid var(--hair);
 }
 .callout span{font-size:9.5px;letter-spacing:1.8px;text-transform:uppercase;color:var(--gold);font-weight:700;display:block;margin-bottom:3px}
-.callout p{font-size:12.6px;color:#fff;font-weight:600;line-height:1.55}
+.callout p{font-size:12.6px;color:var(--paper);font-weight:600;line-height:1.55}
 
 /* ─── PASO NUMERADO (plan resumido de respaldo) ─────────────── */
 .step{
   display:grid;grid-template-columns:40px 1fr;gap:14px;align-items:start;
   padding:14px 16px;
-  background:linear-gradient(160deg, rgba(255,255,255,.06), rgba(255,255,255,.014));
+  background:var(--surface);
   border:1px solid var(--hair-soft);border-radius:11px;box-shadow:var(--shadow-md);
 }
 .step + .step{margin-top:11px}
 .step-num{
   width:36px;height:36px;border-radius:50%;
-  background:linear-gradient(145deg,var(--gold),#a8842a);
-  color:#14202b;font-family:'Playfair Display',Georgia,serif;
+  background:linear-gradient(145deg,var(--gold),var(--gold-deep));
+  color:#0D0D0D;font-family:'Playfair Display',Georgia,serif;
   font-size:18px;font-weight:900;
   display:flex;align-items:center;justify-content:center;
-  box-shadow:0 5px 14px rgba(212,175,55,.32), inset 0 1px 0 rgba(255,255,255,.55);
+  box-shadow:0 5px 14px rgba(229,179,62,.35), inset 0 1px 0 rgba(255,255,255,.55);
 }
 .step h4{font-size:13px;color:var(--gold-soft);margin-bottom:4px;font-weight:700}
-.step p{font-size:12.4px;color:#dbe4ec;line-height:1.62}
+.step p{font-size:12.4px;color:#E4E4E4;line-height:1.62}
 
-/* ─── CTAs ──────────────────────────────────────────────────── */
+/* ─── CTAs ──────────────────────────────────────────────────────
+   Son los tres botones que el gerente sí usa: escuchar, descargar,
+   repetir. Van en dorado sólido y con estados explícitos — un enlace
+   que no responde al cursor se lee como texto, no como botón. */
 .cta-wrap{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(180px,1fr))}
 .cta{
   display:block;text-align:center;text-decoration:none;
-  padding:14px 12px;border-radius:11px;
-  background:linear-gradient(160deg, rgba(212,175,55,.18), rgba(212,175,55,.05));
-  border:1px solid var(--hair);
+  padding:15px 12px;border-radius:11px;
+  background:var(--surface-2);
+  border:1.5px solid var(--gold);
   box-shadow:var(--shadow-md);
-  color:var(--gold-soft);
+  color:var(--gold);
+  transition:background .18s ease, border-color .18s ease, transform .12s ease, box-shadow .18s ease;
 }
-.cta strong{display:block;font-size:13px;font-weight:700;color:#fff;margin-bottom:2px}
+.cta strong{display:block;font-size:13.5px;font-weight:700;color:var(--gold);margin-bottom:3px;letter-spacing:.2px}
 .cta span{font-size:10px;color:var(--muted);letter-spacing:.4px}
+.cta:hover{
+  background:var(--gold);
+  border-color:var(--gold-soft);
+  box-shadow:0 10px 26px rgba(229,179,62,.32);
+  transform:translateY(-1px);
+}
+.cta:hover strong{color:#0D0D0D}
+.cta:hover span{color:rgba(13,13,13,.75)}
+.cta:focus-visible{outline:2px solid var(--gold-pale);outline-offset:3px}
+.cta:active{
+  transform:translateY(1px) scale(.985);
+  background:var(--gold-soft);
+  box-shadow:0 2px 8px rgba(229,179,62,.28);
+}
+.cta:active strong{color:#0D0D0D}
 
 /* ─── TRANSCRIPCIÓN ─────────────────────────────────────────── */
 /* Solo hablante + texto literal. Sin etiquetas de sistema, sin símbolos.
@@ -457,11 +500,11 @@ body{
   box-shadow:var(--shadow-md);
 }
 .bubble.agent{
-  background:linear-gradient(160deg, rgba(212,175,55,.17), rgba(212,175,55,.06));
+  background:linear-gradient(160deg, rgba(229,179,62,.16), rgba(229,179,62,.05));
   border:1px solid var(--hair);border-bottom-right-radius:4px;
 }
 .bubble.user{
-  background:linear-gradient(160deg, rgba(255,255,255,.075), rgba(255,255,255,.02));
+  background:var(--surface-2);
   border:1px solid var(--hair-soft);border-bottom-left-radius:4px;
 }
 .bubble-head{
@@ -470,15 +513,15 @@ body{
 }
 .bubble-speaker{font-size:9.5px;letter-spacing:1.5px;text-transform:uppercase;font-weight:800;line-height:1.5}
 .bubble.agent .bubble-speaker{color:var(--gold)}
-.bubble.user .bubble-speaker{color:var(--sky)}
+.bubble.user .bubble-speaker{color:var(--neutral)}
 .bubble-time{font-size:9px;color:var(--muted);opacity:.7;line-height:1.5;white-space:nowrap}
-.bubble-text{font-size:12.3px;line-height:1.58;color:#e6ecf2;white-space:pre-line}
+.bubble-text{font-size:12.3px;line-height:1.58;color:#EDEDED;white-space:pre-line}
 
 /* ─── PIE ───────────────────────────────────────────────────── */
 .footer{
   padding:24px var(--pad-x) 30px;text-align:center;
   border-top:1px solid var(--hair);
-  background:linear-gradient(180deg, rgba(212,175,55,.05), transparent);
+  background:linear-gradient(180deg, rgba(229,179,62,.06), transparent);
 }
 .footer-mark{font-family:'Playfair Display',Georgia,serif;font-size:14px;color:var(--gold);letter-spacing:2px}
 .footer p{font-size:10px;color:var(--muted);margin-top:6px;line-height:1.65}
@@ -512,7 +555,7 @@ p, li{orphans:2;widows:2}
 @page{size:A4;margin:0}
 
 @media print{
-  body{background:var(--navy-abyss)}
+  body{background:var(--bg)}
   .sheet{max-width:100%;box-shadow:none}
   :root{--pad-x:32px;--gap-section:24px;--gap-block:12px}
   .cover{padding:38px 32px 26px}
@@ -540,7 +583,7 @@ p, li{orphans:2;widows:2}
   <header class="cover">
     <div class="crest"><span class="eyebrow">Victorious Travelers Club · Elite Training</span></div>
     <h1>Reporte de Capacitación<em>{{nombre}}</em></h1>
-    <p class="lede">{{resumen}}</p>
+    <p class="lede">{{{resumen}}}</p>
     <div class="cover-meta">
       <div>Fecha de sesión<strong>{{fecha_sesion}}</strong></div>
       <div>Hora (Cancún)<strong>{{hora_cancun}}</strong></div>
@@ -604,14 +647,14 @@ p, li{orphans:2;widows:2}
       <div class="hero-body">
         <span class="badge {{nivel_clase}}">{{nivel_desempeno}}</span>
         <h3>Desempeño global</h3>
-        <p class="prose">{{actividad_sesion}}</p>
+        <p class="prose">{{{actividad_sesion}}}</p>
       </div>
     </div>
 
     <div class="grid-tight">
       <div class="metric"><div class="metric-label">Duración</div><div class="metric-value">{{duracion_texto}}</div></div>
       <div class="metric"><div class="metric-label">Módulo</div><div class="metric-value sm">{{modulo}}</div></div>
-      <div class="metric"><div class="metric-label">Score global</div><div class="metric-value good">{{scoreTotal}}%</div></div>
+      <div class="metric"><div class="metric-label">Score global</div><div class="metric-value {{score_clase}}">{{scoreTotal}}%</div></div>
       <div class="metric"><div class="metric-label">Potencial de mejora</div><div class="metric-value gold">{{mejora_potencial}}</div></div>
       {{#if plan}}
       <div class="metric"><div class="metric-label">En estándar</div><div class="metric-value">{{plan.competencias_en_estandar}}<span style="font-size:15px;color:var(--muted)">/{{plan.competencias_totales}}</span></div></div>
@@ -631,7 +674,7 @@ p, li{orphans:2;widows:2}
 
     <div class="card">
       <div class="card-title">Recomendación del coach</div>
-      <p class="prose">{{recomendacion_coach}}</p>
+      <p class="prose">{{{recomendacion_coach}}}</p>
     </div>
   </section>
 
@@ -646,7 +689,6 @@ p, li{orphans:2;widows:2}
     <div class="chart-card">
       <div class="chart-head">
         <span class="chart-title">Perfil de competencias</span>
-        <span class="chart-kicker">Gráfico 1 · Radar</span>
       </div>
       <p class="chart-sub">Forma general del desempeño. Un polígono equilibrado indica dominio parejo; las hendiduras señalan dónde se rompe la ejecución.</p>
       {{{chart_radar}}}
@@ -654,17 +696,15 @@ p, li{orphans:2;widows:2}
 
     <div class="chart-card">
       <div class="chart-head">
-        <span class="chart-title">Ranking de competencias</span>
-        <span class="chart-kicker">Gráfico 2 · Barras</span>
+        <span class="chart-title">Ranking de competencias · brecha contra la meta VTC</span>
       </div>
-      <p class="chart-sub">Las mismas competencias ordenadas de mayor a menor, contra la línea de meta VTC de 8.0.</p>
+      <p class="chart-sub">Las mismas competencias ordenadas de mayor a menor contra la línea de meta VTC de 8.0. A la derecha, cuánto le falta a cada una: <strong>cumple meta</strong> o los puntos exactos de brecha.</p>
       {{{chart_ranking}}}
     </div>
 
     <div class="chart-card">
       <div class="chart-head">
         <span class="chart-title">Desempeño por fase</span>
-        <span class="chart-kicker">Gráfico 3 · Línea</span>
       </div>
       <p class="chart-sub">Cómo se sostuvo el nivel a lo largo del arco de la sesión: apertura, descubrimiento, presentación y cierre.</p>
       {{{chart_timeline}}}
@@ -673,7 +713,6 @@ p, li{orphans:2;widows:2}
     <div class="chart-card">
       <div class="chart-head">
         <span class="chart-title">Curva de engagement</span>
-        <span class="chart-kicker">Gráfico 4 · Área</span>
       </div>
       <p class="chart-sub">Densidad de intercambio minuto a minuto. El valle marca el punto donde conviene revisar la grabación.</p>
       {{{chart_engagement}}}
@@ -682,7 +721,6 @@ p, li{orphans:2;widows:2}
     <div class="chart-card">
       <div class="chart-head">
         <span class="chart-title">Distribución del habla</span>
-        <span class="chart-kicker">Gráfico 5 · Anillo</span>
       </div>
       <p class="chart-sub">Cuánto habló el asesor frente al cliente simulado. En consultiva, el asesor debe quedar por debajo del 45%.</p>
       {{{chart_habla}}}
@@ -691,7 +729,6 @@ p, li{orphans:2;widows:2}
     <div class="chart-card">
       <div class="chart-head">
         <span class="chart-title">Brecha contra el estándar VTC</span>
-        <span class="chart-kicker">Gráfico 6 · Bullet</span>
       </div>
       <p class="chart-sub">Distancia exacta entre lo ejecutado y el estándar de 8.0. Es la lista de trabajo del coach, ordenada por urgencia.</p>
       {{{chart_brecha}}}
@@ -711,7 +748,7 @@ p, li{orphans:2;widows:2}
       {{#each principios_neuro}}
       <div class="neuro-item">
         <h4>{{this.titulo}}</h4>
-        <p>{{this.descripcion}}</p>
+        <p>{{{this.descripcion}}}</p>
       </div>
       {{/each}}
     </div>
@@ -771,7 +808,7 @@ p, li{orphans:2;widows:2}
         {{#each objeciones_list}}<li>{{this}}</li>{{/each}}
       </ul>
       {{else}}
-      <p class="prose">{{objeciones_trabajadas}}</p>
+      <p class="prose">{{{objeciones_trabajadas}}}</p>
       {{/if}}
       <div class="row" style="margin-top:12px;border-top:1px solid var(--hair);border-bottom:0;padding-top:11px">
         <dt>Score de manejo de objeciones</dt>
@@ -788,7 +825,7 @@ p, li{orphans:2;widows:2}
       <span class="section-note">Anclajes, reencuadres y calibración del lenguaje</span>
     </div>
     <div class="card card-gold">
-      <p class="prose">{{analisis_pnl}}</p>
+      <p class="prose">{{{analisis_pnl}}}</p>
       <div class="grid-tight" style="margin-top:14px">
         <div class="metric"><div class="metric-label">Rapport</div><div class="metric-value">{{score_rapport}}</div></div>
         <div class="metric"><div class="metric-label">Técnicas PNL</div><div class="metric-value">{{score_pnl}}</div></div>
@@ -798,19 +835,10 @@ p, li{orphans:2;widows:2}
       </div>
     </div>
 
-    {{#if agente.agent_id}}
-    <div class="card card-sky">
-      <div class="card-title">Contexto de evaluación · Knowledge Base</div>
-      <dl>
-        <div class="row"><dt>Agente evaluador</dt><dd>{{agente.agent_name}}</dd></div>
-        <div class="row"><dt>Modelo · RAG</dt><dd>{{agente.llm}}{{#if agente.rag_enabled}} · RAG activo{{/if}}</dd></div>
-        <div class="row"><dt>Guion de referencia</dt><dd>{{agente.kb_document}} · {{agente.kb_chunks}} secciones</dd></div>
-        {{#if kb_fidelity}}
-        <div class="row"><dt>Fidelidad al guion</dt><dd>{{kb_fidelity.score}}/10</dd></div>
-        {{/if}}
-      </dl>
-    </div>
-    {{/if}}
+    <!-- Aquí vivía la ficha del agente evaluador (modelo, RAG, guion de
+         referencia, fidelidad al guion). Se retiró: era telemetría del
+         sistema, no información con la que el gerente pueda decidir nada
+         sobre el asesor. -->
   </section>
 
   <!-- ═══════════════════ 8 · PLAN DE ACCIÓN ══════════════════ -->
@@ -841,7 +869,7 @@ p, li{orphans:2;widows:2}
       {{#each plan.diagnostico}}
       <div class="diag tono-{{this.tono}}">
         <h5>{{this.titulo}}</h5>
-        <p>{{this.detalle}}</p>
+        <p>{{{this.detalle}}}</p>
       </div>
       {{/each}}
     </div>
@@ -956,7 +984,7 @@ p, li{orphans:2;widows:2}
 
     <div class="callout">
       <span>Reevaluación</span>
-      <p>{{plan.pasos.reevaluacion}}</p>
+      <p>{{{plan.pasos.reevaluacion}}}</p>
     </div>
 
     <div class="card card-warn">
@@ -1008,15 +1036,15 @@ p, li{orphans:2;widows:2}
          entregando las tres frases del plan clásico en vez de una sección vacía. -->
     <div class="step">
       <div class="step-num">1</div>
-      <div><h4>Diagnóstico y seguimiento</h4><p>{{plan_1}}</p></div>
+      <div><h4>Diagnóstico y seguimiento</h4><p>{{{plan_1}}}</p></div>
     </div>
     <div class="step">
       <div class="step-num">2</div>
-      <div><h4>Plan de mejora · 7 días</h4><p>{{plan_2}}</p></div>
+      <div><h4>Plan de mejora · 7 días</h4><p>{{{plan_2}}}</p></div>
     </div>
     <div class="step">
       <div class="step-num">3</div>
-      <div><h4>Validación y próximas acciones</h4><p>{{plan_3}}</p></div>
+      <div><h4>Validación y próximas acciones</h4><p>{{{plan_3}}}</p></div>
     </div>
     {{/if}}
   </section>
@@ -1028,10 +1056,12 @@ p, li{orphans:2;widows:2}
       <h2 class="section-title">Acciones disponibles</h2>
       <span class="section-note">Accesos directos a la sesión, al material y al reentrenamiento</span>
     </div>
+    <!-- target="_blank": el reporte se abre desde el correo y desde el PDF.
+         Sin esto, el gerente pierde el reporte al pulsar cualquiera de los tres. -->
     <div class="cta-wrap">
-      <a class="cta" href="{{pop_up_url}}"><strong>Escuchar la sesión</strong><span>Audio completo</span></a>
-      <a class="cta" href="{{pdf_download_url}}"><strong>Descargar el reporte</strong><span>PDF con gráficos</span></a>
-      <a class="cta" href="{{retrain_url}}"><strong>Solicitar reentrenamiento</strong><span>Agendar coaching</span></a>
+      <a class="cta" href="{{pop_up_url}}" target="_blank" rel="noopener noreferrer"><strong>Escuchar la sesión</strong><span>Audio MP3 completo</span></a>
+      <a class="cta" href="{{pdf_download_url}}" target="_blank" rel="noopener noreferrer"><strong>Descargar el reporte</strong><span>PDF con gráficos</span></a>
+      <a class="cta" href="{{retrain_url}}" target="_blank" rel="noopener noreferrer"><strong>Repetir el entrenamiento</strong><span>Nueva solicitud</span></a>
     </div>
 
     <!-- El CTA sin destino visible no se usa: si el gerente no sabe a dónde
@@ -1039,9 +1069,9 @@ p, li{orphans:2;widows:2}
     <div class="card card-gold">
       <div class="card-title">Cómo funciona la solicitud de reentrenamiento</div>
       <ul class="tick-list list-step">
-        <li>Abre <strong>Solicitar reentrenamiento</strong> desde este reporte o desde el correo. El enlace ya viene firmado para esta sesión.</li>
-        <li>Marca las competencias a reforzar (vienen preseleccionadas las que están por debajo del estándar) y escribe las notas para el coach.</li>
-        <li>Al enviar, la solicitud queda registrada y llega por correo a <strong>{{gerente_email}}</strong> con el resumen del asesor, los scores, las áreas críticas, tus notas y el enlace a este reporte.</li>
+        <li>Abre <strong>Repetir el entrenamiento</strong> desde este reporte o desde el correo. El enlace ya viene firmado para esta sesión.</li>
+        <li>Marca las competencias a reforzar (vienen preseleccionadas las que están por debajo del estándar) y escribe las notas para el colaborador.</li>
+        <li>Al enviar, la solicitud queda registrada con el resumen del asesor, los scores, las áreas críticas, tus notas y el enlace a este reporte.</li>
         <li>Recibes la confirmación en pantalla con el folio de la solicitud.</li>
       </ul>
     </div>

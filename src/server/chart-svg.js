@@ -8,29 +8,36 @@
  *   ningún cliente de correo ejecuta JS. El SVG inline se renderiza siempre.
  *
  * Accesibilidad (CVD — daltonismo):
- *   La paleta categórica es Okabe-Ito (diseñada para deuteranopía/protanopía)
- *   con el dorado de marca como primer color. Además ninguna serie depende
- *   solo del color: todas llevan etiqueta de valor y texto en el eje.
+ *   La paleta es negro + oro + tres estados. Ninguna serie depende solo del
+ *   color: todas llevan etiqueta de valor y texto en el eje, y la brecha del
+ *   ranking se escribe en letras ("CUMPLE META" / "BRECHA −6.0"), no solo en
+ *   rojo o verde.
  */
 
 // ════════════════════════════════════════════
-// PALETA — VTC + Okabe-Ito (CVD-safe)
+// PALETA — VTC v4.0 (negro + oro, sin azules)
 // ════════════════════════════════════════════
 const P = {
-  navy: '#1a3a52',
-  navyDeep: '#102435',
-  gold: '#d4af37',
-  goldSoft: '#e6c869',
-  text: '#eef2f6',
-  muted: '#9db0c2',
-  grid: 'rgba(212,175,55,0.18)',
-  gridSoft: 'rgba(255,255,255,0.07)',
-  // Okabe-Ito + gold. Distinguibles en deuteranopía, protanopía y tritanopía.
-  cat: ['#d4af37', '#56B4E9', '#009E73', '#E69F00', '#CC79A7', '#0072B2'],
-  good: '#009E73',
-  warn: '#E69F00',
-  bad: '#D55E00'
+  bg: '#0D0D0D',        // fondo principal
+  surface: '#1A1A1A',   // tarjetas
+  surface2: '#262626',  // badges y pistas de barra
+  gold: '#E5B33E',      // acento único
+  goldSoft: '#F2C766',
+  goldDeep: '#B8862A',
+  text: '#FFFFFF',
+  muted: '#B8B8B8',
+  grid: 'rgba(229,179,62,0.22)',
+  gridSoft: 'rgba(255,255,255,0.08)',
+  // Categórica sin azules: oro, grises y los tres estados. El orden importa —
+  // el primer color es el del asesor en el donut de reparto del habla.
+  cat: ['#E5B33E', '#B8B8B8', '#6B6B6B', '#10B981', '#F59E0B', '#EF4444'],
+  good: '#10B981',      // score ≥ 8   — cumple la meta VTC
+  warn: '#F59E0B',      // score 6 – 7.99
+  bad: '#EF4444'        // score < 6
 };
+
+/** Meta VTC: por debajo de esto la competencia tiene brecha. */
+const META_VTC = 8;
 
 const FONT = "Inter, 'Segoe UI', 'Helvetica Neue', Helvetica, Arial, sans-serif";
 
@@ -146,11 +153,19 @@ function txt(x, y, content, opts = {}) {
     + `>${esc(content)}</text>`;
 }
 
-/** Color semáforo (CVD-safe) según score 0-10. */
+/**
+ * Color de estado según score 0-10, alineado con la meta VTC:
+ *   ≥ 8      verde  — cumple
+ *   6 – 7.99 naranja — cerca
+ *   < 6      rojo    — crítico
+ *
+ * Antes el umbral verde estaba en 8.5 y el 8.0 salía dorado: un asesor que
+ * cumplía la meta exacta se leía como "en camino". El corte va donde está la
+ * regla de negocio, no medio punto después.
+ */
 function scoreColor(score) {
-  if (score >= 8.5) return P.good;
-  if (score >= 7) return P.gold;
-  if (score >= 5) return P.warn;
+  if (score >= META_VTC) return P.good;
+  if (score >= 6) return P.warn;
   return P.bad;
 }
 
@@ -206,7 +221,7 @@ function radarChart(competencias) {
 
   // Vértices + etiqueta de valor sobre cada punto (el color no es el único canal)
   dataPts.forEach((p) => {
-    body += `<circle cx="${p.x}" cy="${p.y}" r="4.5" fill="${scoreColor(p.score)}" stroke="${P.navyDeep}" stroke-width="1.5"/>`;
+    body += `<circle cx="${p.x}" cy="${p.y}" r="4.5" fill="${scoreColor(p.score)}" stroke="${P.bg}" stroke-width="1.5"/>`;
   });
 
   // Etiquetas de eje
@@ -228,9 +243,22 @@ function radarChart(competencias) {
 }
 
 // ════════════════════════════════════════════
-// 2. BARRAS — Ranking de competencias
+// 2. BARRAS — Ranking de competencias con brecha VTC
 // ════════════════════════════════════════════
-function barChart(competencias) {
+/**
+ * Ranking ordenado de mayor a menor, con la brecha contra la meta VTC escrita
+ * al final de cada fila.
+ *
+ * Por qué la brecha va aquí y no solo en el gráfico 6: el ranking es lo primero
+ * que mira el gerente, y un "Cierre 2" sin referencia no dice si eso es malo.
+ * "Cierre 2 · BRECHA −6.0" sí. La lectura ya no requiere hacer la resta.
+ *
+ * Triple canal para cada fila (nunca solo color):
+ *   1. Longitud de la barra   → magnitud
+ *   2. Color                  → verde ≥8 · naranja 6-7.99 · rojo <6
+ *   3. Texto del badge        → "CUMPLE META" / "BRECHA −6.0"
+ */
+function barChart(competencias, meta = META_VTC) {
   const items = (competencias || [])
     .filter((c) => c && c.name)
     .slice()
@@ -239,13 +267,16 @@ function barChart(competencias) {
   if (!items.length) return emptyChart('Ranking de competencias');
 
   const W = 780;
-  const rowH = 41;
-  const padTop = 32;
-  const padBottom = 28;
+  const rowH = 44;
+  const padTop = 34;
+  const padBottom = 30;
   const H = padTop + items.length * rowH + padBottom;
-  const labelW = 168;
+  const labelW = 158;
   const barX = labelW + 12;
-  const barMax = W - barX - 68;
+  // El carril derecho hospeda el score y el badge de brecha ("BRECHA −6.0").
+  // Sin reservarlo, con scores altos la barra llegaba hasta debajo del texto.
+  const badgeX = W - 8;
+  const barMax = 400;
 
   let body = '';
 
@@ -257,19 +288,23 @@ function barChart(competencias) {
     body += txt(x, padTop - 22, String(s), { size: 10, fill: P.muted, anchor: 'middle', opacity: 0.7 });
   }
 
-  // Línea de meta VTC (8/10) — referencia explícita, no decorativa
-  const metaX = barX + 0.8 * barMax;
+  // Línea de meta VTC — dorada, a lo alto de todo el gráfico
+  const metaX = barX + (meta / 10) * barMax;
   body += `<line x1="${r2(metaX)}" y1="${padTop - 14}" x2="${r2(metaX)}" y2="${H - padBottom + 4}" `
-    + `stroke="${P.gold}" stroke-width="1.5" stroke-dasharray="4 4" opacity="0.75"/>`;
-  body += txt(metaX, H - padBottom + 18, 'Meta VTC 8.0', { size: 10, fill: P.gold, anchor: 'middle', weight: 600 });
+    + `stroke="${P.gold}" stroke-width="2" stroke-dasharray="5 4"/>`;
+  body += txt(metaX, H - padBottom + 18, `Meta VTC ${meta.toFixed(1)}`, {
+    size: 10.5, fill: P.gold, anchor: 'middle', weight: 700, letter: 0.4
+  });
 
   items.forEach((c, i) => {
     const score = clamp(c.score, 0, 10, 0);
     const y = padTop + i * rowH;
-    const barY = y + 10;
+    const barY = y + 11;
     const barH = 20;
     const w = Math.max(3, (score / 10) * barMax);
     const color = scoreColor(score);
+    const cumple = score >= meta;
+    const brecha = r2(Math.max(0, meta - score));
     const gid = uid('barGrad');
 
     body += `<defs><linearGradient id="${gid}" x1="0" y1="0" x2="1" y2="0">`
@@ -277,17 +312,44 @@ function barChart(competencias) {
       + `<stop offset="100%" stop-color="${color}" stop-opacity="1"/>`
       + `</linearGradient></defs>`;
 
-    const etiqueta = truncateLabel(c.name);
+    const etiqueta = truncateLabel(c.name, 20);
     body += txt(labelW, barY + barH / 2, etiqueta, {
       size: labelFontSize(etiqueta), fill: P.text, anchor: 'end', weight: 600
     });
-    body += `<rect x="${barX}" y="${barY}" width="${r2(barMax)}" height="${barH}" rx="4" fill="rgba(255,255,255,0.045)"/>`;
+
+    // Pista + zona de brecha en rojo tenue hasta la meta + barra real
+    body += `<rect x="${barX}" y="${barY}" width="${r2(barMax)}" height="${barH}" rx="4" fill="${P.surface2}"/>`;
+    if (!cumple) {
+      body += `<rect x="${r2(barX + w)}" y="${barY}" width="${r2(metaX - barX - w)}" `
+        + `height="${barH}" rx="4" fill="${P.bad}" opacity="0.22"/>`;
+    }
     body += `<rect x="${barX}" y="${barY}" width="${r2(w)}" height="${barH}" rx="4" fill="url(#${gid})"/>`;
-    body += txt(barX + w + 12, barY + barH / 2, `${score}`, { size: 13, fill: color, weight: 700 });
+
+    // Score justo al terminar la barra
+    body += txt(barX + w + 10, barY + barH / 2, `${score}`, { size: 13, fill: color, weight: 700 });
+
+    // Badge de brecha, alineado a la derecha: el veredicto en palabras
+    const veredicto = cumple ? '✓ CUMPLE META' : `× BRECHA −${brecha}`;
+    body += txt(badgeX, barY + barH / 2, veredicto, {
+      size: 11.5, fill: cumple ? P.good : color, anchor: 'end', weight: 800, letter: 0.5
+    });
   });
 
-  const desc = items.map((c) => `${c.name}: ${safeScore(c.score)} de 10`).join('. ');
-  return svgWrap(`0 0 ${W} ${H}`, 'Ranking de competencias contra la meta VTC de 8.0', desc, body);
+  const desc = items
+    .map((c) => {
+      const score = safeScore(c.score);
+      const brecha = r2(Math.max(0, meta - score));
+      return brecha > 0
+        ? `${c.name}: ${score} de 10, brecha de ${brecha} puntos contra la meta VTC de ${meta}`
+        : `${c.name}: ${score} de 10, cumple la meta VTC de ${meta}`;
+    })
+    .join('. ');
+  return svgWrap(
+    `0 0 ${W} ${H}`,
+    `Ranking de competencias y brecha contra la meta VTC de ${meta}`,
+    desc,
+    body
+  );
 }
 
 // ════════════════════════════════════════════
@@ -333,7 +395,7 @@ function lineChart(labels, values, opts = {}) {
   // Puntos + valores + etiquetas de fase
   V.forEach((v, i) => {
     const c = scoreColor(v);
-    body += `<circle cx="${x(i)}" cy="${y(v)}" r="5.5" fill="${P.navyDeep}" stroke="${c}" stroke-width="2.5"/>`;
+    body += `<circle cx="${x(i)}" cy="${y(v)}" r="5.5" fill="${P.bg}" stroke="${c}" stroke-width="2.5"/>`;
     body += txt(x(i), y(v) - 18, String(v), { size: 12, fill: c, anchor: 'middle', weight: 700 });
     // Las fases del eje X caben en ~14 caracteres antes de solaparse
     const fase = truncateLabel(L[i] || '', 14);
@@ -371,8 +433,8 @@ function areaChart(points, opts = {}) {
   const Y = (v) => r2(padT + plotH - (v / 10) * plotH);
 
   let body = `<defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1">`
-    + `<stop offset="0%" stop-color="${P.cat[1]}" stop-opacity="0.45"/>`
-    + `<stop offset="100%" stop-color="${P.cat[1]}" stop-opacity="0.02"/>`
+    + `<stop offset="0%" stop-color="${P.gold}" stop-opacity="0.45"/>`
+    + `<stop offset="100%" stop-color="${P.gold}" stop-opacity="0.02"/>`
     + `</linearGradient></defs>`;
 
   for (let v = 0; v <= 10; v += 2) {
@@ -382,13 +444,13 @@ function areaChart(points, opts = {}) {
 
   const poly = pts.map((p) => `${X(p.x)},${Y(p.y)}`).join(' ');
   body += `<polygon points="${padL},${Y(0)} ${poly} ${X(maxX)},${Y(0)}" fill="url(#${gid})"/>`;
-  body += `<polyline points="${poly}" fill="none" stroke="${P.cat[1]}" stroke-width="2.5" stroke-linejoin="round"/>`;
+  body += `<polyline points="${poly}" fill="none" stroke="${P.gold}" stroke-width="2.5" stroke-linejoin="round"/>`;
 
   // Marcamos solo pico y valle: menos ruido, más señal
   const peak = pts.reduce((a, b) => (b.y > a.y ? b : a), pts[0]);
   const low = pts.reduce((a, b) => (b.y < a.y ? b : a), pts[0]);
   [[peak, 'Pico', P.good], [low, 'Valle', P.warn]].forEach(([p, label, color]) => {
-    body += `<circle cx="${X(p.x)}" cy="${Y(p.y)}" r="5.5" fill="${P.navyDeep}" stroke="${color}" stroke-width="2.5"/>`;
+    body += `<circle cx="${X(p.x)}" cy="${Y(p.y)}" r="5.5" fill="${P.bg}" stroke="${color}" stroke-width="2.5"/>`;
     body += txt(X(p.x), Y(p.y) - 16, `${label} ${p.y}`, { size: 11, fill: color, anchor: 'middle', weight: 700 });
   });
 
@@ -442,14 +504,14 @@ function donutChart(slices, opts = {}) {
       const p4 = polar(cx, cy, rIn, a1);
       body += `<path d="M ${p1.x} ${p1.y} A ${rOut} ${rOut} 0 ${large} 1 ${p2.x} ${p2.y} `
         + `L ${p3.x} ${p3.y} A ${rIn} ${rIn} 0 ${large} 0 ${p4.x} ${p4.y} Z" `
-        + `fill="${color}" stroke="${P.navyDeep}" stroke-width="2"/>`;
+        + `fill="${color}" stroke="${P.bg}" stroke-width="2"/>`;
     }
 
     // Porcentaje dentro del anillo cuando el sector es lo bastante grande
     const pct = Math.round((s.value / total) * 100);
     if (sweep > 26) {
       const mid = polar(cx, cy, (rOut + rIn) / 2, angle + sweep / 2);
-      body += txt(mid.x, mid.y, `${pct}%`, { size: 13, fill: '#0d1b26', anchor: 'middle', weight: 800 });
+      body += txt(mid.x, mid.y, `${pct}%`, { size: 13, fill: P.bg, anchor: 'middle', weight: 800 });
     }
     angle += sweep;
   });
@@ -515,7 +577,7 @@ function gapChart(competencias, meta = 8) {
     body += txt(labelW, barY + barH / 2, etiqueta, {
       size: labelFontSize(etiqueta), fill: P.text, anchor: 'end', weight: 600
     });
-    body += `<rect x="${trackX}" y="${barY}" width="${r2(trackW)}" height="${barH}" rx="4" fill="rgba(255,255,255,0.045)"/>`;
+    body += `<rect x="${trackX}" y="${barY}" width="${r2(trackW)}" height="${barH}" rx="4" fill="${P.surface2}"/>`;
 
     // Zona de brecha (solo si existe) — patrón diagonal + color, doble canal
     if (gap > 0) {

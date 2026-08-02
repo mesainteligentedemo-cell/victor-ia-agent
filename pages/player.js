@@ -10,29 +10,36 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+/**
+ * Paleta VTC v4.0 — idéntica a la del reporte, el correo y el formulario.
+ * El reproductor se abre desde el CTA "Escuchar la sesión"; si cambia de color
+ * al saltar, parece otro sistema.
+ */
 const C = {
-  bg: '#0a1721',
-  panel: '#102435',
-  navy: '#1a3a52',
-  gold: '#d4af37',
-  goldSoft: '#e6c869',
-  text: '#eef2f6',
-  muted: '#9db0c2',
-  good: '#009E73',
-  warn: '#E69F00',
-  bad: '#D55E00',
-  border: 'rgba(212,175,55,.22)'
+  bg: '#0D0D0D',        // fondo principal — negro puro
+  panel: '#1A1A1A',     // tarjetas
+  navy: '#262626',      // cabecera y controles (gris grafito)
+  gold: '#E5B33E',      // acento único
+  goldSoft: '#F2C766',
+  text: '#FFFFFF',
+  muted: '#B8B8B8',
+  good: '#10B981',      // score ≥ 8 — cumple la meta VTC
+  warn: '#F59E0B',      // score 6 – 7.99
+  bad: '#EF4444',       // score < 6
+  border: 'rgba(229,179,62,.28)'
 };
 
 const FONT = "Inter, 'Segoe UI', Helvetica, Arial, sans-serif";
 
-/** Color semáforo del score (mismo criterio que el reporte). */
+/**
+ * Color semáforo del score, con los cortes de la meta VTC (8.0) —
+ * los mismos que usan el reporte, los gráficos, el correo y el formulario.
+ */
 function scoreColor(score) {
   const n = Number(score);
   if (!Number.isFinite(n)) return C.muted;
-  if (n >= 8.5) return C.good;
-  if (n >= 7) return C.gold;
-  if (n >= 5) return C.warn;
+  if (n >= 8) return C.good;
+  if (n >= 6) return C.warn;
   return C.bad;
 }
 
@@ -160,7 +167,7 @@ export default function Player() {
 
           {error && (
             <div role="alert" style={{
-              background: 'rgba(213,94,0,.12)', border: `1px solid ${C.bad}`,
+              background: 'rgba(239,68,68,.12)', border: `1px solid ${C.bad}`,
               borderRadius: 10, padding: '18px 20px'
             }}>
               <p style={{ margin: 0, fontWeight: 700, color: C.bad }}>No se pudo abrir la sesión</p>
@@ -208,8 +215,9 @@ export default function Player() {
 
               {/* ── Acciones ──────────────────────────────── */}
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, margin: '20px 0 30px' }}>
-                <a href={pdfHref} style={btnPrimary}>Descargar el PDF</a>
+                <a href={pdfHref} className="vtc-btn vtc-btn-primary" style={btnPrimary}>Descargar el PDF</a>
                 <a
+                  className="vtc-btn vtc-btn-ghost"
                   href={`/retrain?conv=${encodeURIComponent(conv)}${token ? `&t=${encodeURIComponent(token)}` : ''}`}
                   style={btnGhost}
                 >
@@ -239,7 +247,7 @@ export default function Player() {
                           style={{
                             maxWidth: '78%', textAlign: 'left', cursor: secs === null || audioError ? 'default' : 'pointer',
                             background: activo
-                              ? 'rgba(212,175,55,.18)'
+                              ? 'rgba(229,179,62,.20)'
                               : esAgente ? 'rgba(255,255,255,.05)' : 'rgba(86,180,233,.10)',
                             border: `1px solid ${activo ? C.gold : 'rgba(255,255,255,.08)'}`,
                             borderRadius: 12, padding: '11px 14px', color: C.text,
@@ -273,6 +281,37 @@ export default function Player() {
         <footer style={{ textAlign: 'center', color: C.muted, fontSize: 12, marginTop: 22 }}>
           Victor IA · Entrenamiento VTC Capacitación · victor-ia.xyz
         </footer>
+
+        {/* Los estados del cursor no caben en un `style` inline. Sin ellos un
+            botón se lee como texto: no se sabe que se puede pulsar, ni queda
+            constancia de que el clic entró. Mismos tiempos y mismo oro que los
+            CTAs del reporte. */}
+        <style jsx global>{`
+          .vtc-btn { transition: background .18s ease, border-color .18s ease,
+                                 color .18s ease, transform .12s ease, box-shadow .18s ease; }
+          .vtc-btn:focus-visible { outline: 2px solid #F2C766; outline-offset: 3px; }
+
+          .vtc-btn-primary:hover:not(:disabled) {
+            background: #F2C766;
+            box-shadow: 0 10px 26px rgba(229,179,62,.32);
+            transform: translateY(-1px);
+          }
+          .vtc-btn-primary:active:not(:disabled) {
+            background: #B8862A;
+            transform: translateY(1px) scale(.985);
+            box-shadow: 0 2px 8px rgba(229,179,62,.28);
+          }
+
+          .vtc-btn-ghost:hover {
+            background: rgba(229,179,62,.14);
+            border-color: #E5B33E;
+            color: #FFFFFF;
+          }
+          .vtc-btn-ghost:active {
+            background: rgba(229,179,62,.24);
+            transform: translateY(1px) scale(.985);
+          }
+        `}</style>
       </main>
     </div>
   );
@@ -299,7 +338,7 @@ const sectionTitle = {
 };
 
 const btnPrimary = {
-  display: 'inline-block', background: C.gold, color: '#0d1b26', fontWeight: 700,
+  display: 'inline-block', background: C.gold, color: C.bg, fontWeight: 700,
   fontSize: 14, padding: '12px 22px', borderRadius: 8, textDecoration: 'none'
 };
 

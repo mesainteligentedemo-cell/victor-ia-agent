@@ -450,10 +450,10 @@ class PDFGenerator {
    */
   getHeaderTemplate(metadata) {
     return `
-      <div style="font-size:8px;width:100%;padding:0 16mm;color:#8FA0B2;
+      <div style="font-size:8px;width:100%;padding:0 16mm;color:#B8B8B8;
                   font-family:'Segoe UI',Helvetica,Arial,sans-serif;
                   display:flex;justify-content:space-between;align-items:center;">
-        <span style="letter-spacing:1.5px;text-transform:uppercase;color:#d4af37;">VTC Elite Training</span>
+        <span style="letter-spacing:1.5px;text-transform:uppercase;color:#E5B33E;">VTC Elite Training</span>
         <span>${escapeAttr(metadata.nombre || 'Entrenamiento')} · ${escapeAttr(metadata.modulo || '')}</span>
       </div>
     `;
@@ -466,7 +466,7 @@ class PDFGenerator {
     const fecha = escapeAttr(metadata.fecha_sesion || new Date().toLocaleDateString('es-MX'));
     const hora = escapeAttr(metadata.hora_cancun || '');
     return `
-      <div style="font-size:8px;width:100%;padding:0 16mm;color:#8FA0B2;
+      <div style="font-size:8px;width:100%;padding:0 16mm;color:#B8B8B8;
                   font-family:'Segoe UI',Helvetica,Arial,sans-serif;
                   display:flex;justify-content:space-between;align-items:center;">
         <span>${fecha}${hora ? ' · ' + hora : ''} · victor-ia.xyz</span>
