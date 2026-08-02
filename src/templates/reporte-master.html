@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Reporte de Capacitación — {{nombre}} · {{fecha_sesion}}</title>
+<title>Reporte de Capacitación — {{nombre_completo}} · {{fecha_sesion}}</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700;900&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -591,16 +591,16 @@ p, li{orphans:2;widows:2}
        ═══════════════════════════════════════════════════════ -->
   <header class="cover">
     <div class="crest"><span class="eyebrow">Victorious Travelers Club · Elite Training</span></div>
-    <h1>Reporte de Capacitación<em>{{nombre}}</em></h1>
+    <h1>Reporte de Capacitación<em>{{nombre_completo}}</em></h1>
     <p class="lede">{{{resumen}}}</p>
     <div class="cover-meta">
-      <div>Asesor<strong>{{nombre}}</strong></div>
+      <div>Asesor<strong>{{nombre_completo}}</strong></div>
       <div>ID de empleado<strong>{{empleado_id}}</strong></div>
       <div>Departamento<strong>{{departamento}}</strong></div>
-      <div>Fecha de sesión<strong>{{fecha_sesion}}</strong></div>
+      <div>Fecha de sesión<strong>{{fecha_larga}}</strong></div>
       <div>Hora (Cancún)<strong>{{hora_cancun}}</strong></div>
       <div>Módulo<strong>{{modulo}}</strong></div>
-      <div>Duración<strong>{{duracion_texto}} min</strong></div>
+      <div>Duración<strong>{{duracion_humana}}</strong></div>
       <div>Desempeño<strong>{{score_overall}}/10 · {{scoreTotal}}%</strong></div>
     </div>
   </header>
@@ -618,7 +618,7 @@ p, li{orphans:2;widows:2}
       <div class="card card-gold">
         <div class="card-title">Datos del asesor</div>
         <dl>
-          <div class="row"><dt>Nombre</dt><dd>{{nombre}}</dd></div>
+          <div class="row"><dt>Nombre completo</dt><dd>{{nombre_completo}}</dd></div>
           <div class="row"><dt>ID de empleado</dt><dd>{{empleado_id}}</dd></div>
           <div class="row"><dt>Departamento</dt><dd>{{departamento}}</dd></div>
           <div class="row"><dt>Puesto</dt><dd>{{puesto}}</dd></div>
@@ -629,6 +629,8 @@ p, li{orphans:2;widows:2}
         <div class="card-title">Escenario de entrenamiento</div>
         <dl>
           <div class="row"><dt>Módulo</dt><dd>{{modulo}}</dd></div>
+          <div class="row"><dt>Fecha y hora</dt><dd>{{fecha_hora_larga}}</dd></div>
+          <div class="row"><dt>Duración</dt><dd>{{duracion_humana}}</dd></div>
           <div class="row"><dt>Familia simulada</dt><dd>{{familia_nombre}}</dd></div>
           <div class="row"><dt>ID de conversación</dt><dd>{{conversationId}}</dd></div>
           <div class="row"><dt>Nivel alcanzado</dt><dd>{{nivel_desempeno}}</dd></div>
@@ -665,7 +667,7 @@ p, li{orphans:2;widows:2}
     </div>
 
     <div class="grid-tight">
-      <div class="metric"><div class="metric-label">Duración</div><div class="metric-value">{{duracion_texto}}</div></div>
+      <div class="metric"><div class="metric-label">Duración</div><div class="metric-value sm">{{duracion_humana}}</div></div>
       <div class="metric"><div class="metric-label">Módulo</div><div class="metric-value sm">{{modulo}}</div></div>
       <div class="metric"><div class="metric-label">Score global</div><div class="metric-value {{score_clase}}">{{scoreTotal}}%</div></div>
       <div class="metric"><div class="metric-label">Potencial de mejora</div><div class="metric-value gold">{{mejora_potencial}}</div></div>
@@ -1123,7 +1125,7 @@ p, li{orphans:2;widows:2}
     <div class="footer-mark">VICTORIOUS TRAVELERS CLUB</div>
     <p>
       VTC Elite Training · Reporte generado automáticamente por Victor&nbsp;IA<br>
-      {{fecha_sesion}} · {{hora_cancun}} (America/Cancún) · Sesión {{conversationId}}<br>
+      {{fecha_hora_larga}} (America/Cancún) · Sesión {{conversationId}}<br>
       victor-ia.xyz
     </p>
   </footer>

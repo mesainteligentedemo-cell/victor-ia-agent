@@ -8,9 +8,28 @@
 const {
   formatTimezoneCancun,
   formatDateLocal,
-  formatDateLong
+  formatDateLong,
+  formatDateTimeLong,
+  formatDuracion
 } = require('./email-sender');
 const { buildReportLinks } = require('./report-links');
+
+/**
+ * Roster de respaldo — espejo del que valida /api/verify-employee.
+ *
+ * ¿Por qué duplicarlo aquí? Porque el agente de ElevenLabs devuelve muchas
+ * veces SOLO el nombre de pila ("Christian"), y un reporte de RR. HH. sin
+ * apellido no identifica a nadie. Con el número de empleado —que sí viaja
+ * siempre desde el formulario— completamos el nombre a como está en nómina.
+ *
+ * Es un respaldo, no la autoridad: si el webhook trae el nombre completo, ese
+ * manda. La verificación de acceso sigue viviendo en /api/verify-employee.
+ */
+const ROSTER = [
+  { empleado_id: '1234567', nombre: 'Pablo Solar', departamento: 'Dirección', puesto: 'Master Closer / Trainer' },
+  { empleado_id: '123456', nombre: 'Christian Soria', departamento: 'Dirección', puesto: 'Closer' },
+  { empleado_id: '12345', nombre: 'Andrés Mateos', departamento: 'Dirección', puesto: 'Senior Closer' }
+];
 
 function mapElevenLabsData(webhookBody) {
   const wh = webhookBody.body || webhookBody;
@@ -48,13 +67,29 @@ function mapElevenLabsData(webhookBody) {
     return null;
   };
 
-  const nombre = v(primero('nombre', 'nombre_asesor', 'user_name', 'employee_name'), 'Asesor VTC');
   const empleado_id = v(
     primero('empleado_id', 'employee_number', 'employee_id', 'numero_empleado'),
     'VTC-001'
   );
-  const departamento = v(primero('departamento', 'department', 'depto'), 'Dirección');
-  const puesto = v(primero('puesto', 'role', 'rol', 'position'), 'Asesor');
+
+  // Identidad completa: nombre de pila + apellido, siempre. Se resuelve contra
+  // el roster cuando el agente solo mandó el nombre de pila. Ver resolveIdentity.
+  const identidad = resolveIdentity({
+    nombre: primero('nombre', 'nombre_completo', 'nombre_asesor', 'user_name', 'employee_name'),
+    apellido: primero('apellido', 'apellidos', 'last_name', 'surname', 'apellido_paterno'),
+    empleado_id
+  });
+
+  const nombre = identidad.nombre_completo;
+  const nombre_completo = identidad.nombre_completo;
+  const nombre_pila = identidad.nombre_pila;
+  const apellido = identidad.apellido;
+
+  const departamento = v(
+    primero('departamento', 'department', 'depto') || identidad.departamento,
+    'Dirección'
+  );
+  const puesto = v(primero('puesto', 'role', 'rol', 'position') || identidad.puesto, 'Asesor');
   const idioma = v(safe(wh, 'idioma', 'Español'), 'Español');
   const modulo = v(safe(wh, 'modulo', null), 'Meet & Greet');
   const familia_nombre = v(safe(wh, 'familia_nombre', null), 'López');
@@ -65,6 +100,7 @@ function mapElevenLabsData(webhookBody) {
   const sessionDate = resolveSessionDate(wh);
   const fecha_sesion = formatDateLocal(sessionDate);
   const fecha_larga = formatDateLong(sessionDate);
+  const fecha_hora_larga = formatDateTimeLong(sessionDate);
   const hora_cancun = formatTimezoneCancun(sessionDate);
   const hora_sesion = hora_cancun;
 
@@ -74,7 +110,10 @@ function mapElevenLabsData(webhookBody) {
   const duracion_sec = Number.isFinite(parsedDuracion) && parsedDuracion > 0 ? Math.round(parsedDuracion) : 570;
   const duracion_minutos = Math.floor(duracion_sec / 60);
   const duracion_seg = duracion_sec % 60;
+  // "9:30" para tablas y métricas compactas...
   const duracion_texto = `${duracion_minutos}:${duracion_seg < 10 ? '0' : ''}${duracion_seg}`;
+  // ...y en palabras para el correo y el PDF, donde "9:30" se lee como una hora.
+  const duracion_humana = formatDuracion(duracion_sec);
 
   // ===== SCORES (0-10) =====
   // Siempre número finito dentro de [0,10]; si el agente manda string ("9") se convierte.
@@ -223,7 +262,12 @@ function mapElevenLabsData(webhookBody) {
   return {
     // IDs
     conversationId,
+    // `nombre` ES el nombre completo: todo lo que ya lo consumía (correo, PDF,
+    // reentrenamiento) pasa a mostrar nombre y apellido sin tocar nada más.
     nombre,
+    nombre_completo,
+    nombre_pila,
+    apellido,
     empleado_id,
     departamento,
     puesto,
@@ -234,10 +278,12 @@ function mapElevenLabsData(webhookBody) {
     // Fecha/Hora (todo en America/Cancun)
     fecha_sesion,
     fecha_larga,
+    fecha_hora_larga,
     hora_sesion,
     hora_cancun,
     session_iso: sessionDate.toISOString(),
     duracion_texto,
+    duracion_humana,
     duracion_minutos,
     duracion_sec,
 
@@ -309,6 +355,78 @@ function mapElevenLabsData(webhookBody) {
     // Permite al reporte mostrar contra qué guion se evaluó al asesor.
     agente: agentContext(modulo)
   };
+}
+
+/**
+ * Resuelve la identidad del asesor a nombre COMPLETO.
+ *
+ * El problema real: el agente de voz suele devolver "Christian" y el reporte
+ * salía a nombre de "Christian" — que en una plantilla de cuarenta personas no
+ * identifica a nadie. El correo, el PDF y el archivo adjunto tienen que decir
+ * "Christian Soria".
+ *
+ * Cascada, de más fiable a menos:
+ *   1. Nombre + apellido llegan por separado  → se unen.
+ *   2. El nombre ya trae apellido             → se respeta tal cual.
+ *   3. Solo nombre de pila → se completa desde el roster, casando primero por
+ *      número de empleado (dato duro del formulario) y, si no, por nombre.
+ *   4. Nada casa → se devuelve lo que haya, sin inventar apellidos.
+ *
+ * @param {{nombre:?string, apellido:?string, empleado_id:?string}} input
+ * @returns {{nombre_completo:string, nombre_pila:string, apellido:string,
+ *            departamento:?string, puesto:?string}}
+ */
+function resolveIdentity(input) {
+  const limpio = (s) => String(s == null ? '' : s).replace(/\s+/g, ' ').trim();
+
+  const nombreRaw = limpio(input && input.nombre);
+  const apellidoRaw = limpio(input && input.apellido);
+  const idRaw = limpio(input && input.empleado_id);
+
+  // 1 + 2: lo que ya viene con apellido no se toca.
+  let completo = apellidoRaw && !nombreRaw.toLowerCase().endsWith(apellidoRaw.toLowerCase())
+    ? `${nombreRaw} ${apellidoRaw}`.trim()
+    : nombreRaw;
+
+  const ficha = matchRoster(idRaw, completo);
+
+  // 3: solo hay nombre de pila y el roster sabe el apellido.
+  if (ficha && completo.split(' ').filter(Boolean).length < 2) {
+    completo = ficha.nombre;
+  }
+  // Sin nombre utilizable, el roster manda (el id sí es un dato duro).
+  if (!completo && ficha) completo = ficha.nombre;
+
+  const partes = completo.split(' ').filter(Boolean);
+
+  return {
+    nombre_completo: completo || 'Asesor VTC',
+    nombre_pila: partes[0] || 'Asesor',
+    apellido: partes.slice(1).join(' '),
+    departamento: ficha ? ficha.departamento : null,
+    puesto: ficha ? ficha.puesto : null
+  };
+}
+
+/** Busca la ficha del roster por número de empleado y, en su defecto, por nombre. */
+function matchRoster(empleadoId, nombre) {
+  const id = String(empleadoId || '').replace(/\D/g, '');
+  if (id) {
+    const porId = ROSTER.find((e) => e.empleado_id === id);
+    if (porId) return porId;
+  }
+
+  const key = normKey(nombre);
+  if (!key) return null;
+
+  // Coincidencia exacta antes que por nombre de pila: si algún día entran dos
+  // "Christian", el nombre completo desempata y el de pila ya no.
+  const exacto = ROSTER.find((e) => normKey(e.nombre) === key);
+  if (exacto) return exacto;
+
+  const pila = key.split(' ')[0];
+  const candidatos = ROSTER.filter((e) => normKey(e.nombre).split(' ')[0] === pila);
+  return candidatos.length === 1 ? candidatos[0] : null;
 }
 
 /**
@@ -792,6 +910,7 @@ module.exports = {
   turnsToBubbles,
   splitItems,
   resolveSessionDate,
+  resolveIdentity,
   // Exportados para pruebas y para el reproductor
   cleanSpeakerLabel,
   cleanTurnText,

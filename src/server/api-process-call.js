@@ -380,7 +380,12 @@ async function processCallWebhook(webhookBody, hmacSignature, rawBody) {
 
     // Asunto, cuerpos y nombres de archivo se derivan del mismo instante:
     // el PDF y el MP3 comparten base para que queden juntos al ordenar por nombre.
-    const email = buildEmailPackage(mergedData, mergedData.session_iso);
+    // `hasAudio` evita que el correo prometa un MP3 que no viaja: cuando el
+    // presupuesto de la lambda no alcanzó para el audio, la lista de adjuntos
+    // tiene que decir la verdad.
+    const email = buildEmailPackage(mergedData, mergedData.session_iso, {
+      hasAudio: !!mp3Buffer
+    });
 
     const attachments = [
       {

@@ -277,25 +277,52 @@ function escapeHtml(str) {
     .replace(/"/g, '&quot;');
 }
 
-/** Áreas críticas de la sesión, con su score. Es lo que el gerente necesita ver. */
-function areasCriticas(summary) {
-  const comps = summary && Array.isArray(summary.competencias) ? summary.competencias : [];
-  return comps
-    .filter((c) => c && Number.isFinite(Number(c.score)) && Number(c.score) < 8)
-    .sort((a, b) => a.score - b.score)
-    .map((c) => `${c.name}: ${c.score}/10 (${Math.round((8 - c.score) * 10) / 10} por debajo del estándar)`);
+/** Techo del asunto: lo mismo que en el correo del reporte. */
+const SUBJECT_MAX = 78;
+
+/** Recorta el nombre para que el asunto quepa entero, sin partir palabras. */
+function fitNombre(nombre, resto) {
+  const disponible = SUBJECT_MAX - resto;
+  if (nombre.length <= disponible) return nombre;
+  if (disponible < 8) return nombre.slice(0, Math.max(1, disponible));
+
+  const cortado = nombre.slice(0, disponible - 1);
+  const espacio = cortado.lastIndexOf(' ');
+  return `${(espacio > 4 ? cortado.slice(0, espacio) : cortado).trim()}…`;
+}
+
+/**
+ * Notas escritas por quien solicitó el reentrenamiento.
+ *
+ * El formulario tiene dos campos —uno dirigido al colaborador y otro al
+ * gerente— y los dos los escribe la misma persona. Se muestran juntos: perder
+ * uno de los dos en el correo sería perder instrucciones de coaching.
+ *
+ * @returns {Array<[string,string]>} pares [etiqueta, texto]; vacío si no hay nada
+ */
+function notasDelGerente(record) {
+  const gerente = String(record.notas_gerente || '').trim();
+  const colaborador = String(record.notas || '').trim();
+
+  const bloques = [];
+  if (gerente) bloques.push(['', gerente]);
+  if (colaborador && colaborador !== gerente) {
+    bloques.push([bloques.length ? 'Para el colaborador' : '', colaborador]);
+  }
+  return bloques;
 }
 
 /**
  * Construye el correo que recibe el gerente.
- * Lleva TODO el contexto: quién, qué sesión, qué scores, qué falla, qué pidió
- * el solicitante y los enlaces al reporte y al audio.
+ * Lleva lo esencial —quién, qué sesión, qué competencias, qué notas— y los
+ * enlaces al reporte y al audio, que es donde vive el detalle completo.
  *
  * @returns {{subject:string, html:string, text:string}}
  */
 function buildRetrainEmail({ summary, record, links, origenCompetencias }) {
   const s = summary || {};
   const ahora = new Date(record.created_at);
+  const nombre = String(s.nombre_completo || s.nombre || 'Asesor VTC');
 
   // Las competencias marcadas viajan CON su score: el gerente no debería tener
   // que abrir el PDF para saber de qué número parte cada una.
@@ -310,83 +337,72 @@ function buildRetrainEmail({ summary, record, links, origenCompetencias }) {
   });
 
   const competencias = marcadas.length ? marcadas.join(', ') : 'Sin foco definido';
-  const criticas = areasCriticas(s);
-
-  const fortalezas = Array.isArray(s.fortalezas_list) ? s.fortalezas_list : [];
-  const areas = Array.isArray(s.areas_list) ? s.areas_list : [];
-
-  // El asunto va con los nombres pelados: con los scores dentro se corta en el
-  // inbox y el gerente pierde justo la parte que dice de quién es.
-  const subject =
-    `Reentrenamiento ${record.prioridad}: ${s.nombre || 'Asesor VTC'} — ` +
-    `${record.competencias.length ? record.competencias.join(', ') : 'Sin foco definido'} ` +
-    `(${formatDateLocal(ahora)})`;
 
   const notaOrigen = origenCompetencias === 'automatico'
-    ? ' (deducidas de los scores de la sesión — el solicitante no marcó ninguna)'
+    ? ' (deducidas de los scores de la sesión)'
     : '';
+
+  // Asunto: "🔄 Solicitud de Reentrenamiento: Christian Soria • 01/08/2026 11:53 a.m."
+  const prefijo = '🔄 Solicitud de Reentrenamiento: ';
+  const sufijo = ` • ${formatDateLocal(ahora)} ${formatTimezoneCancun(ahora)}`;
+  const subject = `${prefijo}${fitNombre(nombre, prefijo.length + sufijo.length)}${sufijo}`;
+
+  const notas = notasDelGerente(record);
+
+  const detalles = [
+    ['Fecha de Sesión Original', String(s.fecha_sesion || '—')],
+    ['Hora', `${s.hora_cancun || '—'} (America/Cancun)`],
+    ['Competencias a Mejorar', `${competencias}${notaOrigen}`]
+  ];
 
   // ── Texto plano ─────────────────────────────────────────────
   const text = [
-    'SOLICITUD DE REENTRENAMIENTO',
-    `Folio: ${record.id}`,
+    'Solicitud de Reentrenamiento Registrada',
     '',
-    'RESUMEN DEL ASESOR',
-    `Nombre: ${s.nombre || '—'} (${s.empleado_id || '—'})`,
-    `Puesto: ${s.puesto || '—'}`,
-    `Módulo evaluado: ${s.modulo || '—'}`,
-    `Sesión: ${s.fecha_sesion || '—'} ${s.hora_cancun || ''} · ${s.duracion_texto || '—'} min`,
+    '✅ Hemos registrado tu solicitud de reentrenamiento.',
     '',
-    'SCORES',
-    `Desempeño global: ${s.score_overall != null ? s.score_overall : '—'}/10 (${s.scoreTotal != null ? s.scoreTotal : '—'}%)`,
-    ...(Array.isArray(s.competencias) ? s.competencias.map((c) => `  · ${c.name}: ${c.score}/10`) : []),
+    '👤 EMPLEADO:',
+    `${nombre} (${s.empleado_id || '—'})`,
+    `Departamento: ${s.departamento || '—'}`,
     '',
-    'ÁREAS CRÍTICAS',
-    criticas.length ? criticas.map((c) => `  · ${c}`).join('\n') : '  Ninguna competencia por debajo del estándar de 8/10.',
+    '📅 DETALLES:',
+    ...detalles.map(([k, v]) => `• ${k}: ${v}`),
     '',
-    `PRIORIDAD: ${record.prioridad}`,
-    `COMPETENCIAS A REFORZAR: ${competencias}${notaOrigen}`,
+    '📝 NOTAS DEL GERENTE:',
+    ...(notas.length
+      ? notas.map(([etiqueta, texto]) => (etiqueta ? `${etiqueta}: ${texto}` : texto))
+      : ['(sin notas)']),
     '',
-    'NOTAS PARA EL COLABORADOR',
-    record.notas || '(sin notas)',
+    '⏳ ESTADO:',
+    'Tu sesión de reentrenamiento será programada dentro de los próximos días.',
     '',
-    'NOTAS ADICIONALES PARA EL GERENTE',
-    record.notas_gerente || '(sin notas adicionales)',
-    ...(fortalezas.length ? ['', 'FORTALEZAS DE LA SESIÓN', ...fortalezas.map((f) => `  · ${f}`)] : []),
-    ...(areas.length ? ['', 'ÁREAS DE MEJORA DETECTADAS', ...areas.map((a) => `  · ${a}`)] : []),
+    'ENLACES:',
+    `• Reporte completo (PDF): ${links.pdf_download_url}`,
+    `• Escuchar la sesión: ${links.pop_up_url}`,
     '',
-    'RECOMENDACIÓN DEL COACH',
-    s.recomendacion_coach || '—',
+    'Saludos,',
+    'Victor IA — Elite Training System',
     '',
-    'ENLACES',
-    `Reporte completo (PDF): ${links.pdf_download_url}`,
-    `Escuchar la sesión: ${links.pop_up_url}`,
-    '',
-    `Solicitado el ${formatDateLong(ahora)} a las ${formatTimezoneCancun(ahora)} (America/Cancún)`,
-    `Registro: ${record.persisted === 'supabase' ? 'guardado en base de datos' : 'en memoria del servidor'}`,
-    '',
-    'Victor IA · Entrenamiento VTC Capacitación · victor-ia.xyz'
+    `Folio ${record.id} · Prioridad ${record.prioridad} · `
+      + `Solicitado el ${formatDateLong(ahora)} a las ${formatTimezoneCancun(ahora)} (America/Cancun)`
   ].join('\n');
 
   // ── HTML ────────────────────────────────────────────────────
   const font = "font-family:'Segoe UI',Helvetica,Arial,sans-serif";
-  const label = `${font};font-size:11px;letter-spacing:2px;text-transform:uppercase;color:#E5B33E;font-weight:700;margin:0 0 8px`;
-  const para = `${font};font-size:14px;line-height:1.7;color:#E4E4E4;margin:0 0 18px`;
+  const label = `${font};font-size:11px;letter-spacing:2px;text-transform:uppercase;color:#E5B33E;font-weight:700;margin:0 0 12px`;
+  const para = `${font};font-size:14px;line-height:1.7;color:#E4E4E4;margin:0 0 14px`;
 
-  const row = (k, v) => `<tr>
-      <td style="${font};font-size:13px;color:#B8B8B8;padding:7px 0;border-bottom:1px solid rgba(255,255,255,.08)">${escapeHtml(k)}</td>
-      <td style="${font};font-size:14px;color:#fff;font-weight:600;text-align:right;padding:7px 0;border-bottom:1px solid rgba(255,255,255,.08)">${escapeHtml(v)}</td>
+  const row = ([k, v]) => `<tr>
+      <td style="${font};font-size:13px;color:#B8B8B8;padding:9px 0;border-bottom:1px solid rgba(255,255,255,.08)">${escapeHtml(k)}</td>
+      <td style="${font};font-size:14px;color:#fff;font-weight:600;text-align:right;padding:9px 0;border-bottom:1px solid rgba(255,255,255,.08)">${escapeHtml(v)}</td>
     </tr>`;
 
-  const lista = (items, color) => items.length
-    ? `<ul style="${font};font-size:14px;line-height:1.7;color:#E4E4E4;margin:0 0 18px;padding-left:20px">${
-      items.map((i) => `<li style="margin-bottom:5px;color:${color}">${escapeHtml(i)}</li>`).join('')
-    }</ul>`
-    : `<p style="${para}">—</p>`;
-
-  const scoresRows = (Array.isArray(s.competencias) ? s.competencias : [])
-    .map((c) => row(c.name, `${c.score}/10`))
-    .join('');
+  const notasHtml = notas.length
+    ? notas.map(([etiqueta, texto]) => `
+    <p style="${para}">${
+  etiqueta ? `<strong style="color:#F2C766">${escapeHtml(etiqueta)}:</strong> ` : ''
+}${escapeHtml(texto).replace(/\n/g, '<br>')}</p>`).join('')
+    : `<p style="${para}">(sin notas)</p>`;
 
   const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(subject)}</title></head>
@@ -395,56 +411,48 @@ function buildRetrainEmail({ summary, record, links, origenCompetencias }) {
 
   <tr><td style="background:#262626;padding:28px 32px;border-bottom:3px solid #E5B33E">
     <p style="${font};font-size:10px;letter-spacing:3px;text-transform:uppercase;color:#E5B33E;font-weight:700;margin:0 0 8px">Victorious Travelers Club · Elite Training</p>
-    <h1 style="${font};font-size:22px;color:#fff;margin:0;font-weight:700">Solicitud de reentrenamiento</h1>
-    <p style="${font};font-size:14px;color:#B8B8B8;margin:6px 0 0">${escapeHtml(s.nombre || 'Asesor VTC')} · ${escapeHtml(s.modulo || '—')} · prioridad ${escapeHtml(record.prioridad)}</p>
+    <h1 style="${font};font-size:22px;color:#fff;margin:0;font-weight:700">🔄 Solicitud de Reentrenamiento Registrada</h1>
+    <p style="${font};font-size:14px;color:#B8B8B8;margin:8px 0 0">${escapeHtml(nombre)} · ${escapeHtml(String(s.modulo || '—'))} · prioridad ${escapeHtml(record.prioridad)}</p>
     <p style="${font};font-size:11px;color:#B8B8B8;margin:8px 0 0">Folio ${escapeHtml(record.id)}</p>
   </td></tr>
 
   <tr><td style="padding:28px 32px">
 
-    <p style="${label}">Resumen del asesor</p>
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 22px">
-      ${row('Asesor', `${s.nombre || '—'} (${s.empleado_id || '—'})`)}
-      ${row('Puesto', String(s.puesto || '—'))}
-      ${row('Módulo evaluado', String(s.modulo || '—'))}
-      ${row('Sesión', `${s.fecha_sesion || '—'} ${s.hora_cancun || ''}`)}
-      ${row('Duración', `${s.duracion_texto || '—'} min`)}
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 28px;background:rgba(16,185,129,.09);border-left:3px solid #10B981;border-radius:6px">
+      <tr><td style="${font};font-size:14px;line-height:1.7;color:#E4E4E4;padding:14px 16px">✅ Hemos registrado tu solicitud de reentrenamiento.</td></tr>
     </table>
 
-    <p style="${label}">Scores de la sesión</p>
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 22px">
-      ${row('Desempeño global', `${s.score_overall != null ? s.score_overall : '—'}/10 (${s.scoreTotal != null ? s.scoreTotal : '—'}%)`)}
-      ${scoresRows}
+    <p style="${label}">👤 Empleado</p>
+    <p style="${para};margin:0 0 4px"><strong style="color:#fff;font-size:16px">${escapeHtml(nombre)}</strong> <span style="color:#B8B8B8">(${escapeHtml(String(s.empleado_id || '—'))})</span></p>
+    <p style="${para}">Departamento: ${escapeHtml(String(s.departamento || '—'))}</p>
+    <div style="height:14px"></div>
+
+    <p style="${label}">📅 Detalles</p>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 30px">
+      ${detalles.map(row).join('')}
     </table>
 
-    <p style="${label}">Áreas críticas</p>
-    ${criticas.length
-      ? lista(criticas, '#FBBF24')
-      : `<p style="${para}">Ninguna competencia por debajo del estándar de 8/10.</p>`}
+    <p style="${label}">📝 Notas del gerente</p>
+    ${notasHtml}
+    <div style="height:14px"></div>
 
-    <p style="${label}">Competencias a reforzar</p>
-    <p style="${para}"><strong style="color:#F2C766">${escapeHtml(competencias)}</strong>${escapeHtml(notaOrigen)}</p>
+    <p style="${label}">⏳ Estado</p>
+    <p style="${para}">Tu sesión de reentrenamiento será programada dentro de los próximos días.</p>
 
-    <p style="${label}">Notas para el colaborador</p>
-    <p style="${para}">${escapeHtml(record.notas || '(sin notas)').replace(/\n/g, '<br>')}</p>
-
-    <p style="${label}">Notas adicionales para el gerente</p>
-    <p style="${para}">${escapeHtml(record.notas_gerente || '(sin notas adicionales)').replace(/\n/g, '<br>')}</p>
-
-    ${fortalezas.length ? `<p style="${label}">Fortalezas de la sesión</p>${lista(fortalezas, '#34D399')}` : ''}
-
-    <p style="${label}">Recomendación del coach</p>
-    <p style="${para}">${escapeHtml(s.recomendacion_coach || '—')}</p>
-
-    <div style="border-top:1px solid rgba(229,179,62,.28);margin:8px 0 22px"></div>
+    <div style="border-top:1px solid rgba(229,179,62,.28);margin:8px 0 24px"></div>
 
     <a href="${escapeHtml(links.pdf_download_url)}" style="${font};display:inline-block;background:#E5B33E;color:#0D0D0D;font-weight:700;font-size:14px;padding:12px 22px;border-radius:8px;text-decoration:none;margin:0 10px 10px 0">Ver el reporte completo</a>
     <a href="${escapeHtml(links.pop_up_url)}" style="${font};display:inline-block;color:#F2C766;font-weight:600;font-size:14px;padding:12px 22px;border-radius:8px;text-decoration:none;border:1px solid rgba(229,179,62,.28)">Escuchar la sesión</a>
 
+    <div style="border-top:1px solid rgba(229,179,62,.28);margin:24px 0"></div>
+
+    <p style="${para};margin:0 0 4px">Saludos,</p>
+    <p style="${para};margin:0"><strong style="color:#fff">Victor IA</strong> <span style="color:#B8B8B8">— Elite Training System</span></p>
+
   </td></tr>
 
   <tr><td style="background:#0D0D0D;padding:16px 32px;text-align:center;border-top:1px solid rgba(229,179,62,.22)">
-    <p style="${font};font-size:11px;color:#B8B8B8;margin:0">Solicitado el ${escapeHtml(formatDateLocal(ahora))} ${escapeHtml(formatTimezoneCancun(ahora))} (America/Cancún) · Folio ${escapeHtml(record.id)}</p>
+    <p style="${font};font-size:11px;color:#B8B8B8;margin:0">Solicitado el ${escapeHtml(formatDateLong(ahora))} ${escapeHtml(formatTimezoneCancun(ahora))} (America/Cancun) · Folio ${escapeHtml(record.id)}</p>
   </td></tr>
 
 </table></body></html>`;

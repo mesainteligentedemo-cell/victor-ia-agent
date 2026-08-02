@@ -16,6 +16,7 @@ const path = require('path');
 const { buildReportCharts } = require('./chart-svg');
 const { buildActionPlan } = require('./action-plan');
 const { managerRecipients } = require('./retrain-request');
+const { formatDuracion } = require('./email-sender');
 
 // Circunferencia del anillo de score (r = 58 en el viewBox del template)
 const RING_CIRCUMFERENCE = 2 * Math.PI * 58;
@@ -113,7 +114,13 @@ class ReportGenerator {
 
     return {
       // ── Identidad ──────────────────────────────────────────
+      // `nombre` ya llega como nombre completo desde el mapper (nombre +
+      // apellido, completado contra el roster si el agente solo dio el de pila).
+      // `nombre_completo` es el que pinta el reporte; el respaldo evita que un
+      // payload viejo deje la portada en blanco.
       nombre: this.v(data.nombre, 'Asesor VTC'),
+      nombre_completo: this.v(data.nombre_completo || data.nombre, 'Asesor VTC'),
+      apellido: this.v(data.apellido, ''),
       empleado_id: this.v(data.empleado_id, 'VTC-001'),
       // Capturado por el empleado en el formulario de /training y verificado
       // contra el roster antes de abrir la sesión.
@@ -128,8 +135,15 @@ class ReportGenerator {
       fecha_sesion: this.v(data.fecha_sesion, new Date().toLocaleDateString('es-MX')),
       hora_sesion: this.v(data.hora_sesion, ''),
       hora_cancun: this.v(data.hora_cancun, data.hora_sesion),
+      // "01 de Agosto de 2026" — el formato largo del sistema, el mismo que el correo.
       fecha_larga: this.v(data.fecha_larga, data.fecha_sesion),
+      fecha_hora_larga: this.v(
+        data.fecha_hora_larga,
+        `${this.v(data.fecha_larga, data.fecha_sesion)} • ${this.v(data.hora_cancun, data.hora_sesion)}`
+      ),
       duracion_texto: this.v(data.duracion_texto, '00:00'),
+      // "9 minutos 30 segundos": en el PDF se lee, no se descifra.
+      duracion_humana: this.v(data.duracion_humana, formatDuracion(data.duracion_sec)),
       duracion_minutos: this.num(data.duracion_minutos, 0),
 
       // ── Scores ─────────────────────────────────────────────

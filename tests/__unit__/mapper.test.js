@@ -10,6 +10,7 @@ const {
   mapElevenLabsData,
   splitItems,
   resolveSessionDate,
+  resolveIdentity,
   parseTranscript,
   turnsToBubbles,
   cleanSpeakerLabel,
@@ -375,5 +376,82 @@ describe('splitItems — limpieza de listas', () => {
   test('devuelve [] con entrada vacía', () => {
     expect(splitItems('')).toEqual([]);
     expect(splitItems(null)).toEqual([]);
+  });
+});
+describe('resolveIdentity — el reporte siempre lleva apellido', () => {
+  test('completa el apellido desde el roster cuando solo llega el nombre de pila', () => {
+    const id = resolveIdentity({ nombre: 'Christian', empleado_id: '123456' });
+    expect(id.nombre_completo).toBe('Christian Soria');
+    expect(id.nombre_pila).toBe('Christian');
+    expect(id.apellido).toBe('Soria');
+  });
+
+  test('el número de empleado manda sobre el nombre suelto', () => {
+    const id = resolveIdentity({ nombre: '', empleado_id: '12345' });
+    expect(id.nombre_completo).toBe('Andrés Mateos');
+    expect(id.departamento).toBe('Dirección');
+    expect(id.puesto).toBe('Senior Closer');
+  });
+
+  test('une nombre y apellido cuando llegan por campos separados', () => {
+    const id = resolveIdentity({ nombre: 'Ana', apellido: 'Torres López', empleado_id: '999' });
+    expect(id.nombre_completo).toBe('Ana Torres López');
+    expect(id.apellido).toBe('Torres López');
+  });
+
+  test('no duplica el apellido si el nombre ya lo trae', () => {
+    const id = resolveIdentity({ nombre: 'Pablo Solar', apellido: 'Solar', empleado_id: '1234567' });
+    expect(id.nombre_completo).toBe('Pablo Solar');
+  });
+
+  test('NO inventa apellidos para quien no está en el roster', () => {
+    const id = resolveIdentity({ nombre: 'Rodrigo', empleado_id: '777' });
+    expect(id.nombre_completo).toBe('Rodrigo');
+    expect(id.apellido).toBe('');
+  });
+
+  test('sin datos no deja el reporte sin destinatario', () => {
+    expect(resolveIdentity({}).nombre_completo).toBe('Asesor VTC');
+  });
+});
+
+describe('mapElevenLabsData — identidad, fechas y duración', () => {
+  const WH = {
+    conversation_id: 'c-identidad',
+    nombre: 'Christian',
+    empleado_id: '123456',
+    start_time_unix_secs: Math.floor(new Date('2026-08-01T16:53:00Z').getTime() / 1000),
+    duracion_segundos: 570
+  };
+
+  test('`nombre` sale ya como nombre completo', () => {
+    const out = mapElevenLabsData(WH);
+    expect(out.nombre).toBe('Christian Soria');
+    expect(out.nombre_completo).toBe('Christian Soria');
+    expect(out.apellido).toBe('Soria');
+  });
+
+  test('el departamento del roster respalda al que no llega en el webhook', () => {
+    expect(mapElevenLabsData(WH).departamento).toBe('Dirección');
+  });
+
+  test('lo que manda el webhook gana sobre el roster', () => {
+    const out = mapElevenLabsData({ ...WH, departamento: 'Ventas' });
+    expect(out.departamento).toBe('Ventas');
+  });
+
+  test('las fechas van en America/Cancun con el formato del sistema', () => {
+    const out = mapElevenLabsData(WH);
+    expect(out.fecha_sesion).toBe('01/08/2026');
+    expect(out.fecha_larga).toBe('01 de Agosto de 2026');
+    expect(out.hora_cancun).toBe('11:53 a.m.');
+    expect(out.fecha_hora_larga).toBe('01 de Agosto de 2026 • 11:53 a.m.');
+  });
+
+  test('la duración se calcula bien en las dos formas', () => {
+    const out = mapElevenLabsData(WH);
+    expect(out.duracion_sec).toBe(570);
+    expect(out.duracion_texto).toBe('9:30');
+    expect(out.duracion_humana).toBe('9 minutos 30 segundos');
   });
 });

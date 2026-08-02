@@ -77,10 +77,14 @@ export default async function handler(req, res) {
   }
 }
 
-/** Nombre de archivo coherente con el que viajó por correo. */
+/**
+ * Nombre de archivo coherente con el que viajó por correo.
+ * Se pasa el payload entero para que el nombre lleve también el ID de empleado:
+ * `Christian_Soria_123456_01082026_1153.pdf`.
+ */
 function fallbackName(data, conversationId) {
   const d = data || {};
-  const base = buildAttachmentBasename(d.nombre, d.session_iso);
+  const base = buildAttachmentBasename(d, d.session_iso);
   return base ? `${base}.pdf` : `reporte_${conversationId}.pdf`;
 }
 
