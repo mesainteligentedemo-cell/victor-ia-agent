@@ -118,8 +118,19 @@ describe('mapElevenLabsData — los 25 campos del agente', () => {
   test('construye las 6 competencias con los scores recibidos', () => {
     const out = mapElevenLabsData(payload);
     expect(out.competencias).toHaveLength(6);
-    expect(out.comp_baja).toBe('Objeciones'); // el 4, el más bajo
-    expect(out.comp_alta).toBe('Lectura Sala'); // el 8, el más alto
+    // Los nombres son los que lee un director de hotel, no los del manual de
+    // ventas: "Objeciones" es ahora "Inquietudes" y "Lectura Sala", "Percepción".
+    expect(out.comp_baja).toBe('Inquietudes'); // el 4, el más bajo
+    expect(out.comp_alta).toBe('Percepción'); // el 8, el más alto
+  });
+
+  test('ninguna competencia conserva jerga del manual de ventas', () => {
+    const nombres = mapElevenLabsData({}).competencias.map((c) => c.name);
+    expect(nombres).not.toContain('Rapport');
+    expect(nombres).not.toContain('PNL');
+    expect(nombres).toEqual(
+      expect.arrayContaining(['Conexión', 'Comunicación', 'Presencia', 'Inquietudes', 'Percepción', 'Cierre'])
+    );
   });
 
   test('respeta los textos del agente en vez de los defaults', () => {
@@ -152,11 +163,20 @@ describe('mapElevenLabsData — los 25 campos del agente', () => {
 
   test('los defaults narrativos no inventan hallazgos', () => {
     const out = mapElevenLabsData({ conversation_id: 'c1' });
-    expect(out.fortalezas).toBe('Continuar desarrollando fortalezas identificadas');
-    expect(out.areas_mejora).toBe('Mantener enfoque en competencias clave');
+    expect(out.fortalezas).toBe('Continuar desarrollando las fortalezas identificadas');
+    expect(out.areas_mejora).toBe('Mantener el enfoque en las competencias clave');
     // El texto viejo afirmaba observaciones que nadie hizo
     expect(out.fortalezas).not.toMatch(/calibración visual/i);
     expect(out.analisis_pnl).not.toMatch(/anclajes emocionales/i);
+  });
+
+  test('los fundamentos de comunicación se explican sin lenguaje clínico', () => {
+    const descripciones = mapElevenLabsData({ conversation_id: 'c1' })
+      .principios_neuro.map((p) => `${p.titulo} ${p.descripcion}`).join(' ');
+
+    for (const jerga of [/límbic/i, /submodalidad/i, /córtex/i, /neuronal/i, /reencuadre/i]) {
+      expect(descripciones).not.toMatch(jerga);
+    }
   });
 });
 
@@ -291,6 +311,47 @@ describe('transcripción — solo hablante y texto literal', () => {
   test('cleanTurnText quita SSML y marcadores de sistema', () => {
     expect(cleanTurnText('Hola <break time="0.5s"/> familia')).toBe('Hola familia');
     expect(cleanTurnText('[silence] Buenas tardes')).toBe('Buenas tardes');
+  });
+
+  test('cleanTurnText elimina TODO entre corchetes, símbolos incluidos', () => {
+    // Acotaciones de dirección de voz: no se dijeron, se ejecutaron.
+    expect(cleanTurnText('[calmado] Hola')).toBe('Hola');
+    expect(cleanTurnText('Buenas tardes [pausa larga] señores')).toBe('Buenas tardes señores');
+    expect(cleanTurnText('[tono <suave>] Bienvenidos')).toBe('Bienvenidos');
+  });
+
+  test('cleanTurnText elimina la etiqueta de rol al inicio del mensaje', () => {
+    expect(cleanTurnText('(IA): esto es una prueba')).toBe('esto es una prueba');
+    expect(cleanTurnText('(User): quiero entrenarme')).toBe('quiero entrenarme');
+  });
+
+  test('"(IA)" como hablante se resuelve al agente, no a un participante llamado IA', () => {
+    const out = parseTranscript('(IA): esto es una prueba\nuser: Buenas', 'Christian Soria', 'López');
+    expect(out[0].speaker).toBe('Victor');
+    expect(out[0].type).toBe('agent');
+    expect(out[0].text).toBe('esto es una prueba');
+  });
+
+  test('cleanTurnText no deja huecos ni espacios antes de la puntuación', () => {
+    expect(cleanTurnText('Muy bien [risas], continuamos')).toBe('Muy bien, continuamos');
+  });
+
+  test('ningún turno llega al reporte con < > [ ] — regla bloqueada', () => {
+    const out = parseTranscript(
+      '<Víctor English>: [calmado] "Hola, {{nombre}} bienvenido."\n'
+      + '[Usuario] (User): Quiero <break/> entrenarme [ruido]',
+      'Ana Torres',
+      'Ramírez',
+      600
+    );
+
+    expect(out).toHaveLength(2);
+    for (const b of out) {
+      expect(b.speaker).not.toMatch(/[<>[\]{}]/);
+      expect(b.text).not.toMatch(/[<>[\]{}]/);
+    }
+    expect(out[0].text).toBe('Hola, bienvenido.');
+    expect(out[1].text).toBe('Quiero entrenarme');
   });
 
   test('parseTranscript resuelve <Víctor English> al agente, sin símbolos', () => {

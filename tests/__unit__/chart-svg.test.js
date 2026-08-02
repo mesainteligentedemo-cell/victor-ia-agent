@@ -255,11 +255,11 @@ describe('donutChart', () => {
 });
 
 describe('gapChart', () => {
-  test('renderiza la brecha contra el estándar', () => {
+  test('narra la oportunidad de mejora sin jerga de manual de ventas', () => {
     const svg = gapChart(COMPETENCIAS_OK, 8);
     expectSvgLimpio(svg);
-    expect(svg).toMatch(/Objeciones: 4 de 10, 4 puntos debajo/);
-    expect(svg).toMatch(/Postura: 9 de 10, cumple el estándar/);
+    expect(svg).toMatch(/Objeciones: 4 de 10, faltan 4 puntos para el nivel esperado/);
+    expect(svg).toMatch(/Postura: 9 de 10, alcanza el nivel esperado/);
   });
 
   test('placeholder sin competencias', () => {

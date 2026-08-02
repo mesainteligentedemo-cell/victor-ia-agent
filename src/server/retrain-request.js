@@ -381,7 +381,7 @@ function buildRetrainEmail({ summary, record, links, origenCompetencias }) {
     `• Escuchar la sesión: ${links.pop_up_url}`,
     '',
     'Saludos,',
-    'Victor IA — Elite Training System',
+    'Victor IA — Programa de Desarrollo Profesional',
     '',
     `Folio ${record.id} · Prioridad ${record.prioridad} · `
       + `Solicitado el ${formatDateLong(ahora)} a las ${formatTimezoneCancun(ahora)} (America/Cancun)`
@@ -410,7 +410,7 @@ function buildRetrainEmail({ summary, record, links, origenCompetencias }) {
 <table role="presentation" width="640" cellpadding="0" cellspacing="0" style="max-width:640px;width:100%;margin:0 auto;background:#1A1A1A;border-radius:14px;overflow:hidden;border:1px solid rgba(229,179,62,.28)">
 
   <tr><td style="background:#262626;padding:28px 32px;border-bottom:3px solid #E5B33E">
-    <p style="${font};font-size:10px;letter-spacing:3px;text-transform:uppercase;color:#E5B33E;font-weight:700;margin:0 0 8px">Victorious Travelers Club · Elite Training</p>
+    <p style="${font};font-size:10px;letter-spacing:3px;text-transform:uppercase;color:#E5B33E;font-weight:700;margin:0 0 8px">Victorious Travelers Club · Desarrollo Profesional</p>
     <h1 style="${font};font-size:22px;color:#fff;margin:0;font-weight:700">🔄 Solicitud de Reentrenamiento Registrada</h1>
     <p style="${font};font-size:14px;color:#B8B8B8;margin:8px 0 0">${escapeHtml(nombre)} · ${escapeHtml(String(s.modulo || '—'))} · prioridad ${escapeHtml(record.prioridad)}</p>
     <p style="${font};font-size:11px;color:#B8B8B8;margin:8px 0 0">Folio ${escapeHtml(record.id)}</p>
@@ -447,7 +447,7 @@ function buildRetrainEmail({ summary, record, links, origenCompetencias }) {
     <div style="border-top:1px solid rgba(229,179,62,.28);margin:24px 0"></div>
 
     <p style="${para};margin:0 0 4px">Saludos,</p>
-    <p style="${para};margin:0"><strong style="color:#fff">Victor IA</strong> <span style="color:#B8B8B8">— Elite Training System</span></p>
+    <p style="${para};margin:0"><strong style="color:#fff">Victor IA</strong> <span style="color:#B8B8B8">— Programa de Desarrollo Profesional</span></p>
 
   </td></tr>
 

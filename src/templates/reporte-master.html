@@ -3,23 +3,31 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Reporte de Capacitación — {{nombre_completo}} · {{fecha_sesion}}</title>
+<title>Reporte de Desarrollo Profesional — {{nombre_completo}} · {{fecha_sesion}}</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700;900&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 /* ══════════════════════════════════════════════════════════════
-   VTC ELITE — REPORTE DE CAPACITACIÓN  ·  v4.0 (negro + oro)
+   VTC — REPORTE DE DESARROLLO PROFESIONAL  ·  v5.0 (negro + oro)
    Paleta de marca: negro #0D0D0D · oro cálido #E5B33E
 
-   Principios del rediseño:
+   A quién le habla este documento:
+   Dirección, Gerencia y Recursos Humanos de un hotel de 20,000
+   colaboradores. Ni una palabra del manual de ventas llega hasta aquí:
+   "Rapport" es Conexión, "PNL" es Comunicación y "brecha" es una
+   oportunidad de mejora. El vocabulario se decide en el servidor
+   (src/server/n8n-mapper.js y src/server/action-plan.js); esta hoja solo
+   lo presenta.
+
+   Principios del diseño:
    1. NADA tiene altura fija. Todo se dimensiona por su contenido.
       Una sesión de 5 minutos produce un reporte de 3 páginas; una de 30
       produce 15. El documento crece, no se estira con huecos.
    2. Ritmo vertical por margen entre bloques, no por padding de sección.
       El padding de una sección vacía dejaba bandas muertas de 80px.
    3. Cero saltos de página forzados. Solo se protege lo que NO debe
-      partirse por la mitad (una tarjeta, una burbuja, un paso del plan).
+      partirse por la mitad (una tarjeta, una intervención, un paso del plan).
    4. Todo el CSS va inline: el reporte viaja como PDF y como email,
       ninguno de los dos contextos garantiza hojas de estilo externas.
    5. Sin azules. El único acento cromático es el oro; el resto es
@@ -507,34 +515,41 @@ body{
 .cta:active strong{color:#0D0D0D}
 
 /* ─── TRANSCRIPCIÓN ─────────────────────────────────────────── */
-/* Solo hablante + texto literal. Sin etiquetas de sistema, sin símbolos.
-   El hablante y la marca de tiempo comparten renglón: en una sesión de 30
-   minutos son ~260 turnos, y una línea de más por turno son cinco páginas. */
+/* Un bloque independiente por intervención. El nombre de quien habla y el
+   minuto exacto van en su propio renglón; debajo, únicamente lo que se dijo.
+   Se descartaron los globos de chat: alineados a izquierda y derecha se leen
+   como una conversación de mensajería, y este documento lo revisa la dirección
+   del hotel. Ninguna etiqueta de sistema llega hasta aquí. */
 .chat{padding:0}
-.turn{display:flex;margin-bottom:8px}
-.turn:last-child{margin-bottom:0}
-.turn.right{justify-content:flex-end}
-.bubble{
-  max-width:82%;padding:8px 13px 9px;border-radius:12px;
+.turn{
+  padding:11px 15px;
+  border-radius:10px;
+  background:var(--surface);
+  border:1px solid var(--hair-soft);
+  border-left:3px solid var(--hair-soft);
   box-shadow:var(--shadow-md);
+  margin-bottom:9px;
 }
-.bubble.agent{
-  background:linear-gradient(160deg, rgba(229,179,62,.16), rgba(229,179,62,.05));
-  border:1px solid var(--hair);border-bottom-right-radius:4px;
+.turn:last-child{margin-bottom:0}
+.turn.is-agent{
+  border-left-color:var(--gold);
+  background:linear-gradient(140deg, rgba(229,179,62,.13), rgba(229,179,62,.03));
+  border-color:var(--hair);
 }
-.bubble.user{
+.turn.is-user{
+  border-left-color:var(--neutral);
   background:var(--surface-2);
-  border:1px solid var(--hair-soft);border-bottom-left-radius:4px;
 }
-.bubble-head{
-  display:flex;justify-content:space-between;align-items:baseline;
-  gap:12px;margin-bottom:1px;
+.turn-head{
+  display:flex;align-items:baseline;gap:10px;
+  margin-bottom:6px;padding-bottom:5px;
+  border-bottom:1px dashed rgba(255,255,255,.09);
 }
-.bubble-speaker{font-size:9.5px;letter-spacing:1.5px;text-transform:uppercase;font-weight:800;line-height:1.5}
-.bubble.agent .bubble-speaker{color:var(--gold)}
-.bubble.user .bubble-speaker{color:var(--neutral)}
-.bubble-time{font-size:9px;color:var(--muted);opacity:.7;line-height:1.5;white-space:nowrap}
-.bubble-text{font-size:12.3px;line-height:1.58;color:#EDEDED;white-space:pre-line}
+.turn-speaker{font-size:11px;letter-spacing:1.7px;text-transform:uppercase;font-weight:800;line-height:1.5;flex:1}
+.turn.is-agent .turn-speaker{color:var(--gold)}
+.turn.is-user .turn-speaker{color:var(--paper)}
+.turn-time{font-size:10px;color:var(--muted);letter-spacing:.6px;white-space:nowrap;line-height:1.5}
+.turn-text{font-size:12.6px;line-height:1.7;color:#EDEDED;white-space:pre-line}
 
 /* ─── PIE ───────────────────────────────────────────────────── */
 .footer{
@@ -579,7 +594,8 @@ p, li{orphans:2;widows:2}
   .hero{grid-template-columns:1fr;justify-items:center;text-align:center}
   .ring{max-width:150px}
   .hito,.mon,.semaforo{grid-template-columns:1fr;gap:6px}
-  .bubble{max-width:94%}
+  .turn{padding:10px 12px}
+  .turn-head{flex-wrap:wrap;gap:4px 10px}
 }
 </style>
 </head>
@@ -590,18 +606,18 @@ p, li{orphans:2;widows:2}
        PORTADA
        ═══════════════════════════════════════════════════════ -->
   <header class="cover">
-    <div class="crest"><span class="eyebrow">Victorious Travelers Club · Elite Training</span></div>
-    <h1>Reporte de Capacitación<em>{{nombre_completo}}</em></h1>
+    <div class="crest"><span class="eyebrow">Victorious Travelers Club · Desarrollo Profesional</span></div>
+    <h1>Reporte de Desarrollo Profesional<em>{{nombre_completo}}</em></h1>
     <p class="lede">{{{resumen}}}</p>
     <div class="cover-meta">
-      <div>Asesor<strong>{{nombre_completo}}</strong></div>
-      <div>ID de empleado<strong>{{empleado_id}}</strong></div>
+      <div>Colaborador<strong>{{nombre_completo}}</strong></div>
+      <div>Número de empleado<strong>{{empleado_id}}</strong></div>
       <div>Departamento<strong>{{departamento}}</strong></div>
-      <div>Fecha de sesión<strong>{{fecha_larga}}</strong></div>
+      <div>Fecha de la sesión<strong>{{fecha_larga}}</strong></div>
       <div>Hora (Cancún)<strong>{{hora_cancun}}</strong></div>
       <div>Módulo<strong>{{modulo}}</strong></div>
       <div>Duración<strong>{{duracion_humana}}</strong></div>
-      <div>Desempeño<strong>{{score_overall}}/10 · {{scoreTotal}}%</strong></div>
+      <div>Desempeño general<strong>{{score_overall}}/10 · {{scoreTotal}}%</strong></div>
     </div>
   </header>
 
@@ -611,28 +627,28 @@ p, li{orphans:2;widows:2}
   <section class="section">
     <div class="section-head">
       <span class="section-num">01</span>
-      <h2 class="section-title">Perfil del asesor</h2>
-      <span class="section-note">Identidad y rol evaluado en esta sesión</span>
+      <h2 class="section-title">Perfil del Colaborador</h2>
+      <span class="section-note">Datos de identificación y contexto de la sesión evaluada</span>
     </div>
     <div class="grid">
       <div class="card card-gold">
-        <div class="card-title">Datos del asesor</div>
+        <div class="card-title">Información del colaborador</div>
         <dl>
           <div class="row"><dt>Nombre completo</dt><dd>{{nombre_completo}}</dd></div>
-          <div class="row"><dt>ID de empleado</dt><dd>{{empleado_id}}</dd></div>
+          <div class="row"><dt>Número de empleado</dt><dd>{{empleado_id}}</dd></div>
           <div class="row"><dt>Departamento</dt><dd>{{departamento}}</dd></div>
           <div class="row"><dt>Puesto</dt><dd>{{puesto}}</dd></div>
           <div class="row"><dt>Idioma de la sesión</dt><dd>{{idioma}}</dd></div>
         </dl>
       </div>
       <div class="card card-gold">
-        <div class="card-title">Escenario de entrenamiento</div>
+        <div class="card-title">Contexto de la práctica</div>
         <dl>
           <div class="row"><dt>Módulo</dt><dd>{{modulo}}</dd></div>
           <div class="row"><dt>Fecha y hora</dt><dd>{{fecha_hora_larga}}</dd></div>
           <div class="row"><dt>Duración</dt><dd>{{duracion_humana}}</dd></div>
-          <div class="row"><dt>Familia simulada</dt><dd>{{familia_nombre}}</dd></div>
-          <div class="row"><dt>ID de conversación</dt><dd>{{conversationId}}</dd></div>
+          <div class="row"><dt>Escenario practicado</dt><dd>Familia {{familia_nombre}}</dd></div>
+          <div class="row"><dt>Folio de la sesión</dt><dd>{{conversationId}}</dd></div>
           <div class="row"><dt>Nivel alcanzado</dt><dd>{{nivel_desempeno}}</dd></div>
         </dl>
       </div>
@@ -643,13 +659,13 @@ p, li{orphans:2;widows:2}
   <section class="section">
     <div class="section-head">
       <span class="section-num">02</span>
-      <h2 class="section-title">Resumen de la sesión</h2>
-      <span class="section-note">Desempeño global y métricas clave</span>
+      <h2 class="section-title">Resumen Ejecutivo</h2>
+      <span class="section-note">Resultado general de la sesión y datos clave para la toma de decisiones</span>
     </div>
 
     <div class="hero">
       <div class="ring">
-        <svg viewBox="0 0 140 140" role="img" aria-label="Desempeño global {{score_overall}} de 10, equivalente a {{scoreTotal}} por ciento">
+        <svg viewBox="0 0 140 140" role="img" aria-label="Desempeño general {{score_overall}} de 10, equivalente a {{scoreTotal}} por ciento">
           <circle cx="70" cy="70" r="58" fill="none" stroke="rgba(255,255,255,.09)" stroke-width="13"/>
           <circle cx="70" cy="70" r="58" fill="none" stroke="{{ring_color}}" stroke-width="13"
                   stroke-linecap="round" stroke-dasharray="{{ring_dash}} {{ring_gap}}"/>
@@ -661,7 +677,7 @@ p, li{orphans:2;widows:2}
       </div>
       <div class="hero-body">
         <span class="badge {{nivel_clase}}">{{nivel_desempeno}}</span>
-        <h3>Desempeño global</h3>
+        <h3>Desempeño General</h3>
         <p class="prose">{{{actividad_sesion}}}</p>
       </div>
     </div>
@@ -669,11 +685,11 @@ p, li{orphans:2;widows:2}
     <div class="grid-tight">
       <div class="metric"><div class="metric-label">Duración</div><div class="metric-value sm">{{duracion_humana}}</div></div>
       <div class="metric"><div class="metric-label">Módulo</div><div class="metric-value sm">{{modulo}}</div></div>
-      <div class="metric"><div class="metric-label">Score global</div><div class="metric-value {{score_clase}}">{{scoreTotal}}%</div></div>
-      <div class="metric"><div class="metric-label">Potencial de mejora</div><div class="metric-value gold">{{mejora_potencial}}</div></div>
+      <div class="metric"><div class="metric-label">Desempeño general</div><div class="metric-value {{score_clase}}">{{scoreTotal}}%</div></div>
+      <div class="metric"><div class="metric-label">Margen de crecimiento</div><div class="metric-value gold">{{mejora_potencial}}</div></div>
       {{#if plan}}
-      <div class="metric"><div class="metric-label">En estándar</div><div class="metric-value">{{plan.competencias_en_estandar}}<span style="font-size:15px;color:var(--muted)">/{{plan.competencias_totales}}</span></div></div>
-      <div class="metric"><div class="metric-label">Intervenciones</div><div class="metric-value sm">{{transcript_turnos}} turnos</div></div>
+      <div class="metric"><div class="metric-label">Competencias consolidadas</div><div class="metric-value">{{plan.competencias_en_estandar}}<span style="font-size:15px;color:var(--muted)">/{{plan.competencias_totales}}</span></div></div>
+      <div class="metric"><div class="metric-label">Intervenciones</div><div class="metric-value sm">{{transcript_turnos}} participaciones</div></div>
       {{/if}}
     </div>
 
@@ -688,7 +704,7 @@ p, li{orphans:2;widows:2}
     {{/if}}
 
     <div class="card">
-      <div class="card-title">Recomendación del coach</div>
+      <div class="card-title">Recomendación del equipo de desarrollo</div>
       <p class="prose">{{{recomendacion_coach}}}</p>
     </div>
   </section>
@@ -697,55 +713,55 @@ p, li{orphans:2;widows:2}
   <section class="section">
     <div class="section-head">
       <span class="section-num">03</span>
-      <h2 class="section-title">Analítica visual de la sesión</h2>
-      <span class="section-note">Seis vistas de los mismos datos, cada una responde una pregunta distinta</span>
+      <h2 class="section-title">Evaluación de Competencias Profesionales</h2>
+      <span class="section-note">Seis perspectivas del mismo desempeño, cada una responde una pregunta distinta</span>
     </div>
 
     <div class="chart-card">
       <div class="chart-head">
-        <span class="chart-title">Perfil de competencias</span>
+        <span class="chart-title">Perfil general de competencias</span>
       </div>
-      <p class="chart-sub">Forma general del desempeño. Un polígono equilibrado indica dominio parejo; las hendiduras señalan dónde se rompe la ejecución.</p>
+      <p class="chart-sub">Vista de conjunto del desempeño. Una figura equilibrada indica dominio parejo de todas las habilidades; los puntos más cercanos al centro señalan dónde conviene enfocar el acompañamiento.</p>
       {{{chart_radar}}}
     </div>
 
     <div class="chart-card">
       <div class="chart-head">
-        <span class="chart-title">Ranking de competencias · brecha contra la meta VTC</span>
+        <span class="chart-title">Competencias ordenadas por nivel de dominio</span>
       </div>
-      <p class="chart-sub">Las mismas competencias ordenadas de mayor a menor contra la línea de meta VTC de 8.0. A la derecha, cuánto le falta a cada una: <strong>cumple meta</strong> o los puntos exactos de brecha.</p>
+      <p class="chart-sub">Las mismas habilidades de mayor a menor, comparadas con el nivel esperado de 8.0. A la derecha se indica si cada una <strong>alcanza el nivel esperado</strong> o cuánto falta para lograrlo.</p>
       {{{chart_ranking}}}
     </div>
 
     <div class="chart-card">
       <div class="chart-head">
-        <span class="chart-title">Desempeño por fase</span>
+        <span class="chart-title">Desempeño a lo largo de la conversación</span>
       </div>
-      <p class="chart-sub">Cómo se sostuvo el nivel a lo largo del arco de la sesión: apertura, descubrimiento, presentación y cierre.</p>
+      <p class="chart-sub">Cómo se sostuvo el nivel durante las cuatro etapas de la conversación: bienvenida, exploración de necesidades, presentación y conclusión.</p>
       {{{chart_timeline}}}
     </div>
 
     <div class="chart-card">
       <div class="chart-head">
-        <span class="chart-title">Curva de engagement</span>
+        <span class="chart-title">Nivel de participación del cliente</span>
       </div>
-      <p class="chart-sub">Densidad de intercambio minuto a minuto. El valle marca el punto donde conviene revisar la grabación.</p>
+      <p class="chart-sub">Qué tan activo se mantuvo el intercambio minuto a minuto. El punto más bajo indica el momento de la grabación que conviene revisar en la siguiente sesión de acompañamiento.</p>
       {{{chart_engagement}}}
     </div>
 
     <div class="chart-card">
       <div class="chart-head">
-        <span class="chart-title">Distribución del habla</span>
+        <span class="chart-title">Equilibrio de la conversación</span>
       </div>
-      <p class="chart-sub">Cuánto habló el asesor frente al cliente simulado. En consultiva, el asesor debe quedar por debajo del 45%.</p>
+      <p class="chart-sub">Proporción del tiempo en que habló el colaborador frente al cliente. En una atención consultiva, lo recomendable es que el colaborador se mantenga por debajo del 45% y dedique el resto a escuchar.</p>
       {{{chart_habla}}}
     </div>
 
     <div class="chart-card">
       <div class="chart-head">
-        <span class="chart-title">Brecha contra el estándar VTC</span>
+        <span class="chart-title">Oportunidades de mejora por competencia</span>
       </div>
-      <p class="chart-sub">Distancia exacta entre lo ejecutado y el estándar de 8.0. Es la lista de trabajo del coach, ordenada por urgencia.</p>
+      <p class="chart-sub">Distancia entre el desempeño actual y el nivel esperado de 8.0, ordenada por prioridad. Es la agenda de trabajo para las próximas sesiones de acompañamiento.</p>
       {{{chart_brecha}}}
     </div>
   </section>
@@ -755,8 +771,8 @@ p, li{orphans:2;widows:2}
   <section class="section">
     <div class="section-head">
       <span class="section-num">04</span>
-      <h2 class="section-title">Principios neurocientíficos activados</h2>
-      <span class="section-note">Mecanismos de decisión detectados durante la sesión</span>
+      <h2 class="section-title">Fundamentos Psicológicos de la Comunicación Efectiva</h2>
+      <span class="section-note">Recursos de comunicación que el colaborador aplicó para generar confianza</span>
     </div>
 
     <div class="stack">
@@ -769,7 +785,7 @@ p, li{orphans:2;widows:2}
     </div>
 
     <div class="gauge">
-      <div class="gauge-label">Cumplimiento neurocientífico</div>
+      <div class="gauge-label">Aplicación de la metodología</div>
       <div class="gauge-value">{{cumplimiento_neuro}}%</div>
       <div class="gauge-track"><div class="gauge-fill" style="width:{{cumplimiento_neuro}}%"></div></div>
     </div>
@@ -783,12 +799,12 @@ p, li{orphans:2;widows:2}
   <section class="section">
     <div class="section-head">
       <span class="section-num">05</span>
-      <h2 class="section-title">Fortalezas y áreas de mejora</h2>
-      <span class="section-note">Qué replicar en el equipo y qué corregir en 7 días</span>
+      <h2 class="section-title">Fortalezas y Oportunidades de Mejora</h2>
+      <span class="section-note">Qué conviene replicar en el equipo y qué reforzar en los próximos 7 días</span>
     </div>
     <div class="grid-wide">
       <div class="card card-gold">
-        <div class="card-title">Fortalezas identificadas</div>
+        <div class="card-title">Fortalezas que destacan</div>
         {{#if fortalezas_list}}
         <ul class="tick-list list-good">
           {{#each fortalezas_list}}<li>{{this}}</li>{{/each}}
@@ -798,7 +814,7 @@ p, li{orphans:2;widows:2}
         {{/if}}
       </div>
       <div class="card card-warn">
-        <div class="card-title">Áreas de mejora</div>
+        <div class="card-title">Oportunidades de mejora</div>
         {{#if areas_list}}
         <ul class="tick-list list-warn">
           {{#each areas_list}}<li>{{this}}</li>{{/each}}
@@ -814,8 +830,8 @@ p, li{orphans:2;widows:2}
   <section class="section">
     <div class="section-head">
       <span class="section-num">06</span>
-      <h2 class="section-title">Manejo de objeciones</h2>
-      <span class="section-note">Objeciones trabajadas y calidad de la respuesta</span>
+      <h2 class="section-title">Atención de Inquietudes del Cliente</h2>
+      <span class="section-note">Dudas planteadas por el cliente y calidad de la respuesta ofrecida</span>
     </div>
     <div class="card card-sky">
       {{#if objeciones_list}}
@@ -826,7 +842,7 @@ p, li{orphans:2;widows:2}
       <p class="prose">{{{objeciones_trabajadas}}}</p>
       {{/if}}
       <div class="row" style="margin-top:12px;border-top:1px solid var(--hair);border-bottom:0;padding-top:11px">
-        <dt>Score de manejo de objeciones</dt>
+        <dt>Nivel alcanzado en atención de inquietudes</dt>
         <dd style="color:{{ring_color}};font-size:15px">{{score_objecciones}}/10</dd>
       </div>
     </div>
@@ -836,17 +852,17 @@ p, li{orphans:2;widows:2}
   <section class="section">
     <div class="section-head">
       <span class="section-num">07</span>
-      <h2 class="section-title">Análisis de PNL</h2>
-      <span class="section-note">Anclajes, reencuadres y calibración del lenguaje</span>
+      <h2 class="section-title">Técnicas de Comunicación Avanzada</h2>
+      <span class="section-note">Uso del lenguaje, escucha activa y adaptación al interlocutor</span>
     </div>
     <div class="card card-gold">
       <p class="prose">{{{analisis_pnl}}}</p>
       <div class="competencias-grid" style="margin-top:14px">
-        <div class="metric"><div class="metric-label">Rapport</div><div class="metric-value">{{score_rapport}}</div></div>
-        <div class="metric"><div class="metric-label">Técnicas PNL</div><div class="metric-value">{{score_pnl}}</div></div>
-        <div class="metric"><div class="metric-label">Lectura de sala</div><div class="metric-value">{{score_lectura_sala}}</div></div>
-        <div class="metric"><div class="metric-label">Postura</div><div class="metric-value">{{score_postura}}</div></div>
-        <div class="metric"><div class="metric-label">Cierre</div><div class="metric-value">{{score_cierre}}</div></div>
+        <div class="metric"><div class="metric-label">Conexión con el cliente</div><div class="metric-value">{{score_rapport}}</div></div>
+        <div class="metric"><div class="metric-label">Manejo del lenguaje</div><div class="metric-value">{{score_pnl}}</div></div>
+        <div class="metric"><div class="metric-label">Lectura del ambiente</div><div class="metric-value">{{score_lectura_sala}}</div></div>
+        <div class="metric"><div class="metric-label">Presencia y actitud</div><div class="metric-value">{{score_postura}}</div></div>
+        <div class="metric"><div class="metric-label">Conclusión de la venta</div><div class="metric-value">{{score_cierre}}</div></div>
       </div>
     </div>
 
@@ -860,25 +876,25 @@ p, li{orphans:2;widows:2}
   <section class="section">
     <div class="section-head">
       <span class="section-num">08</span>
-      <h2 class="section-title">Plan de acción para el gerente</h2>
-      <span class="section-note">Diagnóstico, intervención, validación y criterios de decisión</span>
+      <h2 class="section-title">Plan de Desarrollo Profesional</h2>
+      <span class="section-note">Análisis de desempeño, recomendaciones de mejora y seguimiento del progreso</span>
     </div>
 
     {{#if plan}}
 
-    <!-- Resumen operativo del plan: lo que cuesta y cuándo se valida -->
+    <!-- Resumen operativo del plan: qué requiere y cuándo se verifica -->
     <div class="grid-tight">
-      <div class="metric"><div class="metric-label">Competencias críticas</div><div class="metric-value {{#if plan.competencias_criticas}}warn{{else}}good{{/if}}">{{plan.competencias_criticas}}</div></div>
-      <div class="metric"><div class="metric-label">Brecha total</div><div class="metric-value gold">{{plan.brecha_total}} pts</div></div>
-      <div class="metric"><div class="metric-label">Coaching estimado</div><div class="metric-value sm">{{plan.sesiones_totales}} sesiones · {{plan.horas_coaching}} h</div></div>
-      <div class="metric"><div class="metric-label">Validación</div><div class="metric-value sm">{{plan.fecha_validacion}}</div></div>
+      <div class="metric"><div class="metric-label">Competencias por reforzar</div><div class="metric-value {{#if plan.competencias_criticas}}warn{{else}}good{{/if}}">{{plan.competencias_criticas}}</div></div>
+      <div class="metric"><div class="metric-label">Margen de crecimiento</div><div class="metric-value gold">{{plan.brecha_total}} pts</div></div>
+      <div class="metric"><div class="metric-label">Acompañamiento estimado</div><div class="metric-value sm">{{plan.sesiones_totales}} sesiones · {{plan.horas_coaching}} h</div></div>
+      <div class="metric"><div class="metric-label">Fecha de revisión</div><div class="metric-value sm">{{plan.fecha_validacion}}</div></div>
     </div>
 
-    <!-- ── A · Diagnóstico completo ─────────────────────────── -->
+    <!-- ── A · Análisis de desempeño ────────────────────────── -->
     <div class="block-head">
       <span class="block-letter">A</span>
-      <span class="block-title">Diagnóstico completo</span>
-      <span class="block-note">Score, fortalezas, áreas críticas y brecha</span>
+      <span class="block-title">Análisis de Desempeño</span>
+      <span class="block-note">Resultado general, fortalezas y áreas por reforzar</span>
     </div>
     <div class="stack">
       {{#each plan.diagnostico}}
@@ -889,11 +905,11 @@ p, li{orphans:2;widows:2}
       {{/each}}
     </div>
 
-    <!-- ── B · Plan de mejora por competencia ───────────────── -->
+    <!-- ── B · Recomendaciones de mejora por competencia ────── -->
     <div class="block-head">
       <span class="block-letter">B</span>
-      <span class="block-title">Plan de mejora detallado</span>
-      <span class="block-note">Por competencia: score actual, meta y ejercicios</span>
+      <span class="block-title">Recomendaciones de Mejora</span>
+      <span class="block-note">Por competencia: nivel actual, nivel esperado y prácticas sugeridas</span>
     </div>
     {{#if plan.mejora}}
     <div>
@@ -905,7 +921,7 @@ p, li{orphans:2;widows:2}
           <div class="comp-head">
             <span class="comp-name">{{this.orden}}. {{this.competencia}}</span>
             <span class="pill {{this.prioridad_cls}}">Prioridad {{this.prioridad}}</span>
-            <span class="comp-scores"><b>{{this.score}}</b>/10 → meta {{this.meta}}/10</span>
+            <span class="comp-scores"><b>{{this.score}}</b>/10 → nivel esperado {{this.meta}}/10</span>
           </div>
 
           <div class="bar">
@@ -913,11 +929,11 @@ p, li{orphans:2;widows:2}
             <div class="bar-meta" style="left:{{this.barra_meta}}%"></div>
           </div>
           <div class="bar-legend">
-            <span>Ejecución actual: {{this.score}}/10</span>
+            <span>Nivel actual: {{this.score}}/10</span>
             <span>{{this.brecha_texto}}</span>
           </div>
 
-          <p class="comp-tecnica">Técnica: {{this.tecnica}}</p>
+          <p class="comp-tecnica">Enfoque de trabajo: {{this.tecnica}}</p>
         </div>
 
         <ul class="tick-list list-step">
@@ -925,25 +941,25 @@ p, li{orphans:2;widows:2}
         </ul>
 
         <div class="comp-meta">
-          <div><span>Dosis</span>{{this.dosis_texto}} ({{this.minutos_totales}} min en total)</div>
-          <div><span>Métrica de control</span>{{this.metrica}}</div>
-          <div><span>Trayectoria esperada</span>{{this.timeline}}</div>
-          <div><span>Señal de que ya prendió</span>{{this.senal_exito}}</div>
+          <div><span>Dedicación sugerida</span>{{this.dosis_texto}} ({{this.minutos_totales}} min en total)</div>
+          <div><span>Cómo se mide el avance</span>{{this.metrica}}</div>
+          <div><span>Progreso esperado</span>{{this.timeline}}</div>
+          <div><span>Señal de que ya se logró</span>{{this.senal_exito}}</div>
         </div>
       </div>
       {{/each}}
     </div>
     {{else}}
     <div class="card">
-      <p class="prose">Ninguna competencia queda por debajo del estándar de {{plan.meta_estandar}}/10. No hay plan correctivo que aplicar: el trabajo pasa a modo mantenimiento con una simulación semanal.</p>
+      <p class="prose">Todas las competencias alcanzan el nivel esperado de {{plan.meta_estandar}}/10. No se requieren acciones correctivas: el trabajo continúa en modo de mantenimiento, con una práctica semanal para sostener el nivel alcanzado.</p>
     </div>
     {{/if}}
 
-    <!-- ── C · Hitos y validaciones ─────────────────────────── -->
+    <!-- ── C · Seguimiento y verificación de progreso ───────── -->
     <div class="block-head">
       <span class="block-letter">C</span>
-      <span class="block-title">Hitos y validaciones</span>
-      <span class="block-note">Calendario con métrica verificable por hito</span>
+      <span class="block-title">Seguimiento y Verificación de Progreso</span>
+      <span class="block-note">Calendario con un resultado comprobable en cada etapa</span>
     </div>
     <div class="card">
       {{#each plan.hitos}}
@@ -951,17 +967,17 @@ p, li{orphans:2;widows:2}
         <div class="hito-momento">{{this.momento}}</div>
         <div>
           <p>{{this.objetivo}}</p>
-          <p class="hito-metrica"><b>Métrica:</b> {{this.metrica}} · <b>Verificación:</b> {{this.verificacion}}</p>
+          <p class="hito-metrica"><b>Cómo se mide:</b> {{this.metrica}} · <b>Cómo se comprueba:</b> {{this.verificacion}}</p>
         </div>
       </div>
       {{/each}}
     </div>
 
-    <!-- ── D · Criterios de aprobación ──────────────────────── -->
+    <!-- ── D · Criterios de certificación ───────────────────── -->
     <div class="block-head">
       <span class="block-letter">D</span>
-      <span class="block-title">Criterios de aprobación</span>
-      <span class="block-note">Reglas de decisión, no opiniones</span>
+      <span class="block-title">Criterios de Certificación</span>
+      <span class="block-note">Reglas claras y objetivas para autorizar la operación</span>
     </div>
     <div class="stack">
       {{#each plan.criterios}}
@@ -973,21 +989,21 @@ p, li{orphans:2;widows:2}
       {{/each}}
     </div>
 
-    <!-- ── E · Próximos pasos del gerente ───────────────────── -->
+    <!-- ── E · Acciones inmediatas y seguimiento ────────────── -->
     <div class="block-head">
       <span class="block-letter">E</span>
-      <span class="block-title">Próximos pasos del gerente</span>
-      <span class="block-note">Qué hacer hoy y qué monitorear</span>
+      <span class="block-title">Acciones Inmediatas y Seguimiento</span>
+      <span class="block-note">Qué hacer hoy y qué revisar en los próximos días</span>
     </div>
     <div class="grid-wide">
       <div class="card card-gold">
-        <div class="card-title">Hoy mismo</div>
+        <div class="card-title">Acciones para el día de hoy</div>
         <ul class="tick-list list-step">
           {{#each plan.pasos.hoy}}<li>{{this}}</li>{{/each}}
         </ul>
       </div>
       <div class="card card-sky">
-        <div class="card-title">Monitoreo continuo</div>
+        <div class="card-title">Seguimiento continuo</div>
         {{#each plan.pasos.monitoreo}}
         <div class="mon">
           <div class="mon-freq">{{this.frecuencia}}</div>
@@ -998,22 +1014,22 @@ p, li{orphans:2;widows:2}
     </div>
 
     <div class="callout">
-      <span>Reevaluación</span>
+      <span>Próxima evaluación</span>
       <p>{{{plan.pasos.reevaluacion}}}</p>
     </div>
 
     <div class="card card-warn">
-      <div class="card-title">Escalar a dirección si ocurre alguno de estos</div>
+      <div class="card-title">Situaciones que conviene informar a Dirección</div>
       <ul class="tick-list list-warn">
         {{#each plan.pasos.escalar}}<li>{{this}}</li>{{/each}}
       </ul>
     </div>
 
-    <!-- ── F · Notas de coaching ────────────────────────────── -->
+    <!-- ── F · Observaciones del equipo de desarrollo ───────── -->
     <div class="block-head">
       <span class="block-letter">F</span>
-      <span class="block-title">Notas de coaching</span>
-      <span class="block-note">Observaciones, patrones y recomendaciones</span>
+      <span class="block-title">Observaciones del Equipo de Desarrollo</span>
+      <span class="block-note">Notas de la sesión, tendencias identificadas y sugerencias</span>
     </div>
     <div class="grid-wide">
       <div class="card">
@@ -1023,7 +1039,7 @@ p, li{orphans:2;widows:2}
         </ul>
       </div>
       <div class="card">
-        <div class="card-title">Qué reforzar</div>
+        <div class="card-title">Aspectos por reforzar</div>
         <ul class="tick-list list-gold">
           {{#each plan.notas.reforzar}}<li>{{this}}</li>{{/each}}
         </ul>
@@ -1032,7 +1048,7 @@ p, li{orphans:2;widows:2}
 
     {{#if plan.notas.patrones}}
     <div class="card card-sky">
-      <div class="card-title">Patrones detectados</div>
+      <div class="card-title">Tendencias identificadas</div>
       <ul class="tick-list list-info">
         {{#each plan.notas.patrones}}<li>{{this}}</li>{{/each}}
       </ul>
@@ -1040,26 +1056,26 @@ p, li{orphans:2;widows:2}
     {{/if}}
 
     <div class="card card-gold">
-      <div class="card-title">Recomendaciones para el gerente</div>
+      <div class="card-title">Sugerencias para el líder del área</div>
       <ul class="tick-list list-gold">
         {{#each plan.notas.recomendaciones}}<li>{{this}}</li>{{/each}}
       </ul>
     </div>
 
     {{else}}
-    <!-- Respaldo: si el plan expandido no se pudo construir, el reporte sigue
-         entregando las tres frases del plan clásico en vez de una sección vacía. -->
+    <!-- Respaldo: si el plan detallado no se pudo construir, el reporte sigue
+         entregando los tres apartados esenciales en vez de una sección vacía. -->
     <div class="step">
       <div class="step-num">1</div>
-      <div><h4>Diagnóstico y seguimiento</h4><p>{{{plan_1}}}</p></div>
+      <div><h4>Análisis de desempeño</h4><p>{{{plan_1}}}</p></div>
     </div>
     <div class="step">
       <div class="step-num">2</div>
-      <div><h4>Plan de mejora · 7 días</h4><p>{{{plan_2}}}</p></div>
+      <div><h4>Recomendaciones de mejora · 7 días</h4><p>{{{plan_2}}}</p></div>
     </div>
     <div class="step">
       <div class="step-num">3</div>
-      <div><h4>Validación y próximas acciones</h4><p>{{{plan_3}}}</p></div>
+      <div><h4>Seguimiento y verificación de progreso</h4><p>{{{plan_3}}}</p></div>
     </div>
     {{/if}}
   </section>
@@ -1068,50 +1084,50 @@ p, li{orphans:2;widows:2}
   <section class="section">
     <div class="section-head">
       <span class="section-num">09</span>
-      <h2 class="section-title">Acciones disponibles</h2>
-      <span class="section-note">Accesos directos a la sesión, al material y al reentrenamiento</span>
+      <h2 class="section-title">Recursos y Acciones Disponibles</h2>
+      <span class="section-note">Acceso a la grabación, al documento completo y a una nueva sesión de práctica</span>
     </div>
     <!-- target="_blank": el reporte se abre desde el correo y desde el PDF.
          Sin esto, el gerente pierde el reporte al pulsar cualquiera de los tres. -->
     <div class="cta-wrap">
-      <a class="cta" href="{{pop_up_url}}" target="_blank" rel="noopener noreferrer"><strong>Escuchar la sesión</strong><span>Audio MP3 completo</span></a>
-      <a class="cta" href="{{pdf_download_url}}" target="_blank" rel="noopener noreferrer"><strong>Descargar el reporte</strong><span>PDF con gráficos</span></a>
-      <a class="cta" href="{{retrain_url}}" target="_blank" rel="noopener noreferrer"><strong>Repetir el entrenamiento</strong><span>Nueva solicitud</span></a>
+      <a class="cta" href="{{pop_up_url}}" target="_blank" rel="noopener noreferrer"><strong>Escuchar la sesión</strong><span>Grabación completa en audio</span></a>
+      <a class="cta" href="{{pdf_download_url}}" target="_blank" rel="noopener noreferrer"><strong>Descargar el reporte</strong><span>Documento PDF con gráficos</span></a>
+      <a class="cta" href="{{retrain_url}}" target="_blank" rel="noopener noreferrer"><strong>Solicitar nueva práctica</strong><span>Programar una sesión adicional</span></a>
     </div>
 
-    <!-- El CTA sin destino visible no se usa: si el gerente no sabe a dónde
-         llega la solicitud, no la manda. Aquí se dice explícitamente. -->
+    <!-- Un botón sin destino visible no se usa: si el líder del área no sabe a
+         dónde llega la solicitud, no la envía. Aquí se explica paso a paso. -->
     <div class="card card-gold">
-      <div class="card-title">Cómo funciona la solicitud de reentrenamiento</div>
+      <div class="card-title">Cómo solicitar una nueva sesión de práctica</div>
       <ul class="tick-list list-step">
-        <li>Abre <strong>Repetir el entrenamiento</strong> desde este reporte o desde el correo. El enlace ya viene firmado para esta sesión.</li>
-        <li>Marca las competencias a reforzar (vienen preseleccionadas las que están por debajo del estándar) y escribe las notas para el colaborador.</li>
-        <li>Al enviar, la solicitud queda registrada con el resumen del asesor, los scores, las áreas críticas, tus notas y el enlace a este reporte.</li>
-        <li>Recibes la confirmación en pantalla con el folio de la solicitud.</li>
+        <li>Abre <strong>Solicitar nueva práctica</strong> desde este reporte o desde el correo. El enlace corresponde únicamente a esta sesión.</li>
+        <li>Selecciona las competencias por reforzar — vienen preseleccionadas las que aún no alcanzan el nivel esperado — y agrega tus comentarios para el colaborador.</li>
+        <li>Al enviar, la solicitud queda registrada junto con el resumen de la sesión, los resultados, las competencias por reforzar, tus comentarios y el enlace a este reporte.</li>
+        <li>Recibirás en pantalla la confirmación con el folio de la solicitud.</li>
       </ul>
     </div>
   </section>
 
   <!-- ═══════════════════ 10 · TRANSCRIPCIÓN ══════════════════ -->
   <!-- Sin salto de página forzado: si la conversación fue corta, la
-       transcripción arranca en la misma hoja y el reporte termina antes. -->
+       transcripción arranca en la misma hoja y el reporte termina antes.
+       Cada intervención ocupa su propio bloque: quién habla, en qué minuto y
+       qué dijo. Nada más. -->
   {{#if transcription}}
   <section class="section">
     <div class="section-head">
       <span class="section-num">10</span>
-      <h2 class="section-title">Transcripción completa</h2>
-      <span class="section-note">{{transcript_turnos}} intervenciones · texto literal de la sesión</span>
+      <h2 class="section-title">Transcripción de la Sesión</h2>
+      <span class="section-note">{{transcript_turnos}} intervenciones · registro textual de la conversación</span>
     </div>
     <div class="chat">
       {{#each transcription}}
-      <div class="turn {{this.side}}">
-        <div class="bubble {{this.type}}">
-          <div class="bubble-head">
-            <span class="bubble-speaker">{{this.speaker}}</span>
-            {{#if this.timestamp}}<span class="bubble-time">{{this.timestamp}}</span>{{/if}}
-          </div>
-          <div class="bubble-text">{{this.text}}</div>
+      <div class="turn is-{{this.type}}">
+        <div class="turn-head">
+          <span class="turn-speaker">{{this.speaker}}</span>
+          {{#if this.timestamp}}<span class="turn-time">{{this.timestamp}}</span>{{/if}}
         </div>
+        <div class="turn-text">{{this.text}}</div>
       </div>
       {{/each}}
     </div>
@@ -1124,8 +1140,8 @@ p, li{orphans:2;widows:2}
   <footer class="footer">
     <div class="footer-mark">VICTORIOUS TRAVELERS CLUB</div>
     <p>
-      VTC Elite Training · Reporte generado automáticamente por Victor&nbsp;IA<br>
-      {{fecha_hora_larga}} (America/Cancún) · Sesión {{conversationId}}<br>
+      Programa de Desarrollo Profesional · Documento generado por Victor&nbsp;IA<br>
+      {{fecha_hora_larga}} (America/Cancún) · Folio de sesión {{conversationId}}<br>
       victor-ia.xyz
     </p>
   </footer>

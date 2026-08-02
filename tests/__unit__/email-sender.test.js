@@ -60,9 +60,9 @@ describe('formato de fecha, hora y duración', () => {
 });
 
 describe('asunto del reporte', () => {
-  test('sigue el formato acordado, con emoji, nombre completo, fecha y hora', () => {
+  test('sigue el formato acordado, con nombre completo, fecha y hora', () => {
     expect(buildEmailSubject(BASE, CUANDO))
-      .toBe('📊 Reporte de Capacitación: Pablo Martínez • 01/08/2026 06:26 a.m.');
+      .toBe('Reporte de Desarrollo Profesional: Pablo Martínez • 01/08/2026 06:26 a.m.');
   });
 
   test('cabe en la línea de asunto de cualquier cliente', () => {
@@ -88,11 +88,11 @@ describe('cuerpo del reporte', () => {
   test('la estructura va en el orden acordado', () => {
     const orden = [
       'Estimado Pablo Martínez,',
-      '✅ Tu sesión de entrenamiento ha finalizado correctamente.',
-      '📋 DETALLES DE LA SESIÓN:',
-      '📎 ADJUNTOS:',
+      'Su sesión de práctica ha concluido satisfactoriamente.',
+      '📋 DATOS DE LA SESIÓN:',
+      '📎 DOCUMENTOS ADJUNTOS:',
       '🎯 PRÓXIMOS PASOS:',
-      'Victor IA — Elite Training System'
+      'Victor IA — Programa de Desarrollo Profesional'
     ];
 
     let cursor = -1;
@@ -103,13 +103,13 @@ describe('cuerpo del reporte', () => {
     }
   });
 
-  test('los detalles llevan empleado con ID, departamento, fecha, hora, duración y score', () => {
-    expect(texto).toContain('• Empleado: Pablo Martínez (1234567)');
+  test('los detalles llevan colaborador con ID, departamento, fecha, hora, duración y desempeño', () => {
+    expect(texto).toContain('• Colaborador: Pablo Martínez (1234567)');
     expect(texto).toContain('• Departamento: Dirección');
     expect(texto).toContain('• Fecha: 01 de Agosto de 2026');
     expect(texto).toContain('• Hora: 06:26 a.m. (America/Cancun)');
     expect(texto).toContain('• Duración: 18 minutos 42 segundos');
-    expect(texto).toContain('• Desempeño Global: 68%');
+    expect(texto).toContain('• Desempeño General: 68%');
   });
 
   test('el HTML dice exactamente lo mismo que el texto plano', () => {
@@ -119,8 +119,16 @@ describe('cuerpo del reporte', () => {
     ]) {
       expect(html).toContain(dato);
     }
-    expect(html).toContain('Tu sesión de entrenamiento ha finalizado correctamente');
-    expect(html).toContain('Revisa el reporte adjunto para identificar áreas de mejora');
+    expect(html).toContain('Su sesión de práctica ha concluido satisfactoriamente');
+    expect(html).toContain('Le invitamos a revisar el reporte adjunto');
+  });
+
+  test('no queda jerga técnica en el cuerpo del correo', () => {
+    // El correo lo lee Dirección y Recursos Humanos, no el área de capacitación.
+    for (const jerga of ['PNL', 'Rapport', 'Score Global', 'coaching', 'brecha']) {
+      expect(texto).not.toContain(jerga);
+      expect(html).not.toContain(jerga);
+    }
   });
 
   test('el análisis largo NO viaja en el correo: vive en el PDF', () => {
@@ -134,7 +142,7 @@ describe('cuerpo del reporte', () => {
 
   test('sin MP3, el correo no promete un adjunto que no viaja', () => {
     const sinAudio = buildEmailText(BASE, CUANDO, { hasAudio: false });
-    expect(sinAudio).toContain('• PDF: Reporte completo de capacitación');
+    expect(sinAudio).toContain('• PDF: Reporte completo de desarrollo profesional');
     expect(sinAudio).not.toContain('MP3');
 
     expect(buildEmailHTML(BASE, CUANDO, { hasAudio: false })).not.toContain('Grabación de la sesión');
@@ -152,6 +160,74 @@ describe('cuerpo del reporte', () => {
 
   test('sin nombre mapeado no se queda en blanco', () => {
     expect(buildEmailText({}, CUANDO)).toContain('Estimado Asesor VTC,');
+  });
+});
+
+describe('transcripción dentro del correo', () => {
+  const CON_CHARLA = {
+    ...BASE,
+    transcription: [
+      { speaker: 'Victor', timestamp: '00:03', text: 'Buenas tardes, bienvenidos.', type: 'agent' },
+      { speaker: 'Christian Soria', timestamp: '00:11', text: 'Muchas gracias.', type: 'user' }
+    ]
+  };
+
+  test('cada intervención va en su propio bloque: hablante, hora y texto', () => {
+    const texto = buildEmailText(CON_CHARLA, CUANDO);
+
+    expect(texto).toContain('💬 TRANSCRIPCIÓN DE LA SESIÓN:');
+    expect(texto).toContain('VICTOR (00:03)\nBuenas tardes, bienvenidos.');
+    expect(texto).toContain('CHRISTIAN SORIA (00:11)\nMuchas gracias.');
+  });
+
+  test('los bloques van separados por una línea en blanco', () => {
+    const texto = buildEmailText(CON_CHARLA, CUANDO);
+    expect(texto).toContain('Buenas tardes, bienvenidos.\n\nCHRISTIAN SORIA (00:11)');
+  });
+
+  test('el HTML pinta un bloque por intervención con el nombre del hablante', () => {
+    const html = buildEmailHTML(CON_CHARLA, CUANDO);
+    expect(html).toContain('Transcripción de la sesión');
+    expect(html).toContain('Victor');
+    expect(html).toContain('Christian Soria');
+    expect(html).toContain('Buenas tardes, bienvenidos.');
+  });
+
+  test('ningún símbolo de sistema sobrevive al correo', () => {
+    const sucio = {
+      ...BASE,
+      transcription: [
+        { speaker: '<Víctor English>', timestamp: '00:01', text: '[calmado] Hola familia', type: 'agent' },
+        { speaker: '[Usuario]', timestamp: '00:08', text: 'Quiero <break/> entrenarme', type: 'user' }
+      ]
+    };
+
+    const texto = buildEmailText(sucio, CUANDO);
+    expect(texto).toContain('Hola familia');
+    expect(texto).toContain('Quiero entrenarme');
+    expect(texto).not.toMatch(/[<>[\]]/);
+  });
+
+  test('sin transcripción, el bloque entero desaparece', () => {
+    expect(buildEmailText(BASE, CUANDO)).not.toContain('TRANSCRIPCIÓN');
+    expect(buildEmailHTML(BASE, CUANDO)).not.toContain('Transcripción de la sesión');
+  });
+
+  test('una sesión larga se recorta y dice dónde está el resto', () => {
+    const larga = {
+      ...BASE,
+      transcription: Array.from({ length: 60 }, (_, i) => ({
+        speaker: i % 2 ? 'Christian Soria' : 'Victor',
+        timestamp: `00:${String(i).padStart(2, '0')}`,
+        text: `Intervención número ${i}`,
+        type: i % 2 ? 'user' : 'agent'
+      }))
+    };
+
+    const texto = buildEmailText(larga, CUANDO);
+    expect(texto).toContain('Intervención número 39');
+    expect(texto).not.toContain('Intervención número 40');
+    expect(texto).toContain('Se muestran las primeras 40 de 60 intervenciones');
   });
 });
 
@@ -190,7 +266,9 @@ describe('CTAs del correo', () => {
 
     expect(html).toContain('Escuchar la sesión');
     expect(html).toContain('Descargar el reporte');
-    expect(html).toContain('Repetir el entrenamiento');
+    // El rótulo es el mismo que en el reporte: el gerente salta del correo al
+    // PDF y de vuelta, y un botón que cambia de nombre parece otro destino.
+    expect(html).toContain('Solicitar nueva práctica');
     // El ampersand se escapa una sola vez y el `=` sobrevive legible
     expect(html).toContain('conv=a&amp;t=1.aa');
     expect(html).not.toContain('&amp;amp;');

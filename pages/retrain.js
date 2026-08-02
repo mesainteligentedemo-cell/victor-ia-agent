@@ -53,21 +53,21 @@ const EMAIL_DEFAULT = 'mesainteligentedemo@gmail.com';
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /**
- * Las seis competencias del modelo VTC.
- * Sirven de respaldo cuando la sesión no trae el desglose: el gerente igual
- * tiene que poder pedir el reentrenamiento, aunque falte el score.
+ * Las seis competencias del modelo VTC, con los nombres que lee el hotel.
+ * Sirven de respaldo cuando la sesión no trae el desglose: el líder del área
+ * igual tiene que poder solicitar la práctica adicional, aunque falte el dato.
  */
 const COMPETENCIAS_VTC = [
-  'Rapport',
-  'PNL',
-  'Postura',
-  'Objeciones',
-  'Lectura de Sala',
+  'Conexión',
+  'Comunicación',
+  'Presencia',
+  'Inquietudes',
+  'Percepción',
   'Cierre'
 ];
 
 const PRIORIDADES = [
-  { value: 'alta', label: 'Alta — antes de volver a piso' },
+  { value: 'alta', label: 'Alta — antes de atender clientes' },
   { value: 'media', label: 'Media — en la sesión semanal' },
   { value: 'baja', label: 'Baja — seguimiento normal' }
 ];
@@ -186,7 +186,7 @@ export default function Retrain() {
 
   const destinoTexto = emailValido
     ? emailDestino.trim()
-    : (destinatarios.join(', ') || 'los gerentes de VTC Elite Training');
+    : (destinatarios.join(', ') || 'los líderes de área de VTC');
 
   function toggleCompetencia(name) {
     setCompetencias((prev) =>
@@ -262,7 +262,7 @@ export default function Retrain() {
           borderRadius: '14px 14px 0 0', padding: '26px 28px'
         }}>
           <p style={{ margin: 0, fontSize: 10, letterSpacing: 3, textTransform: 'uppercase', color: C.gold, fontWeight: 700 }}>
-            Victorious Travelers Club · Elite Training
+            Victorious Travelers Club · Desarrollo Profesional
           </p>
           <h1 style={{ margin: '10px 0 0', fontSize: 26, fontWeight: 700 }}>Solicitar reentrenamiento</h1>
           {data && (

@@ -239,7 +239,7 @@ function radarChart(competencias) {
   });
 
   const desc = items.map((c) => `${c.name}: ${safeScore(c.score)} de 10`).join('. ');
-  return svgWrap(`0 0 ${W} ${H}`, 'Perfil de competencias del asesor', desc, body);
+  return svgWrap(`0 0 ${W} ${H}`, 'Perfil general de competencias del colaborador', desc, body);
 }
 
 // ════════════════════════════════════════════
@@ -264,7 +264,7 @@ function barChart(competencias, meta = META_VTC) {
     .slice()
     .sort((a, b) => clamp(b.score, 0, 10, 0) - clamp(a.score, 0, 10, 0));
 
-  if (!items.length) return emptyChart('Ranking de competencias');
+  if (!items.length) return emptyChart('Competencias ordenadas por nivel de dominio');
 
   const W = 780;
   const rowH = 44;
@@ -288,11 +288,11 @@ function barChart(competencias, meta = META_VTC) {
     body += txt(x, padTop - 22, String(s), { size: 10, fill: P.muted, anchor: 'middle', opacity: 0.7 });
   }
 
-  // Línea de meta VTC — dorada, a lo alto de todo el gráfico
+  // Línea del nivel esperado — dorada, a lo alto de todo el gráfico
   const metaX = barX + (meta / 10) * barMax;
   body += `<line x1="${r2(metaX)}" y1="${padTop - 14}" x2="${r2(metaX)}" y2="${H - padBottom + 4}" `
     + `stroke="${P.gold}" stroke-width="2" stroke-dasharray="5 4"/>`;
-  body += txt(metaX, H - padBottom + 18, `Meta VTC ${meta.toFixed(1)}`, {
+  body += txt(metaX, H - padBottom + 18, `Nivel esperado ${meta.toFixed(1)}`, {
     size: 10.5, fill: P.gold, anchor: 'middle', weight: 700, letter: 0.4
   });
 
@@ -328,8 +328,8 @@ function barChart(competencias, meta = META_VTC) {
     // Score justo al terminar la barra
     body += txt(barX + w + 10, barY + barH / 2, `${score}`, { size: 13, fill: color, weight: 700 });
 
-    // Badge de brecha, alineado a la derecha: el veredicto en palabras
-    const veredicto = cumple ? '✓ CUMPLE META' : `× BRECHA −${brecha}`;
+    // Etiqueta de estado, alineada a la derecha: el resultado en palabras
+    const veredicto = cumple ? '✓ NIVEL ALCANZADO' : `▲ FALTAN ${brecha}`;
     body += txt(badgeX, barY + barH / 2, veredicto, {
       size: 11.5, fill: cumple ? P.good : color, anchor: 'end', weight: 800, letter: 0.5
     });
@@ -340,13 +340,13 @@ function barChart(competencias, meta = META_VTC) {
       const score = safeScore(c.score);
       const brecha = r2(Math.max(0, meta - score));
       return brecha > 0
-        ? `${c.name}: ${score} de 10, brecha de ${brecha} puntos contra la meta VTC de ${meta}`
-        : `${c.name}: ${score} de 10, cumple la meta VTC de ${meta}`;
+        ? `${c.name}: ${score} de 10, faltan ${brecha} puntos para el nivel esperado de ${meta}`
+        : `${c.name}: ${score} de 10, alcanza el nivel esperado de ${meta}`;
     })
     .join('. ');
   return svgWrap(
     `0 0 ${W} ${H}`,
-    `Ranking de competencias y brecha contra la meta VTC de ${meta}`,
+    `Competencias ordenadas por nivel de dominio, comparadas con el nivel esperado de ${meta}`,
     desc,
     body
   );
@@ -358,7 +358,7 @@ function barChart(competencias, meta = META_VTC) {
 function lineChart(labels, values, opts = {}) {
   const L = (labels || []).map(String);
   const V = (values || []).map((v) => clamp(v, 0, 10, 0));
-  if (L.length < 2 || V.length < 2) return emptyChart(opts.title || 'Timeline');
+  if (L.length < 2 || V.length < 2) return emptyChart(opts.title || 'Desempeño a lo largo de la conversación');
 
   const W = 780;
   const H = 322;
@@ -405,7 +405,7 @@ function lineChart(labels, values, opts = {}) {
   });
 
   const desc = L.map((l, i) => `${l}: ${V[i]} de 10`).join('. ');
-  return svgWrap(`0 0 ${W} ${H}`, opts.title || 'Evolución por fase de la sesión', desc, body);
+  return svgWrap(`0 0 ${W} ${H}`, opts.title || 'Desempeño a lo largo de la conversación', desc, body);
 }
 
 // ════════════════════════════════════════════
@@ -416,7 +416,7 @@ function areaChart(points, opts = {}) {
     .map((p) => ({ x: Number(p.x), y: clamp(p.y, 0, 10, 0) }))
     .filter((p) => Number.isFinite(p.x));
 
-  if (pts.length < 2) return emptyChart(opts.title || 'Curva de engagement');
+  if (pts.length < 2) return emptyChart(opts.title || 'Nivel de participación del cliente');
 
   const W = 780;
   const H = 306;
@@ -463,7 +463,7 @@ function areaChart(points, opts = {}) {
 
   const desc = `Engagement por minuto. Pico ${peak.y} de 10 en el minuto ${peak.x}. `
     + `Punto más bajo ${low.y} de 10 en el minuto ${low.x}.`;
-  return svgWrap(`0 0 ${W} ${H}`, opts.title || 'Curva de engagement de la sesión', desc, body);
+  return svgWrap(`0 0 ${W} ${H}`, opts.title || 'Nivel de participación del cliente durante la sesión', desc, body);
 }
 
 // ════════════════════════════════════════════
@@ -474,7 +474,7 @@ function donutChart(slices, opts = {}) {
     .map((s) => ({ label: String(s.label || ''), value: Math.max(0, Number(s.value) || 0) }))
     .filter((s) => s.value > 0);
 
-  if (!data.length) return emptyChart(opts.title || 'Distribución');
+  if (!data.length) return emptyChart(opts.title || 'Equilibrio de la conversación');
 
   const total = data.reduce((a, b) => a + b.value, 0);
   const W = 780;
@@ -541,7 +541,7 @@ function donutChart(slices, opts = {}) {
   });
 
   const desc = data.map((s) => `${s.label}: ${Math.round((s.value / total) * 100)} por ciento`).join('. ');
-  return svgWrap(`0 0 ${W} ${H}`, opts.title || 'Distribución del habla', desc, body);
+  return svgWrap(`0 0 ${W} ${H}`, opts.title || 'Equilibrio de la conversación', desc, body);
 }
 
 // ════════════════════════════════════════════
@@ -549,7 +549,7 @@ function donutChart(slices, opts = {}) {
 // ════════════════════════════════════════════
 function gapChart(competencias, meta = 8) {
   const items = (competencias || []).filter((c) => c && c.name);
-  if (!items.length) return emptyChart('Brecha contra el estándar');
+  if (!items.length) return emptyChart('Oportunidades de mejora por competencia');
 
   const W = 780;
   const rowH = 46;
@@ -560,7 +560,7 @@ function gapChart(competencias, meta = 8) {
   const trackX = labelW + 12;
   const trackW = W - trackX - 96;
 
-  let body = txt(trackX, padT - 20, `Estándar VTC = ${meta}/10 · la barra roja marca la brecha a cerrar`, {
+  let body = txt(trackX, padT - 20, `Nivel esperado = ${meta}/10 · la zona marcada indica el avance pendiente`, {
     size: 11, fill: P.muted, opacity: 0.85
   });
 
@@ -603,11 +603,11 @@ function gapChart(competencias, meta = 8) {
       const score = safeScore(c.score);
       const gap = Math.max(0, meta - score);
       return gap > 0
-        ? `${c.name}: ${score} de 10, ${r2(gap)} puntos debajo del estándar`
-        : `${c.name}: ${score} de 10, cumple el estándar`;
+        ? `${c.name}: ${score} de 10, faltan ${r2(gap)} puntos para el nivel esperado`
+        : `${c.name}: ${score} de 10, alcanza el nivel esperado`;
     })
     .join('. ');
-  return svgWrap(`0 0 ${W} ${H}`, 'Brecha de cada competencia contra el estándar VTC', desc, body);
+  return svgWrap(`0 0 ${W} ${H}`, 'Oportunidad de mejora de cada competencia respecto al nivel esperado', desc, body);
 }
 
 /** Placeholder legible cuando no hay datos suficientes para un gráfico. */

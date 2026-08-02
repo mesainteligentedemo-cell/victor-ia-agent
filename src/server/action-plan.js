@@ -38,78 +38,118 @@ const DIA_MS = 24 * 60 * 60 * 1000;
 
 const CATALOGO = {
   rapport: {
-    tecnica: 'Espejeo progresivo y apertura sin producto',
+    tecnica: 'Construcción de confianza desde el primer contacto',
     ejercicios: [
-      'Espejo de tres capas: replicar postura, ritmo de habla y una palabra clave del cliente dentro de los primeros 90 segundos. Grabar y contar cuántas veces se logra.',
-      'Apertura sin producto: cuatro minutos de conversación con prohibición de mencionar el resort. Objetivo: que el cliente cuente algo personal sin que se lo pidan.',
-      'Regla del nombre: usar el nombre del cliente tres veces en la fase de apertura, nunca dos veces seguidas.'
+      'Sintonía con el interlocutor: durante los primeros 90 segundos, acompasar la postura y el ritmo del habla del cliente, y retomar una palabra que él mismo haya utilizado. Registrar la práctica y contar cuántas veces se logra.',
+      'Apertura centrada en la persona: dedicar los primeros cuatro minutos a conocer al cliente sin mencionar el resort. El objetivo es que comparta algo personal de forma espontánea.',
+      'Uso del nombre: mencionar el nombre del cliente tres veces durante la bienvenida, distribuidas a lo largo de la conversación y nunca de forma consecutiva.'
     ],
-    metrica: 'Minutos hasta la primera confidencia personal del cliente (meta: menos de 4 minutos)',
-    senal: 'El cliente hace preguntas que no son sobre precio'
+    metrica: 'Minutos transcurridos hasta que el cliente comparte algo personal (objetivo: menos de 4 minutos)',
+    senal: 'El cliente formula preguntas que van más allá del precio'
   },
   pnl: {
-    tecnica: 'Reencuadre semántico y cambio de submodalidades',
+    tecnica: 'Lenguaje de valor y construcción de imágenes positivas',
     ejercicios: [
-      'Banco de reencuadres: escribir diez objeciones frecuentes con su reencuadre "gasto → inversión" y recitarlas sin leer.',
-      'Cambio de submodalidad: pedir al cliente que describa sus vacaciones ideales y devolverle la imagen con más brillo, más sonido y más cercanía.',
-      'Anclaje kinestésico: fijar un gesto durante el pico emocional de la sesión y reactivarlo en el momento del cierre.'
+      'Repertorio de respuestas de valor: redactar diez inquietudes frecuentes junto con la manera de presentarlas como una inversión en tiempo familiar, y practicarlas hasta expresarlas con naturalidad.',
+      'Proyección de la experiencia: invitar al cliente a describir sus vacaciones ideales y devolverle esa misma imagen con mayor detalle, color y cercanía.',
+      'Momento memorable: identificar el punto de mayor entusiasmo de la conversación y retomarlo con la misma expresión al momento de concluir.'
     ],
-    metrica: 'Reencuadres aplicados por sesión (meta: 3 o más)',
-    senal: 'El cliente repite el reencuadre con sus propias palabras'
+    metrica: 'Respuestas de valor aplicadas por sesión (objetivo: 3 o más)',
+    senal: 'El cliente repite con sus propias palabras el beneficio planteado'
   },
   postura: {
-    tecnica: 'Congruencia corporal y control del silencio',
+    tecnica: 'Presencia, seguridad y manejo de las pausas',
     ejercicios: [
-      'Revisión de video sin audio, cinco minutos: contar gestos de retroceso (brazos cruzados, hombros caídos, mirada al piso).',
-      'Silencio de tres segundos cronometrados después de cada pregunta de cierre, sin rellenar el hueco.',
-      'Ensayo de pie frente al espejo: la misma presentación con tres niveles de energía distintos.'
+      'Revisión del video sin audio durante cinco minutos: identificar los gestos que restan seguridad, como brazos cruzados, hombros caídos o mirada baja.',
+      'Pausa de tres segundos después de cada pregunta importante, sin llenar el silencio con explicaciones adicionales.',
+      'Ensayo frente al espejo: presentar el mismo contenido con tres niveles distintos de energía y elegir el más adecuado para cada tipo de cliente.'
     ],
-    metrica: 'Gestos de retroceso por cada 10 minutos de sesión (meta: 0)',
-    senal: 'El asesor sostiene el silencio sin justificarse'
+    metrica: 'Gestos que restan seguridad por cada 10 minutos de conversación (objetivo: ninguno)',
+    senal: 'El colaborador sostiene la pausa con naturalidad, sin necesidad de justificarse'
   },
   objeciones: {
-    tecnica: 'Amortiguar, aislar, reencuadrar y volver a cerrar',
+    tecnica: 'Escuchar, comprender, aportar valor y retomar la conversación',
     ejercicios: [
-      'Rueda de diez objeciones: el coach dispara objeciones sin pausa y el asesor responde en menos de cinco segundos con la estructura de cuatro pasos.',
-      'Aislar antes de responder: prohibido tocar el precio hasta haber preguntado "¿es lo único que lo detiene?".',
-      'Reescritura: tomar las tres objeciones peor resueltas de esta sesión y escribir la respuesta ideal palabra por palabra.'
+      'Práctica de respuesta ágil: el facilitador plantea diez inquietudes seguidas y el colaborador responde en menos de cinco segundos aplicando los cuatro pasos de la metodología.',
+      'Comprender antes de responder: no abordar el tema del precio hasta haber confirmado con el cliente si ese es realmente el único punto por resolver.',
+      'Respuestas modelo: tomar las tres inquietudes que quedaron menos resueltas en esta sesión y redactar la respuesta ideal palabra por palabra.'
     ],
-    metrica: 'Objeciones resueltas sin ceder precio (meta: 80% o más)',
-    senal: 'La objeción no vuelve a aparecer más adelante en la sesión'
+    metrica: 'Inquietudes resueltas manteniendo el valor de la oferta (objetivo: 80% o más)',
+    senal: 'La misma inquietud no vuelve a plantearse durante la conversación'
   },
   'lectura sala': {
-    tecnica: 'Calibración continua y detección de señales de compra',
+    tecnica: 'Lectura de las señales del cliente y ajuste en tiempo real',
     ejercicios: [
-      'Semáforo: pausar la grabación cada dos minutos y clasificar al cliente en verde, amarillo o rojo. Contrastar la lectura con el coach.',
-      'Detectar cinco señales de compra en una grabación ajena y decir en qué segundo exacto aparecieron.',
-      'Preguntar "¿cómo lo ve hasta aquí?" en cada transición de fase, sin excepción.'
+      'Evaluación por etapas: pausar la grabación cada dos minutos y clasificar la disposición del cliente en alta, media o baja. Contrastar la lectura con el facilitador.',
+      'Identificar cinco señales de interés en la grabación de otro colaborador e indicar el momento exacto en que aparecieron.',
+      'Confirmar el avance con una pregunta abierta —"¿cómo lo ve hasta aquí?"— en cada cambio de etapa, sin excepción.'
     ],
-    metrica: 'Aciertos en la clasificación del semáforo (meta: 8 de 10)',
-    senal: 'El asesor cambia de rumbo antes de que el cliente se cierre'
+    metrica: 'Aciertos al evaluar la disposición del cliente (objetivo: 8 de cada 10)',
+    senal: 'El colaborador ajusta su enfoque antes de que el cliente pierda interés'
   },
   cierre: {
-    tecnica: 'Cierre asumido sobre escalera de microcompromisos',
+    tecnica: 'Conclusión natural a partir de acuerdos parciales',
     ejercicios: [
-      'Tres cierres distintos sobre el mismo cliente simulado: asumido, por alternativa y por urgencia real.',
-      'Prohibido preguntar "¿qué le parece?": sustituirlo siempre por una pregunta de decisión.',
-      'Escalera: obtener tres microcompromisos verbales antes de intentar el cierre final.'
+      'Practicar tres formas distintas de concluir con el mismo cliente: por confirmación, por elección entre opciones y por oportunidad real.',
+      'Sustituir la pregunta "¿qué le parece?" por una pregunta que invite a tomar una decisión concreta.',
+      'Construir el acuerdo por partes: obtener tres confirmaciones parciales del cliente antes de proponer la decisión final.'
     ],
-    metrica: 'Intentos de cierre por sesión (meta: 3 o más, sin repetir técnica)',
-    senal: 'El cliente pide condiciones en vez de tiempo para pensarlo'
+    metrica: 'Propuestas de conclusión por sesión (objetivo: 3 o más, cada una con un enfoque distinto)',
+    senal: 'El cliente pregunta por condiciones y formas de pago en lugar de pedir tiempo para pensarlo'
   }
 };
 
-/** Intervención genérica cuando la competencia no está en el catálogo. */
+/**
+ * Equivalencia entre el nombre que LEE el director y la clave del catálogo.
+ *
+ * El reporte dejó de hablar de "Rapport" y "PNL" — son términos del manual de
+ * ventas, no del vocabulario de un hotel de 20,000 colaboradores. El catálogo
+ * de entrenamiento sí conserva sus claves internas, así que aquí se traduce.
+ *
+ * Se aceptan LAS DOS familias de nombres a propósito: los reportes archivados y
+ * las integraciones ya en marcha siguen enviando los nombres antiguos, y si
+ * dejaran de resolver, el plan caería a la intervención genérica y el gerente
+ * perdería los ejercicios concretos sin que nada avisara.
+ */
+const ALIAS_COMPETENCIA = {
+  // Nombres actuales del reporte
+  'conexion': 'rapport',
+  'comunicacion': 'pnl',
+  'presencia': 'postura',
+  'inquietudes': 'objeciones',
+  'percepcion': 'lectura sala',
+  'cierre': 'cierre',
+  // Nombres históricos (payloads y reportes anteriores)
+  'rapport': 'rapport',
+  'pnl': 'pnl',
+  'postura': 'postura',
+  'objeciones': 'objeciones',
+  'lectura sala': 'lectura sala',
+  'lectura de sala': 'lectura sala'
+};
+
+/** Clave de catálogo de una competencia, sea cual sea el nombre con que llegue. */
+function claveCompetencia(nombre) {
+  const limpio = String(nombre == null ? '' : nombre)
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+  return ALIAS_COMPETENCIA[limpio] || limpio;
+}
+
+/** Recomendación general cuando la competencia no está en el catálogo. */
 function intervencionGenerica(nombre) {
   return {
-    tecnica: `Práctica dirigida de ${nombre} con grabación y revisión`,
+    tecnica: `Práctica dirigida de ${nombre} con grabación y retroalimentación`,
     ejercicios: [
-      `Aislar ${nombre} en simulaciones cortas de 10 minutos: se trabaja solo esa competencia, el resto se da por bueno.`,
-      `Revisar con el asesor dos fragmentos de esta grabación donde ${nombre} falló y reescribir en voz alta la ejecución correcta.`,
-      `Cerrar cada sesión con una repetición completa cronometrada, sin interrupciones del coach.`
+      `Trabajar ${nombre} de forma aislada en prácticas breves de 10 minutos, enfocadas únicamente en esa competencia.`,
+      `Revisar junto con el colaborador dos momentos de esta grabación donde ${nombre} puede mejorar, y ensayar en voz alta la versión ideal.`,
+      `Cerrar cada sesión con una práctica completa y cronometrada, sin intervenciones del facilitador.`
     ],
-    metrica: `Puntuación de ${nombre} en la simulación de validación (meta: ${META}/10)`,
-    senal: 'La ejecución se sostiene sin que el coach tenga que intervenir'
+    metrica: `Nivel de ${nombre} alcanzado en la práctica de verificación (objetivo: ${META}/10)`,
+    senal: 'El colaborador sostiene el desempeño sin necesidad de apoyo del facilitador'
   };
 }
 
@@ -164,13 +204,13 @@ function dosificar(brecha) {
 
   const sesiones = Math.min(6, Math.max(2, Math.ceil(brecha / GANANCIA_POR_SESION)));
   const minutos = brecha >= 2.5 ? 30 : brecha >= 1.5 ? 25 : 20;
-  const etiqueta = brecha >= 2.5 ? 'intensivo' : brecha >= 1 ? 'dirigido' : 'de ajuste';
+  const etiqueta = brecha >= 2.5 ? 'intensivo' : brecha >= 1 ? 'dirigido' : 'de refinamiento';
   return { sesiones, minutos, etiqueta };
 }
 
-/** Prioridad de intervención: cuanto más lejos del estándar, más arriba. */
+/** Prioridad de desarrollo: a mayor margen de crecimiento, mayor prioridad. */
 function prioridadPorBrecha(brecha) {
-  if (brecha >= 2) return { label: 'Crítica', cls: 'p-alta' };
+  if (brecha >= 2) return { label: 'Muy alta', cls: 'p-alta' };
   if (brecha >= 1) return { label: 'Alta', cls: 'p-alta' };
   if (brecha > 0) return { label: 'Media', cls: 'p-media' };
   return { label: 'Mantenimiento', cls: 'p-baja' };
@@ -192,33 +232,33 @@ function semaforo(score, competencias) {
     return {
       nivel: 'verde',
       cls: 'sem-verde',
-      label: 'VERDE · Autorizar piso de ventas',
-      accion: 'El asesor puede operar sin acompañamiento. Mantener la revisión semanal de rutina.'
+      label: 'CERTIFICADO · Listo para atender clientes',
+      accion: 'El colaborador puede atender clientes de forma autónoma. Se recomienda mantener la revisión semanal de rutina.'
     };
   }
   if (score >= 7 && peor >= 6) {
     return {
       nivel: 'amarillo',
       cls: 'sem-amarillo',
-      label: 'AMARILLO · Piso con acompañamiento',
-      accion: 'El asesor puede recibir familias, pero con un coach presente hasta cerrar la brecha detectada.'
+      label: 'EN DESARROLLO · Atención con acompañamiento',
+      accion: 'El colaborador puede atender clientes con el respaldo de un facilitador en sala, hasta consolidar las competencias identificadas.'
     };
   }
   return {
     nivel: 'rojo',
     cls: 'sem-rojo',
-    label: 'ROJO · Retener en entrenamiento',
-    accion: 'No asignar familias reales hasta superar la validación de día 7. El costo de un cierre perdido supera el del coaching.'
+    label: 'EN FORMACIÓN · Continuar el entrenamiento',
+    accion: 'Se recomienda completar el programa de desarrollo antes de asignar clientes. La inversión en preparación se recupera con el primer cierre bien ejecutado.'
   };
 }
 
-/** Interpretación del score global en una frase, sin eufemismos. */
+/** Interpretación del resultado general en una frase clara y directa. */
 function interpretarScore(score) {
-  if (score >= 9) return 'nivel élite: ejecución de referencia para el resto del equipo';
-  if (score >= 8) return 'dentro del estándar VTC, listo para operar';
-  if (score >= 7) return 'base sólida con una brecha identificada, aún por debajo del estándar';
-  if (score >= 5.5) return 'en desarrollo: la estructura está, la ejecución todavía no';
-  return 'por debajo del umbral operativo: requiere refuerzo antes de cualquier contacto real';
+  if (score >= 9) return 'nivel de excelencia, referencia para el resto del equipo';
+  if (score >= 8) return 'dentro del nivel esperado por la institución y listo para atender clientes';
+  if (score >= 7) return 'base sólida, con una competencia identificada por consolidar';
+  if (score >= 5.5) return 'en desarrollo: domina la estructura y trabaja ahora en la ejecución';
+  return 'en formación: requiere acompañamiento antes de atender clientes de forma autónoma';
 }
 
 // ════════════════════════════════════════════════════════════
@@ -281,7 +321,7 @@ function buildActionPlan(data = {}, competencias = []) {
   const planMejora = foco.map((c, i) => {
     const brecha = r1(META - c.score);
     const dosis = dosificar(brecha);
-    const cat = CATALOGO[c.name.toLowerCase()] || intervencionGenerica(c.name);
+    const cat = CATALOGO[claveCompetencia(c.name)] || intervencionGenerica(c.name);
     const prio = prioridadPorBrecha(brecha);
     const medio = r1(c.score + brecha / 2);
 
@@ -291,18 +331,18 @@ function buildActionPlan(data = {}, competencias = []) {
       score: r1(c.score),
       meta: META,
       brecha,
-      brecha_texto: `${brecha} punto${brecha === 1 ? '' : 's'} por debajo del estándar`,
+      brecha_texto: `${brecha} punto${brecha === 1 ? '' : 's'} para alcanzar el nivel esperado`,
       prioridad: prio.label,
       prioridad_cls: prio.cls,
       tecnica: cat.tecnica,
       ejercicios: cat.ejercicios,
       sesiones: dosis.sesiones,
       minutos: dosis.minutos,
-      dosis_texto: `${dosis.sesiones} sesiones de ${dosis.minutos} min · coaching ${dosis.etiqueta}`,
+      dosis_texto: `${dosis.sesiones} sesiones de ${dosis.minutos} min · acompañamiento ${dosis.etiqueta}`,
       minutos_totales: dosis.sesiones * dosis.minutos,
       metrica: cat.metrica,
       senal_exito: cat.senal,
-      timeline: `Día 3: ${medio}/10 · Día 7: ${META}/10 o más`,
+      timeline: `Día 3: ${medio}/10 · Día 7: ${META}/10 o superior`,
       // Ancho de barra ya calculado (Handlebars no multiplica)
       barra_actual: Math.round((c.score / 10) * 100),
       barra_meta: Math.round((META / 10) * 100)
@@ -326,54 +366,55 @@ function buildActionPlan(data = {}, competencias = []) {
   const diagnostico = [];
 
   diagnostico.push({
-    titulo: 'Score actual e interpretación',
+    titulo: 'Desempeño general de la sesión',
     detalle: `${r1(score)}/10 (${scoreTotal}%) — ${interpretarScore(score)}. `
-      + `${enEstandar} de ${comps.length} competencias alcanzan el estándar VTC de ${META}/10.`,
+      + `${enEstandar} de ${comps.length} competencias alcanzan el nivel esperado de ${META}/10.`,
     tono: score >= META ? 'ok' : score >= 7 ? 'warn' : 'bad'
   });
 
   if (fuertes.length) {
     diagnostico.push({
-      titulo: 'Fortalezas a capitalizar',
+      titulo: 'Fortalezas que destacan',
       detalle: `${enumerar(fuertes.map((c) => `${c.name} (${r1(c.score)}/10)`))}. `
-        + `Son la base sobre la que se apoya el coaching: no se tocan, se usan como prueba de que el asesor sí puede ejecutar.`,
+        + `Son la base sobre la que se construye el plan de desarrollo y la evidencia de que el colaborador `
+        + `ya domina el nivel que la institución espera.`,
       tono: 'ok'
     });
   } else {
     diagnostico.push({
-      titulo: 'Fortalezas a capitalizar',
-      detalle: `Ninguna competencia alcanza todavía el estándar de ${META}/10. La más avanzada es `
-        + `${ordenadas[0] ? `${ordenadas[0].name} (${r1(ordenadas[0].score)}/10)` : 'no determinada'}: `
-        + `usarla como punto de partida del entrenamiento.`,
+      titulo: 'Fortalezas que destacan',
+      detalle: `Las competencias se encuentran todavía en desarrollo respecto al nivel esperado de ${META}/10. La más avanzada es `
+        + `${ordenadas[0] ? `${ordenadas[0].name} (${r1(ordenadas[0].score)}/10)` : 'no determinada'}, `
+        + `y es el mejor punto de partida para el acompañamiento.`,
       tono: 'warn'
     });
   }
 
   if (criticas.length) {
     diagnostico.push({
-      titulo: 'Áreas críticas',
+      titulo: 'Oportunidades de mejora',
       detalle: `${enumerar(criticas.slice(0, 3).map((c) => `${c.name} (${r1(c.score)}/10)`))}. `
-        + `Están por debajo del estándar y son las que explican la diferencia entre este resultado y un ${META}/10 global.`,
+        + `Consolidar estas competencias es lo que llevará el desempeño general al nivel esperado de ${META}/10.`,
       tono: criticas[0].score < 6 ? 'bad' : 'warn'
     });
   } else {
     diagnostico.push({
-      titulo: 'Áreas críticas',
-      detalle: `Ninguna competencia queda por debajo de ${META}/10. No hay foco correctivo: el trabajo pasa a modo mantenimiento.`,
+      titulo: 'Oportunidades de mejora',
+      detalle: `Todas las competencias alcanzan el nivel esperado de ${META}/10. No se requieren acciones correctivas: `
+        + `el trabajo continúa en modo de mantenimiento.`,
       tono: 'ok'
     });
   }
 
   // Observación adicional: contexto de la sesión desde ElevenLabs
   if (prospectEngagement || interactionQuality || objectionsCount !== null) {
-    let contexto = 'Contexto de la sesión: ';
     const partes = [];
-    if (prospectEngagement) partes.push(`Engagement del cliente: ${prospectEngagement}`);
-    if (interactionQuality) partes.push(`Calidad de interacción: ${interactionQuality}`);
-    if (objectionsCount !== null) partes.push(`${objectionsCount} objeción${objectionsCount === 1 ? '' : 'es'} identificada${objectionsCount === 1 ? '' : 's'}`);
+    if (prospectEngagement) partes.push(`Participación del cliente: ${prospectEngagement}`);
+    if (interactionQuality) partes.push(`Calidad de la conversación: ${interactionQuality}`);
+    if (objectionsCount !== null) partes.push(`${objectionsCount} inquietud${objectionsCount === 1 ? '' : 'es'} planteada${objectionsCount === 1 ? '' : 's'} por el cliente`);
     if (partes.length) {
       diagnostico.push({
-        titulo: 'Observaciones de la sesión',
+        titulo: 'Contexto de la conversación',
         detalle: partes.join(' · '),
         tono: 'ok'
       });
@@ -381,117 +422,119 @@ function buildActionPlan(data = {}, competencias = []) {
   }
 
   diagnostico.push({
-    titulo: `Brecha para llegar a ${META}+/10`,
+    titulo: `Camino hacia el nivel esperado de ${META}/10`,
     detalle: brechaTotal > 0
-      ? `Faltan ${brechaTotal} puntos repartidos en ${criticas.length} competencia${criticas.length === 1 ? '' : 's'}. `
-        + `Concentrados en ${enumerar(foco.map((c) => c.name))}, que absorben `
-        + `${r1(foco.reduce((a, c) => a + (META - c.score), 0))} de esos puntos.`
-      : `Sin brecha pendiente: todas las competencias están en ${META}/10 o por encima.`,
+      ? `Restan ${brechaTotal} puntos distribuidos en ${criticas.length} competencia${criticas.length === 1 ? '' : 's'}, `
+        + `concentrados principalmente en ${enumerar(foco.map((c) => c.name))}, que representan `
+        + `${r1(foco.reduce((a, c) => a + (META - c.score), 0))} de esos puntos. Es un objetivo alcanzable con acompañamiento dirigido.`
+      : `Objetivo alcanzado: todas las competencias se encuentran en ${META}/10 o por encima.`,
     tono: brechaTotal > 2 ? 'bad' : brechaTotal > 0 ? 'warn' : 'ok'
   });
 
   diagnostico.push({
-    titulo: 'Velocidad de mejora esperada',
+    titulo: 'Progreso esperado',
     detalle: brechaTotal > 0
-      ? `Con ${sesionesTotales} sesiones (${horasCoaching} h de coaching efectivo) la brecha se cierra en `
-        + `aproximadamente ${diasEstimados} días. Ritmo de referencia del programa: ${GANANCIA_POR_SESION} puntos `
-        + `por sesión de práctica dirigida con grabación.`
-      : `No aplica: el asesor ya está en estándar. Mantener una simulación semanal para no perder nivel.`,
+      ? `Con ${sesionesTotales} sesiones de acompañamiento (${horasCoaching} horas efectivas), se estima alcanzar el nivel esperado en `
+        + `aproximadamente ${diasEstimados} días. El avance de referencia del programa es de ${GANANCIA_POR_SESION} puntos `
+        + `por sesión de práctica dirigida con grabación y retroalimentación.`
+      : `El colaborador ya se encuentra en el nivel esperado. Se recomienda una práctica semanal para sostener el resultado.`,
     tono: diasEstimados > 10 ? 'warn' : 'ok'
   });
 
   const riesgos = detectarRiesgos(data, comps, varianza, sem);
   const riesgosTexto = riesgos.join(' ');
-  const riesgosAgente = identifiedRisks ? `Riesgos identificados por el agente: ${identifiedRisks}. ` : '';
+  const riesgosAgente = identifiedRisks ? `Aspectos señalados durante la evaluación: ${identifiedRisks}. ` : '';
   diagnostico.push({
-    titulo: 'Riesgos de desempeño',
-    detalle: riesgosAgente + (riesgosTexto || 'Sin riesgos operativos detectados en esta sesión. El perfil es parejo y sostenido de principio a fin.'),
+    titulo: 'Aspectos a considerar',
+    detalle: riesgosAgente + (riesgosTexto || 'No se identificaron aspectos que requieran atención especial. El desempeño se mantuvo constante durante toda la sesión.'),
     tono: (riesgos.length || identifiedRisks) ? 'warn' : 'ok'
   });
 
   diagnostico.push({
-    titulo: 'Recomendación inmediata',
+    titulo: 'Recomendación institucional',
     detalle: `${sem.label}. ${sem.accion}`,
     tono: sem.nivel === 'verde' ? 'ok' : sem.nivel === 'amarillo' ? 'warn' : 'bad'
   });
 
   // ── C · Hitos y validaciones ─────────────────────────────────
   const hitos = [];
-  const focoNombres = foco.length ? enumerar(foco.map((c) => c.name)) : 'las competencias en estándar';
+  const focoNombres = foco.length ? enumerar(foco.map((c) => c.name)) : 'las competencias ya consolidadas';
 
   hitos.push({
     momento: 'Hoy',
     objetivo: brechaTotal > 0
-      ? `Agendar el bloque de coaching de ${focoNombres} y compartir la grabación con el asesor.`
-      : 'Confirmar al asesor el resultado y su asignación en piso.',
-    metrica: 'Sesión agendada en calendario con hora y coach asignado',
-    verificacion: 'Invitación enviada'
+      ? `Programar las sesiones de acompañamiento en ${focoNombres} y compartir la grabación con el colaborador.`
+      : 'Comunicar al colaborador su resultado y confirmar su asignación de clientes.',
+    metrica: 'Sesión programada en el calendario, con horario y facilitador asignado',
+    verificacion: 'Invitación enviada al colaborador'
   });
 
   if (planMejora.length) {
     const primera = planMejora[0];
     hitos.push({
       momento: `Día 3 · ${formatDateLocal(fechaCheckpoint)}`,
-      objetivo: `Checkpoint intermedio de ${primera.competencia}: simulación corta de 10 minutos centrada solo en esa competencia.`,
+      objetivo: `Revisión intermedia de ${primera.competencia}: práctica breve de 10 minutos enfocada únicamente en esa competencia.`,
       metrica: `${primera.competencia} en ${r1(primera.score + primera.brecha / 2)}/10 o más`,
-      verificacion: 'Simulación grabada y calificada por el coach'
+      verificacion: 'Práctica grabada y evaluada por el facilitador'
     });
   }
 
   hitos.push({
     momento: 'Semana 1',
     objetivo: brechaTotal > 0
-      ? `Completar ${sesionesTotales} sesiones de coaching (${horasCoaching} h) sobre ${focoNombres}.`
-      : 'Sostener el nivel con dos simulaciones completas de práctica.',
+      ? `Completar ${sesionesTotales} sesiones de acompañamiento (${horasCoaching} horas) enfocadas en ${focoNombres}.`
+      : 'Sostener el nivel alcanzado con dos prácticas completas.',
     metrica: brechaTotal > 0
-      ? `Todas las competencias del foco en ${META}/10 o más`
+      ? `Todas las competencias en desarrollo alcanzan ${META}/10 o más`
       : `Ninguna competencia por debajo de ${META}/10`,
     verificacion: 'Registro de asistencia a las sesiones'
   });
 
   hitos.push({
     momento: `Día 7 · ${formatDateLocal(fechaValidacion)}`,
-    objetivo: 'Validación completa: simulación íntegra con familia simulada y evaluación de las seis competencias.',
-    metrica: `Score global en ${META}/10 o más, sin ninguna competencia por debajo de 7/10`,
-    verificacion: 'Nuevo reporte generado y comparado contra este'
+    objetivo: 'Evaluación completa: práctica íntegra con un cliente simulado y valoración de las seis competencias.',
+    metrica: `Desempeño general en ${META}/10 o más, sin ninguna competencia por debajo de 7/10`,
+    verificacion: 'Nuevo reporte generado y comparado con el actual'
   });
 
   if (sem.nivel === 'rojo') {
     hitos.push({
       momento: `Semana 2 · ${formatDateLocal(sumarDias(base, 14))}`,
-      objetivo: 'Segunda validación obligatoria por semáforo rojo. Solo si la de día 7 no alcanzó el estándar.',
-      metrica: `Score global en ${META}/10 o más`,
-      verificacion: 'Decisión formal de autorización o escalado a dirección'
+      objetivo: 'Segunda evaluación de seguimiento, aplicable únicamente si la del día 7 no alcanzó el nivel esperado.',
+      metrica: `Desempeño general en ${META}/10 o más`,
+      verificacion: 'Decisión formal de certificación o revisión con Dirección'
     });
   }
 
-  // ── D · Criterios de aprobación ──────────────────────────────
+  // ── D · Criterios de certificación ───────────────────────────
   const criterios = [
     {
-      condicion: `TODOS los scores en ${META}/10 o más`,
-      resultado: 'Autorizar piso de ventas sin acompañamiento.',
-      estado: criticas.length === 0 ? 'Se cumple hoy' : `No se cumple: faltan ${criticas.length}`,
+      condicion: `TODAS las competencias alcanzan ${META}/10 o más`,
+      resultado: 'Se certifica al colaborador para atender clientes de forma autónoma.',
+      estado: criticas.length === 0
+        ? 'Se cumple el día de hoy'
+        : `Aún no se cumple: ${criticas.length} competencia${criticas.length === 1 ? '' : 's'} en desarrollo`,
       cls: criticas.length === 0 ? 'ok' : 'bad'
     },
     {
-      condicion: `ALGUNO por debajo de ${META}/10`,
-      resultado: `Extender el coaching ${Math.max(3, diasEstimados)} días y revalidar.`,
-      estado: criticas.length ? `Se aplica: ${criticas.length} competencia${criticas.length === 1 ? '' : 's'} pendiente${criticas.length === 1 ? '' : 's'}` : 'No aplica',
+      condicion: `ALGUNA competencia por debajo de ${META}/10`,
+      resultado: `Se extiende el acompañamiento ${Math.max(3, diasEstimados)} días y se realiza una nueva evaluación.`,
+      estado: criticas.length ? `Aplica: ${criticas.length} competencia${criticas.length === 1 ? '' : 's'} por consolidar` : 'No aplica',
       cls: criticas.length ? 'warn' : 'ok'
     },
     {
-      condicion: `Score global 7/10 o más, pero con varianza superior a 1.5`,
-      resultado: 'Refuerzo selectivo: solo las competencias por debajo, sin repetir el programa completo.',
+      condicion: 'Desempeño general de 7/10 o más, con diferencias superiores a 1.5 puntos entre competencias',
+      resultado: 'Se aplica un refuerzo selectivo, únicamente en las competencias por consolidar, sin repetir el programa completo.',
       estado: score >= 7 && varianza > 1.5
-        ? `Se aplica: varianza de ${varianza} puntos entre competencias`
-        : `No aplica: varianza de ${varianza} puntos`,
+        ? `Aplica: ${varianza} puntos de diferencia entre competencias`
+        : `No aplica: ${varianza} puntos de diferencia entre competencias`,
       cls: score >= 7 && varianza > 1.5 ? 'warn' : 'ok'
     },
     {
-      condicion: 'Cualquier competencia por debajo de 6/10',
-      resultado: 'No autorizar contacto con familias reales bajo ninguna circunstancia.',
+      condicion: 'Alguna competencia por debajo de 6/10',
+      resultado: 'Se completa el programa de desarrollo antes de asignar clientes.',
       estado: comps.some((c) => c.score < 6)
-        ? `Se aplica: ${enumerar(comps.filter((c) => c.score < 6).map((c) => `${c.name} (${r1(c.score)})`))}`
+        ? `Aplica: ${enumerar(comps.filter((c) => c.score < 6).map((c) => `${c.name} (${r1(c.score)})`))}`
         : 'No aplica: ninguna competencia por debajo de 6/10',
       cls: comps.some((c) => c.score < 6) ? 'bad' : 'ok'
     }
@@ -501,45 +544,45 @@ function buildActionPlan(data = {}, competencias = []) {
   const hoy = [];
   if (planMejora.length) {
     const primera = planMejora[0];
-    hoy.push(`Agendar la primera sesión de ${primera.competencia} (${primera.minutos} min) antes de que termine el día.`);
-    hoy.push(`Escuchar la grabación completa marcando los momentos donde ${primera.competencia} se rompe, y compartirlos con el asesor.`);
-    hoy.push(`Comunicar al asesor las ${planMejora.length} competencia${planMejora.length === 1 ? '' : 's'} del foco: ${focoNombres}. Nada más — abrir más frentes diluye el resultado.`);
+    hoy.push(`Programar la primera sesión de ${primera.competencia} (${primera.minutos} minutos) antes de que concluya el día.`);
+    hoy.push(`Escuchar la grabación completa, identificar los momentos donde ${primera.competencia} puede fortalecerse y compartirlos con el colaborador.`);
+    hoy.push(`Comunicar al colaborador ${planMejora.length === 1 ? 'la competencia' : `las ${planMejora.length} competencias`} en las que se concentrará el desarrollo: ${focoNombres}. Enfocar el trabajo en pocos objetivos a la vez produce mejores resultados.`);
   } else {
-    hoy.push('Confirmar al asesor que queda autorizado para piso y asignarle su primera familia real.');
-    hoy.push('Guardar esta grabación como material de referencia para el resto del equipo.');
+    hoy.push('Comunicar al colaborador que queda certificado para atender clientes y asignarle su primera atención.');
+    hoy.push('Conservar esta grabación como material de referencia y ejemplo para el resto del equipo.');
   }
   if (sem.nivel === 'rojo') {
-    hoy.push('Bloquear la asignación de familias reales en el sistema hasta la validación de día 7.');
+    hoy.push('Mantener al colaborador en el programa de desarrollo hasta la evaluación del día 7, antes de asignarle clientes.');
   }
 
   const monitoreo = [
     {
       frecuencia: 'Diario',
       que: planMejora.length
-        ? `Una simulación de 10 minutos centrada en ${planMejora[0].competencia}, con la métrica: ${planMejora[0].metrica.toLowerCase()}.`
-        : 'Confirmar que el asesor mantiene su ritmo de práctica sin supervisión.'
+        ? `Una práctica de 10 minutos enfocada en ${planMejora[0].competencia}. Cómo se mide: ${planMejora[0].metrica.toLowerCase()}.`
+        : 'Confirmar que el colaborador mantiene su ritmo de práctica de forma autónoma.'
     },
     {
       frecuencia: 'Cada 48 horas',
-      que: 'Revisar una grabación real o simulada y anotar si la señal de éxito ya aparece de forma espontánea.'
+      que: 'Revisar una grabación real o de práctica y registrar si el comportamiento esperado ya aparece de forma natural.'
     },
     {
       frecuencia: 'Semanal',
-      que: `Comparar el score de la nueva simulación contra el ${r1(score)}/10 de esta sesión. La tendencia importa más que el número suelto.`
+      que: `Comparar el resultado de la nueva práctica con el ${r1(score)}/10 de esta sesión. La tendencia de mejora es más relevante que un resultado aislado.`
     }
   ];
 
   const escalar = [
-    `El score baja respecto al ${r1(score)}/10 de esta sesión en la validación de día 7.`,
-    `Alguna competencia sigue por debajo de 6/10 tras ${Math.max(3, diasEstimados)} días de coaching.`,
-    'El asesor falta a dos sesiones de coaching agendadas.',
-    'La misma objeción se resuelve mal en tres simulaciones seguidas.'
+    `El resultado de la evaluación del día 7 es inferior al ${r1(score)}/10 obtenido en esta sesión.`,
+    `Alguna competencia continúa por debajo de 6/10 después de ${Math.max(3, diasEstimados)} días de acompañamiento.`,
+    'El colaborador no asiste a dos sesiones de acompañamiento programadas.',
+    'La misma inquietud del cliente queda sin resolver en tres prácticas consecutivas.'
   ];
 
   const proximosPasos = {
     hoy,
     monitoreo,
-    reevaluacion: `${formatDateLong(fechaValidacion)} — simulación completa y reporte comparativo contra esta sesión.`,
+    reevaluacion: `${formatDateLong(fechaValidacion)} — práctica completa y reporte comparativo con la sesión actual.`,
     reevaluacion_fecha: formatDateLocal(fechaValidacion),
     escalar
   };
@@ -548,8 +591,8 @@ function buildActionPlan(data = {}, competencias = []) {
   const notas = {
     observaciones: notasObservaciones(data, comps, sem, score),
     reforzar: planMejora.length
-      ? planMejora.map((p) => `${p.competencia}: ${p.tecnica.toLowerCase()}. Señal de que ya prendió — ${p.senal_exito.toLowerCase()}.`)
-      : comps.slice(0, 2).map((c) => `${c.name} (${r1(c.score)}/10): mantener con una repetición semanal, sin corrección.`),
+      ? planMejora.map((p) => `${p.competencia}: ${p.tecnica.toLowerCase()}. Señal de que ya se logró — ${p.senal_exito.toLowerCase()}.`)
+      : comps.slice(0, 2).map((c) => `${c.name} (${r1(c.score)}/10): sostener el nivel con una práctica semanal, sin necesidad de corrección.`),
     patrones: detectarPatrones(data, comps, varianza),
     recomendaciones: recomendacionesPersonales(data, sem, planMejora, score)
   };
@@ -606,7 +649,7 @@ function buildActionPlan(data = {}, competencias = []) {
 /** Riesgos operativos deducidos de los datos reales, nunca genéricos. */
 function detectarRiesgos(data, comps, varianza, sem) {
   const riesgos = [];
-  const get = (nombre) => comps.find((c) => c.name.toLowerCase() === nombre);
+  const get = (clave) => comps.find((c) => claveCompetencia(c.name) === clave);
 
   const cierre = get('cierre');
   const objeciones = get('objeciones');
@@ -614,35 +657,35 @@ function detectarRiesgos(data, comps, varianza, sem) {
   const rapport = get('rapport');
 
   if (cierre && cierre.score < 7) {
-    riesgos.push(`Cierre en ${r1(cierre.score)}/10: riesgo de sesiones largas que terminan sin decisión, con el costo de sala ya incurrido.`);
+    riesgos.push(`Conclusión de la venta en ${r1(cierre.score)}/10: conviene reforzar el cierre para evitar conversaciones extensas que terminan sin una decisión del cliente.`);
   }
   if (objeciones && objeciones.score < 7) {
-    riesgos.push(`Objeciones en ${r1(objeciones.score)}/10: riesgo de ceder descuento para compensar la falta de respuesta, erosionando el margen.`);
+    riesgos.push(`Atención de inquietudes en ${r1(objeciones.score)}/10: existe la tendencia a ofrecer descuentos cuando falta un argumento de valor, lo que afecta la rentabilidad.`);
   }
   if (lectura && lectura.score < 7) {
-    riesgos.push(`Lectura de sala en ${r1(lectura.score)}/10: riesgo de insistir con un cliente ya cerrado y quemar la referencia.`);
+    riesgos.push(`Percepción del cliente en ${r1(lectura.score)}/10: conviene desarrollar la lectura de señales para saber cuándo avanzar y cuándo dar espacio.`);
   }
   if (rapport && rapport.score < 7) {
-    riesgos.push(`Rapport en ${r1(rapport.score)}/10: riesgo de que la familia no comparta información real y toda la presentación apunte al lugar equivocado.`);
+    riesgos.push(`Conexión con el cliente en ${r1(rapport.score)}/10: sin una relación de confianza el cliente comparte menos información y la presentación pierde precisión.`);
   }
   if (varianza > 1.8) {
-    riesgos.push(`Perfil irregular (varianza de ${varianza} puntos): el resultado depende de qué tipo de familia le toque, no de su ejecución.`);
+    riesgos.push(`Desempeño desigual entre competencias (${varianza} puntos de diferencia): el resultado varía según el tipo de cliente que se atienda.`);
   }
 
   const min = Number(data.duracion_minutos);
   if (Number.isFinite(min) && min > 0 && min < 5) {
-    riesgos.push(`Sesión de ${min} min: la muestra es corta y la evaluación tiene menor confianza. Conviene una segunda simulación antes de decidir.`);
+    riesgos.push(`Sesión de ${min} minutos: es una muestra breve, por lo que conviene una segunda práctica antes de tomar decisiones sobre el desarrollo del colaborador.`);
   }
   if (Number.isFinite(min) && min > 35) {
-    riesgos.push(`Sesión de ${min} min: por encima del tiempo objetivo de sala. Revisar dónde se pierde el ritmo.`);
+    riesgos.push(`Sesión de ${min} minutos: por encima del tiempo recomendado de atención. Conviene revisar en qué etapa se pierde el ritmo.`);
   }
 
   const neuro = Number(data.cumplimiento_neuro);
   if (Number.isFinite(neuro) && neuro < 70) {
-    riesgos.push(`Cumplimiento neurocientífico de ${Math.round(neuro)}%: el asesor está vendiendo por instinto, no por método — no es replicable ni enseñable.`);
+    riesgos.push(`Aplicación de la metodología en ${Math.round(neuro)}%: el colaborador se apoya más en su intuición que en el método institucional, lo que dificulta replicar sus buenos resultados.`);
   }
   if (sem.nivel === 'rojo') {
-    riesgos.push('Semáforo en rojo: asignar familias reales ahora expone ingresos y la reputación del club.');
+    riesgos.push('Recomendación en rojo: asignar clientes reales en esta etapa expondría la experiencia del huésped y los resultados del área.');
   }
 
   return riesgos;
@@ -651,8 +694,8 @@ function detectarRiesgos(data, comps, varianza, sem) {
 /** Patrones de comportamiento cruzando fases de la venta. */
 function detectarPatrones(data, comps, varianza) {
   const patrones = [];
-  const get = (nombre) => {
-    const c = comps.find((x) => x.name.toLowerCase() === nombre);
+  const get = (clave) => {
+    const c = comps.find((x) => claveCompetencia(x.name) === clave);
     return c ? c.score : null;
   };
 
@@ -662,30 +705,30 @@ function detectarPatrones(data, comps, varianza) {
   if (apertura.length && cierre.length) {
     const dif = r1(promedio(apertura) - promedio(cierre));
     if (dif >= 1) {
-      patrones.push(`Caída en la segunda mitad: abre en ${r1(promedio(apertura))}/10 y cierra en ${r1(promedio(cierre))}/10. `
-        + `Conecta bien y pierde la venta en el tramo final — el trabajo está en el cierre, no en la apertura.`);
+      patrones.push(`El desempeño desciende en la segunda mitad de la conversación: inicia en ${r1(promedio(apertura))}/10 y concluye en ${r1(promedio(cierre))}/10. `
+        + `El colaborador genera muy buena conexión inicial y la oportunidad de mejora está en la etapa de conclusión.`);
     } else if (dif <= -1) {
-      patrones.push(`Patrón inverso: cierra en ${r1(promedio(cierre))}/10 pero abre en ${r1(promedio(apertura))}/10. `
-        + `Entra en frío y recupera con técnica; con una apertura decente su cierre sería más fácil.`);
+      patrones.push(`El desempeño mejora conforme avanza la conversación: inicia en ${r1(promedio(apertura))}/10 y concluye en ${r1(promedio(cierre))}/10. `
+        + `Domina la técnica de cierre; reforzar la apertura potenciaría todavía más sus resultados.`);
     } else {
-      patrones.push(`Ejecución pareja entre apertura (${r1(promedio(apertura))}/10) y cierre (${r1(promedio(cierre))}/10): `
-        + `el desempeño no depende de la fase, sino del nivel general.`);
+      patrones.push(`Desempeño equilibrado entre la apertura (${r1(promedio(apertura))}/10) y la conclusión (${r1(promedio(cierre))}/10): `
+        + `el resultado se mantiene estable durante toda la conversación.`);
     }
   }
 
   if (varianza <= 0.8) {
-    patrones.push(`Perfil homogéneo (varianza de ${varianza} puntos): sube o baja en bloque. Un ajuste de método impacta todas las competencias a la vez.`);
+    patrones.push(`Perfil homogéneo (${varianza} puntos de diferencia entre competencias): el colaborador avanza de forma pareja, por lo que un ajuste de método beneficia a todas las áreas a la vez.`);
   } else if (varianza > 1.5) {
-    patrones.push(`Perfil disparejo (varianza de ${varianza} puntos): conviven competencias fuertes y débiles en la misma sesión. `
-      + `El coaching debe ser selectivo, no general.`);
+    patrones.push(`Perfil desigual (${varianza} puntos de diferencia entre competencias): conviven habilidades muy sólidas con otras por desarrollar. `
+      + `El acompañamiento debe ser selectivo y enfocado, no general.`);
   }
 
   const neuro = Number(data.cumplimiento_neuro);
   if (Number.isFinite(neuro)) {
     if (neuro >= 85) {
-      patrones.push(`Cumplimiento neurocientífico de ${Math.round(neuro)}%: aplica el marco de forma consistente, no por accidente.`);
+      patrones.push(`Aplicación de la metodología en ${Math.round(neuro)}%: el colaborador sigue el método institucional de forma consistente, lo que hace su desempeño predecible y replicable.`);
     } else if (neuro < 70) {
-      patrones.push(`Cumplimiento neurocientífico de ${Math.round(neuro)}%: usa los principios de forma intermitente. Reforzar el guion antes que la técnica.`);
+      patrones.push(`Aplicación de la metodología en ${Math.round(neuro)}%: aplica los principios de forma intermitente. Conviene reforzar primero la estructura de la conversación y después la técnica.`);
     }
   }
 
@@ -694,9 +737,9 @@ function detectarPatrones(data, comps, varianza) {
   if (turnos > 0 && Number.isFinite(min) && min > 0) {
     const ritmo = r1(turnos / min);
     if (ritmo < 2) {
-      patrones.push(`Ritmo de ${ritmo} intervenciones por minuto: turnos largos. Verificar que no sea monólogo del asesor.`);
+      patrones.push(`Ritmo de ${ritmo} intervenciones por minuto: las participaciones son extensas. Conviene verificar que la conversación sea un diálogo y no una exposición.`);
     } else if (ritmo > 8) {
-      patrones.push(`Ritmo de ${ritmo} intervenciones por minuto: intercambio muy fragmentado, poco espacio para desarrollar una idea.`);
+      patrones.push(`Ritmo de ${ritmo} intervenciones por minuto: el intercambio es muy fragmentado y deja poco espacio para desarrollar cada idea con profundidad.`);
     }
   }
 
@@ -709,157 +752,178 @@ function notasObservaciones(data, comps, sem, score) {
   const fort = Array.isArray(data.fortalezas_list) ? data.fortalezas_list : [];
   const areas = Array.isArray(data.areas_list) ? data.areas_list : [];
 
-  obs.push(`Sesión de ${data.duracion_texto || '—'} en el módulo ${data.modulo || '—'} con ${score >= 8 ? 'ejecución dentro del estándar' : 'ejecución por debajo del estándar'}: ${r1(score)}/10.`);
+  obs.push(`Sesión de ${data.duracion_texto || '—'} en el módulo ${data.modulo || '—'}, con un desempeño ${score >= 8 ? 'dentro del nivel esperado' : 'en desarrollo respecto al nivel esperado'}: ${r1(score)}/10.`);
 
-  if (fort.length) obs.push(`Lo que sí funcionó, en palabras del análisis: ${fort.slice(0, 2).join(' · ')}`);
-  if (areas.length) obs.push(`Lo que hay que corregir: ${areas.slice(0, 2).join(' · ')}`);
+  if (fort.length) obs.push(`Aspectos que funcionaron muy bien: ${fort.slice(0, 2).join(' · ')}`);
+  if (areas.length) obs.push(`Aspectos por reforzar: ${areas.slice(0, 2).join(' · ')}`);
 
-  if (data.objeciones_trabajadas && !/no se registraron/i.test(String(data.objeciones_trabajadas))) {
-    obs.push(`Objeciones que aparecieron en la sesión: ${String(data.objeciones_trabajadas).slice(0, 240)}`);
+  // El respaldo "el cliente no planteó inquietudes" NO es un hallazgo: si se
+  // colara aquí, la nota de coaching diría que hubo inquietudes y a continuación
+  // que no las hubo. Se descartan las dos redacciones, la actual y la histórica.
+  const sinInquietudes = /no (?:se registraron|planteó|plantearon|hubo)/i;
+  if (data.objeciones_trabajadas && !sinInquietudes.test(String(data.objeciones_trabajadas))) {
+    obs.push(`Inquietudes que planteó el cliente durante la sesión: ${String(data.objeciones_trabajadas).slice(0, 240)}`);
   }
 
-  obs.push(`Lectura del entrenador: ${sem.accion}`);
+  obs.push(`Valoración del equipo de desarrollo: ${sem.accion}`);
   return obs;
 }
 
 /**
- * Recomendaciones personales del coach al gerente.
+ * Sugerencias del equipo de desarrollo para el líder del área.
  * @param {Array<{competencia:string}>} foco Entradas YA enriquecidas (planMejora)
  */
 function recomendacionesPersonales(data, sem, foco, score) {
   const recs = [];
-  const nombre = data.nombre || 'el asesor';
+  const nombre = data.nombre || 'el colaborador';
 
   if (sem.nivel === 'verde') {
-    recs.push(`Usar esta grabación de ${nombre} como material de referencia en la junta de equipo: es más útil un ejemplo propio que un video de manual.`);
-    recs.push('Ofrecerle un rol de apoyo con los asesores nuevos: enseñar consolida lo que ya domina.');
+    recs.push(`Compartir esta grabación de ${nombre} como material de referencia en la reunión de equipo: un ejemplo del propio hotel enseña más que cualquier material externo.`);
+    recs.push('Invitarle a apoyar la formación de los colaboradores de nuevo ingreso: enseñar consolida lo que ya domina y fortalece su liderazgo.');
   } else if (sem.nivel === 'amarillo') {
-    recs.push(`Acompañar a ${nombre} en sus primeras dos familias reales sin intervenir, solo tomando notas. Corregir después, nunca delante del cliente.`);
-    recs.push('Dar feedback en formato "una cosa que mantener, una cosa que cambiar". Más de dos correcciones simultáneas no se retienen.');
+    recs.push(`Acompañar a ${nombre} durante sus primeras dos atenciones tomando notas, sin intervenir. La retroalimentación se comparte después, nunca frente al cliente.`);
+    recs.push('Ofrecer la retroalimentación en el formato "un aspecto por mantener y un aspecto por ajustar". Más de dos indicaciones simultáneas dificultan la asimilación.');
   } else {
-    recs.push(`Trabajar con ${nombre} en privado antes de volver a piso: un fracaso público en sala retrasa la curva más que una semana de coaching.`);
-    recs.push('Empezar por la competencia con mayor brecha, pero cerrar cada sesión con algo que ya hace bien: la confianza es parte del entrenamiento.');
+    recs.push(`Trabajar con ${nombre} en sesiones individuales antes de volver a la atención de clientes: la preparación previa acelera el aprendizaje y protege su confianza.`);
+    recs.push('Comenzar por la competencia con mayor oportunidad de mejora y cerrar cada sesión reconociendo algo que ya realiza bien. La confianza es parte del entrenamiento.');
   }
 
   if (foco.length) {
-    recs.push(`Mantener el foco en ${enumerar(foco.map((f) => f.competencia))} durante los próximos 7 días. Todo lo demás se deja pasar aunque salte a la vista.`);
+    recs.push(`Mantener el desarrollo enfocado en ${enumerar(foco.map((f) => f.competencia))} durante los próximos 7 días. Concentrar el esfuerzo en pocos objetivos produce avances más sólidos.`);
   }
-  recs.push('Registrar cada sesión de coaching en el tracker con fecha, duración y competencia trabajada: sin registro no hay curva de aprendizaje que mostrar.');
+  recs.push('Registrar cada sesión de acompañamiento con fecha, duración y competencia trabajada: es la evidencia que permite mostrar la evolución del colaborador.');
 
   return recs;
 }
 
 // ════════════════════════════════════════════════════════════
-// GENERADORES DE PUNTOS EXPANDIDOS (150+ palabras cada uno)
+// GENERADORES DE LOS TRES APARTADOS EXTENSOS
+//
+// Son la versión narrada del plan, la que se lee de corrido en el correo y en
+// el respaldo del reporte. Están escritos para Dirección, Gerencia y Recursos
+// Humanos: sin términos de manual de ventas, en positivo y con un siguiente
+// paso explícito al final de cada apartado.
 // ════════════════════════════════════════════════════════════
 
 /**
- * PUNTO 1: Diagnóstico y Seguimiento (para el gerente)
- * Debe incluir: score actual, interpretación, fortalezas, áreas críticas, contexto de la sesión
+ * APARTADO 1: Análisis de Desempeño
+ * Incluye: resultado general, interpretación, fortalezas, oportunidades de
+ * mejora, contexto de la conversación y el siguiente paso.
  */
 function buildPlanDiagnostico(diagnostico, comps, score, scoreTotal, objectionsCount, prospectEngagement, interactionQuality) {
   const fort = comps.slice().sort((a, b) => b.score - a.score).slice(0, 2);
   const criticas = comps.slice().sort((a, b) => a.score - b.score).slice(0, 2);
 
-  let texto = `**Score Actual e Interpretación:** ${r1(score)}/10 (${scoreTotal}%). `;
+  let texto = `**Desempeño General:** ${r1(score)}/10 (${scoreTotal}%). `;
   if (score >= 8) {
-    texto += `El asesor se encuentra dentro del estándar VTC, demostrando ejecución consistente y técnicas bien aplicadas.`;
+    texto += `El colaborador se encuentra dentro del nivel esperado por la institución y demuestra un manejo consistente de la conversación con el cliente.`;
   } else if (score >= 7) {
-    texto += `El asesor ha alcanzado una base sólida pero hay competencias específicas que requieren refuerzo antes de autorizar operaciones en piso.`;
+    texto += `El colaborador ha construido una base sólida. Existen competencias específicas que conviene consolidar antes de certificarlo para la atención autónoma de clientes.`;
   } else {
-    texto += `El asesor se encuentra por debajo del estándar operativo y requiere coaching intensivo antes de cualquier contacto con familias reales.`;
+    texto += `El colaborador se encuentra en etapa de formación. Con acompañamiento dirigido durante los próximos días alcanzará el nivel que la institución espera.`;
   }
 
-  texto += ` **Fortalezas a Capitalizar:** ${fort.map(c => `${c.name} (${r1(c.score)}/10)`).join(', ')}. `;
-  texto += `Estas son la base sólida sobre la que construir: no se tocan en el coaching, se usan como prueba de que el asesor sí puede ejecutar al nivel requerido.`;
+  texto += ` **Fortalezas que Destacan:** ${fort.map((c) => `${c.name} (${r1(c.score)}/10)`).join(', ')}. `;
+  texto += `Son la base sobre la que se construye el plan de desarrollo y la mejor evidencia de que el colaborador puede desempeñarse al nivel requerido.`;
 
   if (criticas.length) {
-    texto += ` **Áreas Críticas a Reforzar:** ${criticas.map(c => `${c.name} (${r1(c.score)}/10)`).join(', ')}. `;
-    texto += `Estas competencias explican la diferencia entre el resultado actual y un 8+/10 global.`;
+    texto += ` **Oportunidades de Mejora:** ${criticas.map((c) => `${c.name} (${r1(c.score)}/10)`).join(', ')}. `;
+    texto += `Consolidar estas competencias es lo que llevará el desempeño general al nivel esperado de 8/10 o superior.`;
   }
 
   if (objectionsCount !== null || prospectEngagement || interactionQuality) {
-    texto += ` **Contexto de la Sesión:** `;
+    texto += ` **Contexto de la Conversación:** `;
     const partes = [];
-    if (objectionsCount !== null) partes.push(`${objectionsCount} objeción${objectionsCount === 1 ? '' : 'es'}`);
-    if (prospectEngagement) partes.push(`Engagement: ${prospectEngagement}`);
-    if (interactionQuality) partes.push(`Calidad de interacción: ${interactionQuality}`);
+    if (objectionsCount !== null) partes.push(`${objectionsCount} inquietud${objectionsCount === 1 ? '' : 'es'} planteada${objectionsCount === 1 ? '' : 's'} por el cliente`);
+    if (prospectEngagement) partes.push(`Participación del cliente: ${prospectEngagement}`);
+    if (interactionQuality) partes.push(`Calidad de la conversación: ${interactionQuality}`);
     if (partes.length) texto += partes.join('. ') + '.';
   }
 
-  texto += ` **Siguiente Paso:** Este diagnóstico es el punto de partida para el plan de mejora de los próximos 7 días. Debe ser comunicado al asesor hoy, con énfasis en las fortalezas antes que en las áreas de mejora.`;
+  texto += ` **Siguiente Paso:** Este análisis es el punto de partida del plan de desarrollo de los próximos 7 días. Se recomienda compartirlo hoy mismo con el colaborador, comenzando siempre por sus fortalezas y presentando las oportunidades de mejora como el camino hacia su certificación.`;
 
   return texto;
 }
 
 /**
- * PUNTO 2: Plan de Mejora Intensivo (para el gerente)
- * Debe incluir: técnica, ejercicios, dosis, métrica, timeline
+ * APARTADO 2: Plan de Mejora
+ * Incluye: competencia a desarrollar, enfoque de trabajo, prácticas sugeridas,
+ * dedicación estimada, forma de medir el avance y una nota para el facilitador.
+ *
+ * Los saltos de línea son reales (`\n`). Antes iban escapados (`\\n`) y el
+ * lector veía la secuencia "\n" impresa dentro de un documento de dirección.
  */
 function buildPlanMejora(planMejora, score, diasEstimados, sessionProgression, pnlTechniquesUsed, callEfficiency) {
   if (!planMejora || !planMejora.length) {
-    return `**Sin Brecha Pendiente:** Todas las competencias están en estándar. El asesor está listo para operar. ` +
-           `Plan de mantenimiento: una simulación semanal de 15 minutos sin corrección, solo para sostener el ${r1(score)}/10. ` +
-           `Objetivo: que el asesor desarrolle confianza en piso sin interferencias del coaching.`;
+    return `**Todas las Competencias Consolidadas:** El colaborador alcanza el nivel esperado en todas las competencias `
+      + `evaluadas y está listo para atender clientes de forma autónoma. `
+      + `**Plan de Mantenimiento:** una práctica semanal de 15 minutos, sin corrección, con el único fin de sostener el ${r1(score)}/10 alcanzado. `
+      + `**Siguiente Paso:** permitir que el colaborador desarrolle su confianza en la operación diaria, con una revisión de seguimiento cada semana.`;
   }
 
   const p = planMejora[0];
-  let texto = `**Competencia Crítica a Entrenar:** ${p.competencia} (score actual ${r1(p.score)}/10, meta ${p.meta}/10, brecha de ${p.brecha} puntos). `;
-  texto += `Esta competencia es la que explica la mayoría de la brecha total y tiene la prioridad ${p.prioridad.toLowerCase()}.\\n\\n`;
+  let texto = `**Competencia a Desarrollar:** ${p.competencia} (nivel actual ${r1(p.score)}/10, nivel esperado ${p.meta}/10, `
+    + `diferencia de ${p.brecha} punto${p.brecha === 1 ? '' : 's'}). `;
+  texto += `Es la competencia con mayor margen de crecimiento y, por lo tanto, la de prioridad ${p.prioridad.toLowerCase()} en este plan.\n\n`;
 
-  texto += `**Técnica de Intervención:** ${p.tecnica}. El asesor debe comprender no solo QUÉ cambiar, sino POR QUÉ funciona esta técnica en el contexto de sus sesiones.\\n\\n`;
+  texto += `**Enfoque de Trabajo:** ${p.tecnica}. Es importante que el colaborador comprenda no solo qué ajustar, `
+    + `sino por qué este enfoque da resultado en el tipo de conversaciones que sostiene a diario.\n\n`;
 
-  texto += `**Ejercicios Prácticos (Orden de Ejecución):**\\n`;
+  texto += `**Prácticas Sugeridas (en orden de ejecución):**\n`;
   p.ejercicios.forEach((ej, i) => {
-    texto += `${i + 1}. ${ej}\\n`;
+    texto += `${i + 1}. ${ej}\n`;
   });
 
-  texto += `\\n**Dosis y Timeline:** ${p.dosis_texto}. `;
-  texto += `Total: ${p.minutos_totales} minutos de coaching efectivo a lo largo de ${diasEstimados} días. `;
-  texto += `Checkpoint el día 3 (meta intermedia: ${p.score + p.brecha / 2}/10), validación completa el día 7 (meta final: ${p.meta}/10 o más).\\n\\n`;
+  texto += `\n**Dedicación y Calendario:** ${p.dosis_texto}. `;
+  texto += `En total, ${p.minutos_totales} minutos de acompañamiento efectivo distribuidos a lo largo de ${diasEstimados} días. `;
+  texto += `Revisión intermedia el día 3 (objetivo: ${r1(p.score + p.brecha / 2)}/10) y evaluación completa el día 7 (objetivo: ${p.meta}/10 o más).\n\n`;
 
-  texto += `**Métrica de Éxito:** ${p.metrica}. `;
-  texto += `Señal observable de que ya está funcionando: ${p.senal_exito.toLowerCase()}.\\n\\n`;
+  texto += `**Cómo se Mide el Avance:** ${p.metrica}. `;
+  texto += `Señal observable de que el aprendizaje se consolidó: ${p.senal_exito.toLowerCase()}.\n\n`;
 
-  texto += `**Nota para el Coach:** El asesor puede fracasar temporalmente en los ejercicios y eso es parte del aprendizaje. `;
-  texto += `Lo importante es que la señal de éxito empiece a aparecer de forma espontánea en simulaciones sin corrección.`;
+  texto += `**Nota para el Facilitador:** es natural que las primeras prácticas no salgan perfectas; forma parte del proceso de aprendizaje. `;
+  texto += `El indicador que realmente importa es que el comportamiento esperado comience a aparecer de forma espontánea, sin necesidad de corrección.`;
 
   return texto;
 }
 
 /**
- * PUNTO 3: Validación y Decisión Final (para el gerente)
- * Debe incluir: calendario, criterios, decisión, escalado si aplica
+ * APARTADO 3: Seguimiento y Verificación de Progreso
+ * Incluye: calendario, criterios de certificación, recomendación institucional
+ * con su justificación, y las acciones inmediatas.
  */
 function buildPlanValidacion(fechaValidacionLocal, criterios, hitos, sem, nextStepsAgreed, conversionPotential) {
-  let texto = `**Calendario de Validación:** Simulación completa e íntegra el ${fechaValidacionLocal} (día 7). `;
-  texto += `Esta sesión debe ser grabada, evaluada por el coach de forma independiente, y comparada métrica por métrica contra esta evaluación inicial.\\n\\n`;
+  let texto = `**Calendario de Seguimiento:** práctica completa el ${fechaValidacionLocal} (día 7). `;
+  texto += `La sesión se graba, la evalúa el facilitador de forma independiente y se compara competencia por competencia con la evaluación actual, `;
+  texto += `de modo que el progreso quede documentado con datos y no con impresiones.\n\n`;
 
-  texto += `**Criterios de Aprobación para Piso de Ventas:**\\n`;
-  criterios.slice(0, 2).forEach((c, i) => {
+  texto += `**Criterios de Certificación:**\n`;
+  criterios.slice(0, 2).forEach((c) => {
     const estado = c.cls === 'ok' ? '✓' : '○';
-    texto += `${estado} ${c.condicion} → ${c.resultado}\\n`;
+    texto += `${estado} ${c.condicion} → ${c.resultado}\n`;
   });
 
-  texto += `\\n**Recomendación Actual:** ${sem.label}. ${sem.accion}\\n\\n`;
+  texto += `\n**Recomendación Actual:** ${sem.label}. ${sem.accion}\n\n`;
 
   if (sem.nivel === 'rojo') {
-    texto += `**Por Qué Rojo:** No autorizar familias reales ahora. El costo de una sesión perdida supera el costo del coaching. `;
-    texto += `Una segunda validación será obligatoria el día 14 si el día 7 no alcanza el estándar.\\n\\n`;
+    texto += `**Fundamento de la Recomendación:** conviene completar el programa de desarrollo antes de asignar clientes. `;
+    texto += `La preparación previa se recupera con creces en la primera atención bien ejecutada. `;
+    texto += `Si la evaluación del día 7 aún no alcanza el nivel esperado, se programa una segunda revisión el día 14.\n\n`;
   } else if (sem.nivel === 'amarillo') {
-    texto += `**Por Qué Amarillo:** El asesor puede recibir familias, pero con un coach presente en la sala hasta cerrar la brecha detectada. `;
-    texto += `El acompañamiento no es castigo, es protección: para el asesor, para el cliente y para el negocio.\\n\\n`;
+    texto += `**Fundamento de la Recomendación:** el colaborador puede atender clientes con el respaldo de un facilitador en sala, `;
+    texto += `hasta consolidar las competencias identificadas. El acompañamiento es una medida de apoyo y aprendizaje: `;
+    texto += `beneficia al colaborador, cuida la experiencia del huésped y protege los resultados del área.\n\n`;
   } else {
-    texto += `**Por Qué Verde:** El asesor está en estándar y puede operar sin acompañamiento. Mantener la revisión semanal de rutina como parte del desarrollo continuo.\\n\\n`;
+    texto += `**Fundamento de la Recomendación:** el colaborador alcanza el nivel esperado y puede atender clientes de forma autónoma. `;
+    texto += `Se mantiene la revisión semanal de rutina como parte del desarrollo profesional continuo.\n\n`;
   }
 
-  texto += `**Próximos Pasos Inmediatos:** Agendar la validación hoy con el coach asignado. `;
-  texto += `Comunicar al asesor su resultado, el foco de entrenamiento, y la fecha de revalidación. `;
-  texto += `Guardar la grabación de esta sesión: será material de referencia para entrenamientos futuros.`;
+  texto += `**Acciones Inmediatas:** programar hoy la sesión de seguimiento con el facilitador asignado. `;
+  texto += `Compartir con el colaborador su resultado, las competencias en las que se enfocará el desarrollo y la fecha de la próxima evaluación. `;
+  texto += `Conservar la grabación de esta sesión: será material de referencia para futuras capacitaciones del equipo.`;
 
   if (nextStepsAgreed) {
-    texto += ` `;
-    texto += `Pasos acordados con el prospecto: ${nextStepsAgreed}.`;
+    texto += ` Acuerdos alcanzados con el cliente durante la sesión: ${nextStepsAgreed}.`;
   }
 
   return texto;

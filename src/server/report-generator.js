@@ -173,17 +173,17 @@ class ReportGenerator {
       // devolvió "(1) … (2) … (3) …" en un solo bloque, aquí se convierte en
       // lista numerada con saltos de línea. Se inyecta con triple stash en el
       // template, por eso el escape de HTML ocurre dentro del formateador.
-      resumen: this.formatRichText(this.v(data.resumen, 'Sesión de entrenamiento completada.')),
-      actividad_sesion: this.formatRichText(this.v(data.actividad_sesion, 'Sesión completada.')),
+      resumen: this.formatRichText(this.v(data.resumen, 'Sesión de práctica completada.')),
+      actividad_sesion: this.formatRichText(this.v(data.actividad_sesion, 'Sesión de práctica completada.')),
       recomendacion_coach: this.formatRichText(this.v(
         data.recomendacion_coach,
         this.recomendacionFallback(score, competencias)
       )),
       analisis_pnl: this.formatRichText(
-        this.v(data.analisis_pnl, 'Sin observaciones de PNL registradas en esta sesión.')
+        this.v(data.analisis_pnl, 'No se registraron observaciones sobre técnicas de comunicación en esta sesión.')
       ),
       objeciones_trabajadas: this.formatRichText(
-        this.v(data.objeciones_trabajadas, 'No se registraron objeciones.')
+        this.v(data.objeciones_trabajadas, 'El cliente no planteó inquietudes durante esta sesión.')
       ),
 
       // Texto plano (fallback) + listas (presentación preferida)
@@ -399,14 +399,14 @@ class ReportGenerator {
    * Los cortes siguen la meta VTC de 8.0: por debajo de 8 hay brecha.
    */
   nivelDesempeno(score) {
-    if (score >= 9) return { label: 'Desempeño élite', cls: 'b-good', metric: 'good', color: '#10B981' };
+    if (score >= 9) return { label: 'Desempeño excepcional', cls: 'b-good', metric: 'good', color: '#10B981' };
     if (score >= 8) return { label: 'Desempeño sólido', cls: 'b-gold', metric: 'gold', color: '#E5B33E' };
     if (score >= 6) return { label: 'En desarrollo', cls: 'b-warn', metric: 'warn', color: '#F59E0B' };
-    return { label: 'Requiere refuerzo', cls: 'b-bad', metric: 'bad', color: '#EF4444' };
+    return { label: 'En formación', cls: 'b-bad', metric: 'bad', color: '#EF4444' };
   }
 
   /**
-   * Recomendación del coach cuando el agente no la envía.
+   * Recomendación del equipo de desarrollo cuando el análisis no la envía.
    * Se construye con los datos reales de la sesión — no es texto genérico.
    */
   recomendacionFallback(score, competencias) {
@@ -415,34 +415,41 @@ class ReportGenerator {
     const alta = ordenadas[ordenadas.length - 1];
 
     if (!baja || !alta) {
-      return `Desempeño global de ${score}/10. Mantener el ritmo de práctica y revisar la grabación con el gerente.`;
+      return `Desempeño general de ${score}/10. Se recomienda mantener el ritmo de práctica y revisar la grabación `
+        + `junto con el líder del área.`;
     }
 
     if (score >= 8.5) {
-      return `Desempeño de ${score}/10: listo para piso de ventas. Capitalizar ${alta.name} `
-        + `(${alta.score}/10) usando la grabación como material de referencia para el equipo. `
-        + `Único punto de vigilancia: ${baja.name} (${baja.score}/10) — reforzar en la sesión semanal.`;
+      return `Desempeño general de ${score}/10: el colaborador está listo para atender clientes de forma autónoma. `
+        + `Conviene aprovechar su fortaleza en ${alta.name} (${alta.score}/10) compartiendo la grabación como material `
+        + `de referencia para el equipo. Único punto por seguir de cerca: ${baja.name} (${baja.score}/10), que puede `
+        + `reforzarse durante la sesión semanal.`;
     }
 
     if (score >= 7) {
-      return `Desempeño de ${score}/10: sólido con una brecha clara. Concentrar el coaching de los `
-        + `próximos 7 días en ${baja.name} (${baja.score}/10) sin tocar ${alta.name} (${alta.score}/10), `
-        + `que ya está en estándar. Reevaluar con una simulación al séptimo día.`;
+      return `Desempeño general de ${score}/10: base sólida con una oportunidad de mejora bien identificada. `
+        + `Se recomienda concentrar el acompañamiento de los próximos 7 días en ${baja.name} (${baja.score}/10), `
+        + `sin modificar ${alta.name} (${alta.score}/10), que ya alcanza el nivel esperado. `
+        + `El avance se verifica con una nueva práctica al séptimo día.`;
     }
 
-    return `Desempeño de ${score}/10: requiere refuerzo antes de piso de ventas. Prioridad absoluta en `
-      + `${baja.name} (${baja.score}/10) con acompañamiento diario. Apoyarse en ${alta.name} `
-      + `(${alta.score}/10) como base de confianza. Revalidar en 7 días con simulación completa.`;
+    return `Desempeño general de ${score}/10: el colaborador se encuentra en etapa de formación. `
+      + `Se recomienda dar prioridad a ${baja.name} (${baja.score}/10) con acompañamiento diario, apoyándose en `
+      + `${alta.name} (${alta.score}/10) como base de confianza. El progreso se verifica en 7 días con una práctica completa.`;
   }
 
-  /** Competencias mínimas cuando el mapper no las entrega. */
+  /**
+   * Competencias mínimas cuando el mapper no las entrega.
+   * Los nombres son los mismos que usa el mapper: lenguaje de negocio, no de
+   * manual de ventas. Ver la nota en src/server/n8n-mapper.js.
+   */
   competenciasFallback(data) {
     return [
-      { name: 'Rapport', score: this.num(data.score_rapport, 8) },
-      { name: 'PNL', score: this.num(data.score_pnl, 8) },
-      { name: 'Postura', score: this.num(data.score_postura, 9) },
-      { name: 'Objeciones', score: this.num(data.score_objecciones, 7) },
-      { name: 'Lectura Sala', score: this.num(data.score_lectura_sala, 9) },
+      { name: 'Conexión', score: this.num(data.score_rapport, 8) },
+      { name: 'Comunicación', score: this.num(data.score_pnl, 8) },
+      { name: 'Presencia', score: this.num(data.score_postura, 9) },
+      { name: 'Inquietudes', score: this.num(data.score_objecciones, 7) },
+      { name: 'Percepción', score: this.num(data.score_lectura_sala, 9) },
       { name: 'Cierre', score: this.num(data.score_cierre, 8) }
     ];
   }

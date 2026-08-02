@@ -221,9 +221,9 @@ describe('reporte renderizado — estructura', () => {
     expect(html).not.toContain('chart-kicker');
   });
 
-  test('el ranking se titula por la brecha contra la meta VTC', () => {
-    expect(html).toContain('brecha contra la meta VTC');
-    expect(html).toContain('Meta VTC 8.0');
+  test('el ranking se titula por el nivel de dominio, no por la jerga interna', () => {
+    expect(html).toContain('Competencias ordenadas por nivel de dominio');
+    expect(html).toContain('Nivel esperado 8.0');
   });
 
   test('no queda ningún marcador de Handlebars sin resolver', () => {
@@ -233,6 +233,63 @@ describe('reporte renderizado — estructura', () => {
   test('no se imprime undefined ni NaN', () => {
     expect(html).not.toMatch(/>undefined</);
     expect(html).not.toMatch(/>NaN</);
+  });
+});
+
+describe('reporte renderizado — lenguaje corporativo', () => {
+  // Payload realista: SIN `competencias`, para que el reporte use los nombres
+  // que produce el sistema. El bloque anterior manda "Rapport" y "PNL" a
+  // propósito (payload heredado) y esos nombres se respetan tal cual llegan;
+  // aquí se verifica lo que el hotel ve en un reporte generado hoy.
+  let texto;
+
+  beforeAll(async () => {
+    const html = await gen().generate({
+      nombre: 'Christian Soria',
+      conversationId: 'abc',
+      score_overall: 6.9,
+      score_rapport: 6.5,
+      score_objecciones: 5,
+      score_cierre: 5.5,
+      // La sección 04 solo se pinta si hay principios; el mapeo siempre los
+      // entrega, así que el reporte real los lleva.
+      principios_neuro: [
+        { titulo: 'Conexión emocional', descripcion: 'La familia compartió sus planes de viaje desde los primeros minutos.' }
+      ]
+    });
+
+    texto = html
+      .replace(/<style[\s\S]*?<\/style>/g, ' ')
+      .replace(/<!--[\s\S]*?-->/g, ' ')
+      .replace(/<[^>]+>/g, ' ');
+  });
+
+  test('no aparece jerga del manual de ventas ni lenguaje clínico', () => {
+    // El documento lo leen Dirección, Gerencia y Recursos Humanos de un hotel
+    // de 20,000 colaboradores. Ningún término de área debe llegar hasta ahí.
+    for (const jerga of [
+      'Rapport', 'PNL', 'Score global', 'Score Global', 'Meta VTC', 'estándar VTC',
+      'neurocient', 'submodalidad', 'límbic', 'córtex', 'Espejeo', 'kinestésico',
+      'piso de ventas', 'coaching', 'Semáforo'
+    ]) {
+      expect(texto).not.toContain(jerga);
+    }
+  });
+
+  test('los títulos son los de la versión corporativa', () => {
+    for (const titulo of [
+      'Perfil del Colaborador',
+      'Resumen Ejecutivo',
+      'Evaluación de Competencias Profesionales',
+      'Fundamentos Psicológicos de la Comunicación Efectiva',
+      'Técnicas de Comunicación Avanzada',
+      'Plan de Desarrollo Profesional',
+      'Análisis de Desempeño',
+      'Recomendaciones de Mejora',
+      'Seguimiento y Verificación de Progreso'
+    ]) {
+      expect(texto).toContain(titulo);
+    }
   });
 });
 // ════════════════════════════════════════════

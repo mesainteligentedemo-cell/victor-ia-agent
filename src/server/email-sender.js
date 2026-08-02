@@ -256,13 +256,13 @@ function fitNombre(nombre, resto) {
 
 /**
  * Asunto del correo del reporte.
- * Formato: "📊 Reporte de Capacitación: Christian Soria • 01/08/2026 11:53 a.m."
+ * Formato: "Reporte de Desarrollo Profesional: Christian Soria • 01/08/2026 11:53 a.m."
  *
  * @param {object} data Datos del reporte
  * @param {Date|string|number} [when] Momento de la sesión
  */
 function buildEmailSubject(data, when) {
-  const prefijo = '📊 Reporte de Capacitación: ';
+  const prefijo = 'Reporte de Desarrollo Profesional: ';
   const sufijo = ` • ${formatDateLocal(when)} ${formatTimezoneCancun(when)}`;
   return `${prefijo}${fitNombre(nombreCompleto(data), prefijo.length + sufijo.length)}${sufijo}`;
 }
@@ -308,19 +308,108 @@ function scorePct(d) {
  *
  * @returns {Array<[string,string]>}
  */
+/**
+ * Etiqueta de la fila del desempeño. Vive en una constante porque la usan DOS
+ * sitios: la tabla de detalles y el coloreado de esa misma fila en el HTML.
+ */
+const ETIQUETA_DESEMPENO = 'Desempeño General';
+
 function detallesSesion(d, when) {
   const data = d || {};
   const nombre = nombreCompleto(data);
   const id = data.empleado_id ? ` (${data.empleado_id})` : '';
 
   return [
-    ['Empleado', `${nombre}${id}`],
+    ['Colaborador', `${nombre}${id}`],
     ['Departamento', String(data.departamento || '—')],
     ['Fecha', formatDateLong(when)],
     ['Hora', `${formatTimezoneCancun(when)} (America/Cancun)`],
     ['Duración', duracionTexto(data)],
-    ['Desempeño Global', `${scorePct(data)}%`]
+    [ETIQUETA_DESEMPENO, `${scorePct(data)}%`]
   ];
+}
+
+// ════════════════════════════════════════════════════════════
+// TRANSCRIPCIÓN DEL CORREO
+// ════════════════════════════════════════════════════════════
+
+/**
+ * Cuántas intervenciones caben en el correo.
+ *
+ * Una sesión de treinta minutos son ~260 turnos: pegarlos íntegros deja un
+ * correo que Gmail recorta con un "ver mensaje completo" y que nadie despliega.
+ * El registro completo viaja siempre en el PDF; aquí van las primeras
+ * intervenciones y una línea que dice dónde está el resto.
+ */
+const TRANSCRIPT_EMAIL_MAX = 40;
+
+/**
+ * Normaliza la transcripción a bloques listos para imprimir.
+ *
+ * Cada elemento es una intervención independiente: quién habla, en qué minuto y
+ * qué dijo. La limpieza de símbolos de sistema ocurre aguas arriba, en
+ * `cleanTurnText` (src/server/n8n-mapper.js); aquí se vuelve a barrer por
+ * seguridad, porque el correo puede recibir datos de integraciones antiguas que
+ * no pasaron por el mapeo actual.
+ *
+ * @param {object} d Datos del reporte
+ * @returns {{bloques:Array<{speaker:string,timestamp:string,text:string}>, total:number, omitidos:number}}
+ */
+function transcripcionBloques(d) {
+  const turnos = Array.isArray(d && d.transcription) ? d.transcription : [];
+
+  const limpio = (valor) => String(valor == null ? '' : valor)
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/\[[^\]]*\]/g, ' ')
+    .replace(/[<>[\]]/g, '')
+    .replace(/[ \t]+/g, ' ')
+    .trim();
+
+  const bloques = turnos
+    .map((t) => ({
+      speaker: limpio(t && t.speaker) || 'Participante',
+      timestamp: limpio(t && t.timestamp),
+      text: limpio(t && t.text)
+    }))
+    .filter((t) => t.text);
+
+  return {
+    bloques: bloques.slice(0, TRANSCRIPT_EMAIL_MAX),
+    total: bloques.length,
+    omitidos: Math.max(0, bloques.length - TRANSCRIPT_EMAIL_MAX)
+  };
+}
+
+/**
+ * La transcripción en texto plano, un bloque por intervención:
+ *
+ *   VICTOR (00:03)
+ *   Buenas tardes, bienvenidos.
+ *
+ *   CHRISTIAN SORIA (00:11)
+ *   Muchas gracias.
+ *
+ * @returns {string[]} Líneas listas para unir con '\n'
+ */
+function transcripcionTexto(d) {
+  const { bloques, total, omitidos } = transcripcionBloques(d);
+  if (!bloques.length) return [];
+
+  const lineas = ['', '💬 TRANSCRIPCIÓN DE LA SESIÓN:'];
+
+  bloques.forEach((t) => {
+    lineas.push('');
+    lineas.push(t.timestamp ? `${t.speaker.toUpperCase()} (${t.timestamp})` : t.speaker.toUpperCase());
+    lineas.push(t.text);
+  });
+
+  if (omitidos) {
+    lineas.push('');
+    lineas.push(`(Se muestran las primeras ${bloques.length} de ${total} intervenciones. `
+      + 'La conversación completa está en el reporte adjunto.)');
+  }
+
+  return lineas;
 }
 
 /**
@@ -328,8 +417,10 @@ function detallesSesion(d, when) {
  * Es la fuente de verdad: la versión HTML se construye a partir de esta misma
  * estructura para que ambos digan exactamente lo mismo.
  *
- * El análisis detallado NO va aquí a propósito: viaja completo en el PDF. El
- * correo es lo que el gerente lee en el teléfono en veinte segundos.
+ * El análisis detallado NO va aquí a propósito: viaja completo en el reporte
+ * adjunto. El correo es lo que se lee en el teléfono en veinte segundos, más la
+ * transcripción de la conversación, que es lo que el colaborador y su líder
+ * consultan de inmediato sin abrir el documento.
  *
  * @param {object} data
  * @param {Date|string|number} [when]
@@ -338,26 +429,29 @@ function detallesSesion(d, when) {
  */
 function buildEmailText(data, when, options) {
   const d = data || {};
-  const adjuntos = ['• PDF: Reporte completo de capacitación'];
+  const adjuntos = ['• PDF: Reporte completo de desarrollo profesional'];
   if (tieneAudio(options)) adjuntos.push('• MP3: Grabación de la sesión');
 
   return [
     `Estimado ${nombreCompleto(d)},`,
     '',
-    '✅ Tu sesión de entrenamiento ha finalizado correctamente.',
+    'Su sesión de práctica ha concluido satisfactoriamente. A continuación encontrará el resumen de la sesión.',
     '',
-    '📋 DETALLES DE LA SESIÓN:',
+    '📋 DATOS DE LA SESIÓN:',
     ...detallesSesion(d, when).map(([k, v]) => `• ${k}: ${v}`),
     '',
-    '📎 ADJUNTOS:',
+    '📎 DOCUMENTOS ADJUNTOS:',
     ...adjuntos,
+    ...transcripcionTexto(d),
     '',
     '🎯 PRÓXIMOS PASOS:',
-    'Revisa el reporte adjunto para identificar áreas de mejora. '
-      + 'Si requieres reentrenamiento, contáctanos.',
+    'Le invitamos a revisar el reporte adjunto, donde encontrará sus fortalezas, '
+      + 'las oportunidades de mejora identificadas y el plan de desarrollo sugerido. '
+      + 'Si desea programar una nueva sesión de práctica, quedamos a sus órdenes.',
     '',
-    'Saludos,',
-    'Victor IA — Elite Training System'
+    'Cordialmente,',
+    'Victor IA — Programa de Desarrollo Profesional',
+    'Victorious Travelers Club'
   ].join('\n');
 }
 
@@ -418,16 +512,20 @@ function buildEmailHTML(data, when, options) {
   // ve verde en el correo y rojo en el PDF deja de confiar en los dos.
   const colorScore = scoreColor(d.score_overall);
 
+  // La fila del desempeño se colorea con el mismo criterio que el reporte. La
+  // comparación va contra la etiqueta que produce detallesSesion(): si ambas se
+  // desincronizan, el porcentaje sale en blanco y el correo pierde su única
+  // señal de color — que es justo lo que el gerente mira primero.
   const row = ([k, v]) => `
         <tr>
           <td style="${FONT};font-size:13px;color:${COLOR.muted};padding:9px 0;border-bottom:1px solid rgba(255,255,255,.09)">${escapeHtml(k)}</td>
           <td style="${FONT};font-size:14px;color:${
-  k === 'Desempeño Global' ? colorScore : COLOR.text
+  k === ETIQUETA_DESEMPENO ? colorScore : COLOR.text
 };font-weight:600;text-align:right;padding:9px 0;border-bottom:1px solid rgba(255,255,255,.09)">${escapeHtml(v)}</td>
         </tr>`;
 
   const adjuntos = [
-    ['PDF', 'Reporte completo de capacitación'],
+    ['PDF', 'Reporte completo de desarrollo profesional'],
     ...(tieneAudio(options) ? [['MP3', 'Grabación de la sesión']] : [])
   ];
 
@@ -440,15 +538,15 @@ function buildEmailHTML(data, when, options) {
   return `<!DOCTYPE html>
 <html lang="es"><head><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Reporte de Capacitación — ${nombre}</title></head>
+<title>Reporte de Desarrollo Profesional — ${nombre}</title></head>
 <body style="margin:0;padding:0;background:${COLOR.bg};">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${COLOR.bg};padding:28px 12px">
 <tr><td align="center">
 <table role="presentation" width="640" cellpadding="0" cellspacing="0" style="max-width:640px;width:100%;background:${COLOR.surface};border-radius:14px;overflow:hidden;border:1px solid rgba(229,179,62,.28)">
 
   <tr><td style="background:${COLOR.surface2};padding:32px 34px;border-bottom:3px solid ${COLOR.gold}">
-    <p style="${FONT};font-size:10px;letter-spacing:3px;text-transform:uppercase;color:${COLOR.gold};font-weight:700;margin:0 0 10px">Victorious Travelers Club · Elite Training</p>
-    <h1 style="${FONT};font-size:24px;color:${COLOR.text};margin:0;font-weight:700">📊 Reporte de Capacitación</h1>
+    <p style="${FONT};font-size:10px;letter-spacing:3px;text-transform:uppercase;color:${COLOR.gold};font-weight:700;margin:0 0 10px">Victorious Travelers Club · Desarrollo Profesional</p>
+    <h1 style="${FONT};font-size:24px;color:${COLOR.text};margin:0;font-weight:700">Reporte de Desarrollo Profesional</h1>
     <p style="${FONT};font-size:14px;color:${COLOR.muted};margin:8px 0 0">${nombre} · ${escapeHtml(formatDateLocal(when))} · ${escapeHtml(hora)}</p>
   </td></tr>
 
@@ -457,37 +555,86 @@ function buildEmailHTML(data, when, options) {
     <p style="${para}">Estimado <strong style="color:${COLOR.goldSoft}">${nombre}</strong>,</p>
 
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 28px;background:rgba(16,185,129,.09);border-left:3px solid ${COLOR.good};border-radius:6px">
-      <tr><td style="${FONT};font-size:14px;line-height:1.7;color:#E4E4E4;padding:14px 16px">✅ Tu sesión de entrenamiento ha finalizado correctamente.</td></tr>
+      <tr><td style="${FONT};font-size:14px;line-height:1.7;color:#E4E4E4;padding:14px 16px">Su sesión de práctica ha concluido satisfactoriamente. A continuación encontrará el resumen de la sesión.</td></tr>
     </table>
 
-    <p style="${label}">📋 Detalles de la sesión</p>
+    <p style="${label}">Datos de la sesión</p>
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 30px">
       ${detallesSesion(d, when).map(row).join('')}
     </table>
 
-    <p style="${label}">📎 Adjuntos</p>
+    <p style="${label}">Documentos adjuntos</p>
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 30px">
       ${adjuntos.map(adjuntoLi).join('')}
     </table>
 
-    <p style="${label}">🎯 Próximos pasos</p>
-    <p style="${para}">Revisa el reporte adjunto para identificar áreas de mejora. Si requieres reentrenamiento, contáctanos.</p>
+    ${buildEmailTranscript(d, { font: FONT, label })}
+
+    <p style="${label}">Próximos pasos</p>
+    <p style="${para}">Le invitamos a revisar el reporte adjunto, donde encontrará sus fortalezas, las oportunidades de mejora identificadas y el plan de desarrollo sugerido. Si desea programar una nueva sesión de práctica, quedamos a sus órdenes.</p>
     ${buildEmailCtas(d, { font: FONT })}
 
     <div style="border-top:1px solid rgba(229,179,62,.28);margin:28px 0"></div>
 
-    <p style="${para};margin:0 0 4px">Saludos,</p>
-    <p style="${para};margin:0"><strong style="color:${COLOR.text}">Victor IA</strong> <span style="color:${COLOR.muted}">— Elite Training System</span></p>
+    <p style="${para};margin:0 0 4px">Cordialmente,</p>
+    <p style="${para};margin:0"><strong style="color:${COLOR.text}">Victor IA</strong> <span style="color:${COLOR.muted}">— Programa de Desarrollo Profesional</span></p>
 
   </td></tr>
 
   <tr><td style="background:${COLOR.bg};padding:18px 34px;text-align:center;border-top:1px solid rgba(229,179,62,.22)">
-    <p style="${FONT};font-size:11px;color:${COLOR.muted};margin:0">Generado automáticamente por Victor IA · ${escapeHtml(formatDateLocal(when))} ${escapeHtml(hora)} (America/Cancun)</p>
+    <p style="${FONT};font-size:11px;color:${COLOR.muted};margin:0">Documento generado por Victor IA · ${escapeHtml(formatDateLocal(when))} ${escapeHtml(hora)} (America/Cancun)</p>
   </td></tr>
 
 </table>
 </td></tr></table>
 </body></html>`;
+}
+
+/**
+ * La transcripción dentro del correo, un bloque por intervención.
+ *
+ * Cada bloque es una tabla independiente: nombre y minuto en su propio renglón,
+ * y debajo lo que se dijo. Sin globos de chat alineados a izquierda y derecha —
+ * Outlook no los renderiza igual que Gmail y el resultado se descuadra.
+ *
+ * Si la sesión no trae transcripción, el bloque entero desaparece: un
+ * encabezado vacío en un correo se lee como un fallo del sistema.
+ */
+function buildEmailTranscript(d, { font, label }) {
+  const { bloques, total, omitidos } = transcripcionBloques(d);
+  if (!bloques.length) return '';
+
+  const esAgente = (t) => /victor|carlos|sandra|carlitos|jorge|james|kelly|tiffany|george/i.test(t.speaker);
+
+  const bloque = (t) => {
+    const acento = esAgente(t) ? COLOR.gold : COLOR.muted;
+    const fondo = esAgente(t) ? 'rgba(229,179,62,.07)' : 'rgba(255,255,255,.035)';
+    const hora = t.timestamp
+      ? `<span style="${font};font-size:11px;color:${COLOR.muted};font-weight:400;letter-spacing:.4px"> · ${escapeHtml(t.timestamp)}</span>`
+      : '';
+
+    return `
+        <tr><td style="padding:0 0 9px">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${fondo};border-left:3px solid ${acento};border-radius:0 8px 8px 0">
+            <tr><td style="padding:11px 14px">
+              <p style="${font};font-size:11px;letter-spacing:1.4px;text-transform:uppercase;color:${acento};font-weight:700;margin:0 0 5px">${escapeHtml(t.speaker)}${hora}</p>
+              <p style="${font};font-size:14px;line-height:1.65;color:#E4E4E4;margin:0">${escapeHtml(t.text)}</p>
+            </td></tr>
+          </table>
+        </td></tr>`;
+  };
+
+  const nota = omitidos
+    ? `<p style="${font};font-size:12px;line-height:1.6;color:${COLOR.muted};margin:0 0 30px">`
+      + `Se muestran las primeras ${bloques.length} de ${total} intervenciones. `
+      + `La conversación completa está en el reporte adjunto.</p>`
+    : '';
+
+  return `<p style="${label}">Transcripción de la sesión</p>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 ${omitidos ? '10px' : '30px'}">
+      ${bloques.map(bloque).join('')}
+    </table>
+    ${nota}`;
 }
 
 /**
@@ -499,10 +646,13 @@ function buildEmailHTML(data, when, options) {
  * adjuntos, que siempre viajan.
  */
 function buildEmailCtas(d, { font }) {
+  // Los rótulos son EXACTAMENTE los del reporte: el gerente salta del correo al
+  // PDF y de vuelta, y un botón que cambia de nombre entre los dos parece otro
+  // destino.
   const acciones = [
     { url: d.pop_up_url, texto: 'Escuchar la sesión', principal: true },
     { url: d.pdf_download_url, texto: 'Descargar el reporte', principal: false },
-    { url: d.retrain_url, texto: 'Repetir el entrenamiento', principal: false }
+    { url: d.retrain_url, texto: 'Solicitar nueva práctica', principal: false }
   ].filter((a) => typeof a.url === 'string' && /^https?:\/\//i.test(a.url));
 
   if (!acciones.length) return '';

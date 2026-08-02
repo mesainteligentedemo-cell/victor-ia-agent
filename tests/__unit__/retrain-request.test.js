@@ -82,7 +82,7 @@ describe('cuerpo del reentrenamiento', () => {
       '📅 DETALLES:',
       '📝 NOTAS DEL GERENTE:',
       '⏳ ESTADO:',
-      'Victor IA — Elite Training System'
+      'Victor IA — Programa de Desarrollo Profesional'
     ];
 
     let cursor = -1;

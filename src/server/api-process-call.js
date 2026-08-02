@@ -734,14 +734,20 @@ function generateChartsData(mappedData, transcript, turns) {
       categories: (mappedData.competencias || []).map((c) => c.name),
       values: (mappedData.competencias || []).map((c) => c.score)
     },
-    // Cada fase se evalúa con la competencia que realmente la gobierna
+    // Cada etapa se evalúa con la competencia que realmente la gobierna.
+    //
+    // Se aceptan los DOS nombres de cada competencia: el actual del reporte
+    // ("Conexión", "Comunicación"…) y el histórico del manual de ventas
+    // ("Rapport", "PNL"…). Sin el respaldo, un payload de una integración
+    // anterior dejaba la gráfica de etapas en ceros — y un cero pintado se lee
+    // como un desempeño nulo, no como un dato ausente.
     timeline: {
-      labels: ['Apertura', 'Descubrimiento', 'Presentación', 'Objeciones', 'Cierre'],
+      labels: ['Bienvenida', 'Exploración', 'Presentación', 'Inquietudes', 'Conclusión'],
       points: [
-        comp['Rapport'] ?? mappedData.score_rapport,
-        comp['Lectura Sala'] ?? mappedData.score_lectura_sala,
-        comp['PNL'] ?? mappedData.score_pnl,
-        comp['Objeciones'] ?? mappedData.score_objecciones,
+        comp['Conexión'] ?? comp['Rapport'] ?? mappedData.score_rapport,
+        comp['Percepción'] ?? comp['Lectura Sala'] ?? mappedData.score_lectura_sala,
+        comp['Comunicación'] ?? comp['PNL'] ?? mappedData.score_pnl,
+        comp['Inquietudes'] ?? comp['Objeciones'] ?? mappedData.score_objecciones,
         comp['Cierre'] ?? mappedData.score_cierre
       ].map((v) => Number(v) || 0)
     },

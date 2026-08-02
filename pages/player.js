@@ -148,7 +148,7 @@ export default function Player() {
           borderRadius: '14px 14px 0 0', padding: '26px 28px'
         }}>
           <p style={{ margin: 0, fontSize: 10, letterSpacing: 3, textTransform: 'uppercase', color: C.gold, fontWeight: 700 }}>
-            Victorious Travelers Club · Elite Training
+            Victorious Travelers Club · Desarrollo Profesional
           </p>
           <h1 style={{ margin: '10px 0 0', fontSize: 26, fontWeight: 700 }}>Reproductor de sesión</h1>
           {data && (
@@ -186,10 +186,10 @@ export default function Player() {
                 display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))',
                 gap: 14, marginBottom: 26
               }}>
-                <Stat label="Desempeño" value={`${data.score_overall}/10`} color={scoreColor(data.score_overall)} />
+                <Stat label="Desempeño general" value={`${data.score_overall}/10`} color={scoreColor(data.score_overall)} />
                 <Stat label="Equivalente" value={`${data.scoreTotal}%`} color={scoreColor(data.score_overall)} />
                 <Stat label="Duración" value={`${data.duracion_texto} min`} color={C.text} />
-                <Stat label="Turnos" value={String(data.turnos)} color={C.text} />
+                <Stat label="Intervenciones" value={String(data.turnos)} color={C.text} />
               </div>
 
               {/* ── Audio ─────────────────────────────────── */}
@@ -225,8 +225,12 @@ export default function Player() {
                 </a>
               </div>
 
-              {/* ── Transcripción ─────────────────────────── */}
-              <h2 style={sectionTitle}>Transcripción</h2>
+              {/* ── Transcripción ───────────────────────────
+                  Un bloque por intervención, a todo el ancho: quién habla y en
+                  qué minuto en su propio renglón, y debajo lo que dijo. Mismo
+                  formato que el reporte impreso, para que quien salta de un
+                  documento al otro lea siempre lo mismo. */}
+              <h2 style={sectionTitle}>Transcripción de la sesión</h2>
               {!data.transcription || !data.transcription.length ? (
                 <p style={{ color: C.muted, fontSize: 14 }}>
                   Esta sesión no tiene transcripción registrada.
@@ -238,26 +242,29 @@ export default function Player() {
                     const activo = i === activeIndex;
                     const esAgente = turn.type === 'agent';
                     return (
-                      <li key={i} style={{ marginBottom: 10, display: 'flex', justifyContent: esAgente ? 'flex-end' : 'flex-start' }}>
+                      <li key={i} style={{ marginBottom: 9 }}>
                         <button
                           type="button"
                           onClick={() => seekTo(secs)}
                           disabled={secs === null || audioError}
                           title={secs === null ? 'Sin marca de tiempo' : `Ir a ${turn.timestamp}`}
                           style={{
-                            maxWidth: '78%', textAlign: 'left', cursor: secs === null || audioError ? 'default' : 'pointer',
+                            width: '100%', textAlign: 'left', display: 'block',
+                            cursor: secs === null || audioError ? 'default' : 'pointer',
                             background: activo
                               ? 'rgba(229,179,62,.20)'
-                              : esAgente ? 'rgba(255,255,255,.05)' : 'rgba(86,180,233,.10)',
+                              : esAgente ? 'rgba(229,179,62,.07)' : 'rgba(255,255,255,.04)',
                             border: `1px solid ${activo ? C.gold : 'rgba(255,255,255,.08)'}`,
-                            borderRadius: 12, padding: '11px 14px', color: C.text,
-                            font: 'inherit', fontSize: 14, lineHeight: 1.6
+                            borderLeft: `3px solid ${activo ? C.gold : esAgente ? C.gold : C.muted}`,
+                            borderRadius: 10, padding: '11px 14px', color: C.text,
+                            font: 'inherit', fontSize: 14, lineHeight: 1.65
                           }}
                         >
                           <span style={{
-                            display: 'block', fontSize: 11, letterSpacing: 1,
-                            textTransform: 'uppercase', color: esAgente ? C.goldSoft : '#8fc6ea',
-                            fontWeight: 700, marginBottom: 4
+                            display: 'block', fontSize: 11, letterSpacing: 1.4,
+                            textTransform: 'uppercase', color: esAgente ? C.goldSoft : C.text,
+                            fontWeight: 800, marginBottom: 5, paddingBottom: 5,
+                            borderBottom: '1px dashed rgba(255,255,255,.09)'
                           }}>
                             {turn.speaker}{turn.timestamp ? ` · ${turn.timestamp}` : ''}
                           </span>
@@ -271,7 +278,7 @@ export default function Player() {
 
               {!audioError && (
                 <p style={{ color: C.muted, fontSize: 12, marginTop: 16 }}>
-                  Reproduciendo {formatClock(currentTime)} · toca cualquier turno para saltar a ese momento.
+                  Reproduciendo {formatClock(currentTime)} · seleccione cualquier intervención para ir a ese momento.
                 </p>
               )}
             </>
@@ -279,7 +286,7 @@ export default function Player() {
         </section>
 
         <footer style={{ textAlign: 'center', color: C.muted, fontSize: 12, marginTop: 22 }}>
-          Victor IA · Entrenamiento VTC Capacitación · victor-ia.xyz
+          Victor IA · Programa de Desarrollo Profesional · victor-ia.xyz
         </footer>
 
         {/* Los estados del cursor no caben en un `style` inline. Sin ellos un

@@ -143,24 +143,28 @@ function mapElevenLabsData(webhookBody) {
   // el gerente toma decisiones sobre él. Ahora el respaldo es neutro y se
   // apoya en las competencias reales de la sesión.
   const fortalezas = v(safe(wh, 'fortalezas', null),
-    'Continuar desarrollando fortalezas identificadas');
+    'Continuar desarrollando las fortalezas identificadas');
 
   const areas_mejora = v(safe(wh, 'areas_mejora', null),
-    'Mantener enfoque en competencias clave');
+    'Mantener el enfoque en las competencias clave');
 
   const analisis_pnl = v(safe(wh, 'analisis_pnl', null),
-    'Sin observaciones de PNL registradas en esta sesión.');
+    'No se registraron observaciones sobre técnicas de comunicación en esta sesión.');
 
   const objeciones_trabajadas = v(safe(wh, 'objeciones_trabajadas', null),
-    'No se registraron objeciones en esta sesión.');
+    'El cliente no planteó inquietudes durante esta sesión.');
 
   // ===== COMPETENCIAS (para gráficos) =====
+  // Los nombres son los que LEE un director de hotel, no los del manual de
+  // ventas: "Rapport" y "PNL" no significan nada fuera del área de capacitación,
+  // y el reporte lo revisa Recursos Humanos, Dirección y el propio colaborador.
+  // La equivalencia con el catálogo de entrenamiento vive en action-plan.js.
   const competencias = [
-    { name: 'Rapport', score: score_rapport },
-    { name: 'PNL', score: score_pnl },
-    { name: 'Postura', score: score_postura },
-    { name: 'Objeciones', score: score_objecciones },
-    { name: 'Lectura Sala', score: score_lectura_sala },
+    { name: 'Conexión', score: score_rapport },
+    { name: 'Comunicación', score: score_pnl },
+    { name: 'Presencia', score: score_postura },
+    { name: 'Inquietudes', score: score_objecciones },
+    { name: 'Percepción', score: score_lectura_sala },
     { name: 'Cierre', score: score_cierre }
   ];
 
@@ -173,9 +177,9 @@ function mapElevenLabsData(webhookBody) {
   // llamada. El generado es un respaldo con los datos duros de la sesión.
   const resumen = v(
     safe(wh, 'resumen', null) || safe(wh, 'resumen_sesion', null) || safe(wh, 'analisis_general', null),
-    `Sesión de ${duracion_texto} en el módulo ${modulo} con ${nombre}. Desempeño global de `
-      + `${score_overall}/10 (${scoreTotal}%). Competencia más fuerte: ${comp_alta.name} `
-      + `(${comp_alta.score}/10). Competencia a reforzar: ${comp_baja.name} (${comp_baja.score}/10).`
+    `Sesión de ${duracion_humana} en el módulo ${modulo}, con la participación de ${nombre}. `
+      + `Desempeño general de ${score_overall}/10 (${scoreTotal}%). Fortaleza que más destaca: ${comp_alta.name} `
+      + `(${comp_alta.score}/10). Competencia con mayor oportunidad de mejora: ${comp_baja.name} (${comp_baja.score}/10).`
   );
 
   // ===== RECOMENDACIÓN DEL COACH =====
@@ -188,27 +192,31 @@ function mapElevenLabsData(webhookBody) {
     buildRecomendacion(score_overall, comp_alta, comp_baja)
   );
 
-  // ===== PRINCIPIOS NEUROCIENTÍFICOS =====
+  // ===== FUNDAMENTOS DE LA COMUNICACIÓN EFECTIVA =====
+  // Los títulos y descripciones están escritos para que los entienda cualquier
+  // colaborador del hotel. Los términos técnicos del manual de ventas —"sistema
+  // límbico", "submodalidades", "reencuadre"— no aportan nada a quien lee el
+  // reporte y sí generan la impresión de un diagnóstico clínico.
   const principios_neuro = normalizePrincipios(safe(wh, 'principios_neuro', null)) || [
     {
-      titulo: 'Activación Límbica',
-      descripcion: 'Se activó el sistema límbico mediante calibración visual y validación de sueños familiares.'
+      titulo: 'Conexión emocional',
+      descripcion: 'El colaborador logró que la familia hablara de sus planes y expectativas de viaje, lo que abrió una conversación de confianza desde el inicio.'
     },
     {
-      titulo: 'Anclajes Emocionales',
-      descripcion: 'Ancla "memoria familiar" se activó. Reacción: asentimiento y sonrisa genuina.'
+      titulo: 'Momentos memorables',
+      descripcion: 'Se retomaron recuerdos familiares significativos durante la conversación. La respuesta del cliente fue de apertura y receptividad.'
     },
     {
-      titulo: 'Reencuadre PNL',
-      descripcion: 'Transformación "gasto" → "inversión en tiempo familiar" activó córtex prefrontal.'
+      titulo: 'Comunicación de valor',
+      descripcion: 'La propuesta se presentó como una inversión en tiempo de calidad en familia, en lugar de un gasto, lo que facilitó la evaluación por parte del cliente.'
     },
     {
-      titulo: 'Espejeo de Submodalidades',
-      descripcion: 'Sincronización de tono y ritmo generó rapport neuronal. La familia bajó defensas rápidamente.'
+      titulo: 'Sintonía con el interlocutor',
+      descripcion: 'El tono y el ritmo del habla se adaptaron a los del cliente, lo que ayudó a que la familia se sintiera cómoda desde los primeros minutos.'
     },
     {
-      titulo: 'Sincronización Neuronal',
-      descripcion: 'Patrones de respiración y ritmo de habla sincronizados. Congruencia detectada.'
+      titulo: 'Coherencia en el mensaje',
+      descripcion: 'El lenguaje verbal y corporal se mantuvieron alineados durante toda la conversación, transmitiendo seguridad y credibilidad.'
     }
   ];
 
@@ -232,17 +240,21 @@ function mapElevenLabsData(webhookBody) {
   const call_efficiency = safe(wh, 'call_efficiency', null);
   const coach_notes = safe(wh, 'coach_notes', null);
 
-  // ===== PLAN DE ACCIÓN =====
-  const plan_1 = `Score actual: ${score_overall}/10 (${scoreTotal}%). Fortaleza: ${comp_alta.name} (${comp_alta.score}/10). Área crítica: ${comp_baja.name} (${comp_baja.score}/10).`;
+  // ===== PLAN DE DESARROLLO PROFESIONAL =====
+  const plan_1 = `Desempeño general: ${score_overall}/10 (${scoreTotal}%). Fortaleza que más destaca: ${comp_alta.name} `
+    + `(${comp_alta.score}/10). Competencia con mayor oportunidad de mejora: ${comp_baja.name} (${comp_baja.score}/10).`;
 
-  const plan_2 = `Coaching intensivo en ${comp_baja.name} (3 sesiones de 20 min c/u). Práctica diaria: 2 simulaciones mínimo. Meta: ${comp_baja.name} de ${comp_baja.score}/10 → 8+/10 en 7 días.`;
+  const plan_2 = `Acompañamiento dirigido en ${comp_baja.name}: 3 sesiones de 20 minutos cada una, con dos prácticas diarias `
+    + `como mínimo. Objetivo: llevar ${comp_baja.name} de ${comp_baja.score}/10 al nivel esperado de 8/10 en 7 días.`;
 
-  const plan_3 = `Validación completa en 7 días. Si score ≥ 8/10 en todos: autorizar a producción. Si score < 8/10: extender coaching 3 días más.`;
+  const plan_3 = `Evaluación completa a los 7 días. Si todas las competencias alcanzan 8/10 o más, el colaborador queda `
+    + `certificado para atender clientes de forma autónoma. En caso contrario, se extiende el acompañamiento 3 días adicionales.`;
 
-  // ===== ACTIVIDAD SESIÓN =====
+  // ===== ACTIVIDAD DE LA SESIÓN =====
   const actividad_sesion = v(safe(wh, 'actividad_sesion', null),
-    `${nombre} trabajó el módulo ${modulo} durante ${duracion_texto} minutos frente a la familia ${familia_nombre}. `
-      + `Se cubrieron las fases de apertura, descubrimiento, presentación y cierre, con manejo de objeciones en tiempo real.`);
+    `${nombre} practicó el módulo ${modulo} durante ${duracion_humana}, atendiendo a la familia ${familia_nombre}. `
+      + `Se trabajaron las cuatro etapas de la conversación —bienvenida, exploración de necesidades, presentación y conclusión—, `
+      + `incluyendo la atención de las inquietudes planteadas por el cliente en tiempo real.`);
 
   // ===== TRANSCRIPCIÓN =====
   let transcription = [];
@@ -470,18 +482,20 @@ function resolveSessionDate(wh) {
  */
 function buildRecomendacion(score, alta, baja) {
   if (score >= 8.5) {
-    return `Desempeño de ${score}/10: el asesor está listo para piso de ventas. Capitalizar `
-      + `${alta.name} (${alta.score}/10) usando la grabación como referencia para el equipo. `
-      + `Punto único de vigilancia: ${baja.name} (${baja.score}/10), a reforzar en la sesión semanal.`;
+    return `Desempeño general de ${score}/10: el colaborador está listo para atender clientes de forma autónoma. `
+      + `Conviene aprovechar su fortaleza en ${alta.name} (${alta.score}/10) compartiendo la grabación como material `
+      + `de referencia para el equipo. Único punto por seguir de cerca: ${baja.name} (${baja.score}/10), `
+      + `que puede reforzarse durante la sesión semanal.`;
   }
   if (score >= 7) {
-    return `Desempeño de ${score}/10: base sólida con una brecha clara. Concentrar el coaching de los `
-      + `próximos 7 días exclusivamente en ${baja.name} (${baja.score}/10); ${alta.name} `
-      + `(${alta.score}/10) ya está en estándar y no requiere intervención. Revalidar al séptimo día.`;
+    return `Desempeño general de ${score}/10: base sólida con una oportunidad de mejora bien identificada. `
+      + `Se recomienda concentrar el acompañamiento de los próximos 7 días en ${baja.name} (${baja.score}/10); `
+      + `${alta.name} (${alta.score}/10) ya alcanza el nivel esperado y no requiere ajustes. `
+      + `El avance se verifica al séptimo día.`;
   }
-  return `Desempeño de ${score}/10: requiere refuerzo antes de piso de ventas. Prioridad absoluta en `
-    + `${baja.name} (${baja.score}/10) con acompañamiento diario. Usar ${alta.name} `
-    + `(${alta.score}/10) como base de confianza. Revalidar en 7 días con simulación completa.`;
+  return `Desempeño general de ${score}/10: el colaborador se encuentra en etapa de formación. `
+    + `Se recomienda dar prioridad a ${baja.name} (${baja.score}/10) con acompañamiento diario, apoyándose en `
+    + `${alta.name} (${alta.score}/10) como base de confianza. El progreso se verifica en 7 días con una práctica completa.`;
 }
 
 /**
@@ -595,7 +609,7 @@ function agentContext(modulo) {
 
 // ElevenLabs entrega los turnos con role "agent" / "user"
 // Nombres conocidos (español e inglés): Victor, Carlos, Sandra, Carlitos, Jorge, James, Kelly, Tiffany, George
-const AGENT_KEYS = ['victor', 'carlos', 'sandra', 'carlitos', 'jorge', 'james', 'kelly', 'tiffany', 'george', 'agent', 'assistant', 'ai'];
+const AGENT_KEYS = ['victor', 'carlos', 'sandra', 'carlitos', 'jorge', 'james', 'kelly', 'tiffany', 'george', 'agent', 'assistant', 'ai', 'ia'];
 
 /**
  * Etiquetas SSML que ElevenLabs deja dentro del mensaje del agente.
@@ -612,10 +626,25 @@ const ROLE_SUFFIX = /(\S)\s*[([{]\s*(?:agent|assistant|ai|bot|user|usuario|clien
 
 /** Etiqueta de hablante repetida DENTRO del propio mensaje. */
 const INLINE_SPEAKER_TAG = /^\s*[<[{]\s*[^<>[\]{}\n]{1,60}\s*[>\]}]\s*:?\s*/;
-const INLINE_ROLE_TAG = /^\s*[([]\s*(?:agent|assistant|ai|bot|user|usuario|cliente|system|sistema|coach)\s*[)\]]\s*:?\s*/i;
+const INLINE_ROLE_TAG = /^\s*[([{]\s*(?:agent|assistant|ai|ia|bot|user|usuario|cliente|system|sistema|coach|narrador|voz)\s*[)\]}]\s*:?\s*/i;
 
 /** Marcadores de sistema que no son habla. */
 const SYSTEM_MARKERS = /\[(?:tool[_ ]?call|tool[_ ]?result|function[_ ]?call|silence|silencio|inaudible|end[_ ]of[_ ]call|interrupted|noise)\]/gi;
+
+/**
+ * Todo lo que va entre corchetes.
+ *
+ * ElevenLabs incrusta ahí las acotaciones de dirección de voz ("[calmado]",
+ * "[pausa larga]", "[risas]") y las etiquetas de hablante repetidas
+ * ("[Usuario]"). Nada de eso se dijo en voz alta: son instrucciones para el
+ * motor de síntesis. En un reporte que lee un director de hotel, "[calmado]
+ * Buenas tardes" se interpreta como una anotación de auditoría sobre el
+ * colaborador — que no existe.
+ */
+const BRACKET_BLOCK = /\[[^\]]*\]/g;
+
+/** Bloques entre llaves: variables de plantilla sin resolver, nunca habla. */
+const BRACE_BLOCK = /\{\{?[^{}]*\}?\}/g;
 
 /** Pares de comillas que envuelven un turno completo. */
 const QUOTE_PAIRS = [['"', '"'], ['“', '”'], ['«', '»'], ["'", "'"], ['‘', '’']];
@@ -698,40 +727,72 @@ function stripWrappingQuotes(text) {
 }
 
 /**
- * Texto literal del turno: lo que se dijo, nada más.
- * Quita SSML, marcadores de sistema, etiquetas de hablante repetidas y las
- * comillas que envuelven la frase completa.
+ * Texto literal del turno: lo que se dijo en voz alta, nada más.
+ *
+ * Elimina, en este orden y de forma exhaustiva:
+ *   1. Todo lo que va entre `<` y `>`, incluidos los símbolos.
+ *   2. Todo lo que va entre `[` y `]`, incluidos los símbolos.
+ *   3. Variables de plantilla sin resolver entre llaves.
+ *   4. Etiquetas de rol al inicio del mensaje: "(IA):", "(User):", "(Agent):".
+ *   5. Las comillas que envuelven la frase completa.
+ *
+ * La limpieza es iterativa a propósito: un mensaje con anidamiento
+ * ("[tono <suave>] Buenas tardes") necesita más de una pasada, y la validación
+ * final garantiza que ningún símbolo de sistema llegue al documento impreso.
  *
  * @param {string} raw
  * @returns {string}
  */
 function cleanTurnText(raw) {
   let t = String(raw == null ? '' : raw);
+  let prevLength;
 
-  // REGLA BLOQUEADA ESTRICTA: Eliminar TODO entre < y > (símbolos + contenido)
-  // Pasar múltiples veces para asegurar que se elimine COMPLETAMENTE
-  let prevLength = t.length;
+  // 1 · Todo entre < y >, símbolos incluidos.
   do {
     prevLength = t.length;
-    t = t.replace(/<[^>]*>/g, '');
+    t = t.replace(/<[^>]*>/g, ' ');
   } while (t.length < prevLength && t.includes('<'));
+
+  // 2 · Todo entre [ y ], símbolos incluidos. Acotaciones de voz y etiquetas
+  //     de hablante repetidas: "[calmado] Hola" -> "Hola".
+  do {
+    prevLength = t.length;
+    t = t.replace(BRACKET_BLOCK, ' ');
+  } while (t.length < prevLength && t.includes('['));
+
+  // 3 · Variables de plantilla sin resolver.
+  do {
+    prevLength = t.length;
+    t = t.replace(BRACE_BLOCK, ' ');
+  } while (t.length < prevLength && t.includes('{'));
 
   t = t.replace(SSML_TAGS, ' ');
   t = t.replace(SYSTEM_MARKERS, ' ');
   t = t.replace(INLINE_SPEAKER_TAG, '');
   t = t.replace(INLINE_ROLE_TAG, '');
+
+  // Resto del separador que unía la etiqueta con la frase.
+  //
+  // Caso real: `<Víctor English>: "Buenas tardes"`. Los pasos 1 y 2 ya se
+  // llevaron el `<…>`, así que INLINE_SPEAKER_TAG —que espera encontrar el
+  // envoltorio COMPLETO— ya no reconoce nada y los dos puntos se quedan
+  // huérfanos: el reporte imprimía `: "Buenas tardes"`. Se limpia después de
+  // borrar las etiquetas y ANTES de las comillas, para que la frase vuelva a
+  // empezar por comilla y stripWrappingQuotes pueda hacer su trabajo.
+  t = t.replace(/^[\s:;,.–—-]+/, '');
+
   t = stripWrappingQuotes(t);
 
   let cleaned = t
     .replace(/[ \t ]+/g, ' ')
+    .replace(/\s+([,.;:!?…])/g, '$1')   // el hueco que dejó la etiqueta borrada
     .replace(/\s*\n\s*/g, '\n')
     .trim();
 
-  // VALIDACIÓN ESTRICTA: NO puede haber < o > en el resultado
-  if (cleaned.includes('<') || cleaned.includes('>')) {
-    console.error('[TRANSCRIPT] ❌ ERROR CRÍTICO: Símbolos < > NO fueron eliminados:', cleaned.slice(0, 120));
-    // Si aún quedan, eliminar agresivamente
-    cleaned = cleaned.replace(/[<>]/g, '').trim();
+  // VALIDACIÓN ESTRICTA: ningún símbolo de sistema puede llegar al documento.
+  if (/[<>[\]]/.test(cleaned)) {
+    console.error('[TRANSCRIPT] Símbolos de sistema residuales, se eliminan:', cleaned.slice(0, 120));
+    cleaned = cleaned.replace(/[<>[\]]/g, '').replace(/[ \t]+/g, ' ').trim();
   }
 
   return cleaned;
@@ -769,10 +830,13 @@ function speakerMap(asesorName, familyName) {
     kelly: agentLabel('Kelly'),
     tiffany: agentLabel('Tiffany'),
     george: agentLabel('George'),
-    // Mapeos de rol genéricos
+    // Mapeos de rol genéricos. "ia" incluida: el agente a veces se anuncia como
+    // "(IA):" y sin esta entrada el reporte imprimía un hablante llamado "IA",
+    // que para el lector es un participante más de la conversación.
     agent: agentLabel('Victor'),
     assistant: agentLabel('Victor'),
     ai: agentLabel('Victor'),
+    ia: agentLabel('Victor'),
     // Familia/Cliente
     familia,
     [normKey(familia)]: familia,
