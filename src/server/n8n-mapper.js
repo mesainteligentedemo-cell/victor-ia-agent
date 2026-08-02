@@ -568,16 +568,25 @@ function stripWrappingQuotes(text) {
 function cleanTurnText(raw) {
   let t = String(raw == null ? '' : raw);
 
+  // REGLA BLOQUEADA: Eliminar TODO entre < y > (incluyendo símbolos)
+  t = t.replace(/<[^>]*>/g, '');
+
   t = t.replace(SSML_TAGS, ' ');
   t = t.replace(SYSTEM_MARKERS, ' ');
   t = t.replace(INLINE_SPEAKER_TAG, '');
   t = t.replace(INLINE_ROLE_TAG, '');
   t = stripWrappingQuotes(t);
 
-  return t
-    .replace(/[ \t ]+/g, ' ')
+  let cleaned = t
+    .replace(/[ \t ]+/g, ' ')
     .replace(/\s*\n\s*/g, '\n')
     .trim();
+
+  if (cleaned.includes('<') || cleaned.includes('>')) {
+    console.warn('[TRANSCRIPT] Símbolos < > detectados:', cleaned.slice(0, 80));
+  }
+
+  return cleaned;
 }
 
 /**
