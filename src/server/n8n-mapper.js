@@ -159,6 +159,19 @@ function mapElevenLabsData(webhookBody) {
     ? Math.round(rawCumplimiento <= 10 ? rawCumplimiento * 10 : Math.min(100, rawCumplimiento))
     : 85;
 
+  // ===== PROGRESIÓN Y CONTEXTO DE LA SESIÓN =====
+  // Campos que enriquecen el análisis de cómo fue la llamada
+  const session_progression = safe(wh, 'session_progression', null);
+  const objections_count = num(safe(wh, 'objections_count', null), null);
+  const pnl_techniques_used = safe(wh, 'pnl_techniques_used', null);
+  const prospect_engagement = safe(wh, 'prospect_engagement', null);
+  const next_steps_agreed = safe(wh, 'next_steps_agreed', null);
+  const identified_risks = safe(wh, 'identified_risks', null);
+  const interaction_quality = safe(wh, 'interaction_quality', null);
+  const conversion_potential = safe(wh, 'conversion_potential', null);
+  const call_efficiency = safe(wh, 'call_efficiency', null);
+  const coach_notes = safe(wh, 'coach_notes', null);
+
   // ===== PLAN DE ACCIÓN =====
   const plan_1 = `Score actual: ${score_overall}/10 (${scoreTotal}%). Fortaleza: ${comp_alta.name} (${comp_alta.score}/10). Área crítica: ${comp_baja.name} (${comp_baja.score}/10).`;
 
@@ -253,9 +266,21 @@ function mapElevenLabsData(webhookBody) {
     pdf_download_url,
     retrain_url,
 
+    // Contexto adicional de la sesión (nuevos campos de ElevenLabs)
+    session_progression,
+    objections_count,
+    pnl_techniques_used,
+    prospect_engagement,
+    next_steps_agreed,
+    identified_risks,
+    interaction_quality,
+    conversion_potential,
+    call_efficiency,
+    coach_notes,
+
     // Metadata
     timestamp: new Date().toISOString(),
-    version: 'v3.1',
+    version: 'v3.2',
 
     // ===== CONTEXTO DEL AGENTE (KB + RAG) =====
     // Enriquecimiento desde el snapshot del agente ElevenLabs.

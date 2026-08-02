@@ -245,6 +245,20 @@ function buildActionPlan(data = {}, competencias = []) {
     ? Number(data.scoreTotal)
     : Math.round((score / 10) * 100);
 
+  // ── Campos enriquecedores de ElevenLabs (v3.2) ───────────────
+  // Estos campos proporcionan contexto adicional sobre cómo fue la sesión
+  // y se integran en el diagnóstico para hacer el plan más específico y accionable.
+  const sessionProgression = data.session_progression || null;
+  const objectionsCount = Number.isFinite(Number(data.objections_count)) ? Number(data.objections_count) : null;
+  const pnlTechniquesUsed = data.pnl_techniques_used || null;
+  const prospectEngagement = data.prospect_engagement || null;
+  const nextStepsAgreed = data.next_steps_agreed || null;
+  const identifiedRisks = data.identified_risks || null;
+  const interactionQuality = data.interaction_quality || null;
+  const conversionPotential = data.conversion_potential || null;
+  const callEfficiency = data.call_efficiency || null;
+  const coachNotes = data.coach_notes || null;
+
   const ordenadas = comps.slice().sort((a, b) => b.score - a.score);
   const fuertes = ordenadas.filter((c) => c.score >= META).slice(0, 3);
   const criticas = ordenadas.filter((c) => c.score < META).sort((a, b) => a.score - b.score);
@@ -350,6 +364,22 @@ function buildActionPlan(data = {}, competencias = []) {
     });
   }
 
+  // Observación adicional: contexto de la sesión desde ElevenLabs
+  if (prospectEngagement || interactionQuality || objectionsCount !== null) {
+    let contexto = 'Contexto de la sesión: ';
+    const partes = [];
+    if (prospectEngagement) partes.push(`Engagement del cliente: ${prospectEngagement}`);
+    if (interactionQuality) partes.push(`Calidad de interacción: ${interactionQuality}`);
+    if (objectionsCount !== null) partes.push(`${objectionsCount} objeción${objectionsCount === 1 ? '' : 'es'} identificada${objectionsCount === 1 ? '' : 's'}`);
+    if (partes.length) {
+      diagnostico.push({
+        titulo: 'Observaciones de la sesión',
+        detalle: partes.join(' · '),
+        tono: 'ok'
+      });
+    }
+  }
+
   diagnostico.push({
     titulo: `Brecha para llegar a ${META}+/10`,
     detalle: brechaTotal > 0
@@ -371,12 +401,12 @@ function buildActionPlan(data = {}, competencias = []) {
   });
 
   const riesgos = detectarRiesgos(data, comps, varianza, sem);
+  const riesgosTexto = riesgos.join(' ');
+  const riesgosAgente = identifiedRisks ? `Riesgos identificados por el agente: ${identifiedRisks}. ` : '';
   diagnostico.push({
     titulo: 'Riesgos de desempeño',
-    detalle: riesgos.length
-      ? riesgos.join(' ')
-      : 'Sin riesgos operativos detectados en esta sesión. El perfil es parejo y sostenido de principio a fin.',
-    tono: riesgos.length ? 'warn' : 'ok'
+    detalle: riesgosAgente + (riesgosTexto || 'Sin riesgos operativos detectados en esta sesión. El perfil es parejo y sostenido de principio a fin.'),
+    tono: (riesgos.length || identifiedRisks) ? 'warn' : 'ok'
   });
 
   diagnostico.push({
@@ -548,7 +578,19 @@ function buildActionPlan(data = {}, competencias = []) {
       hitos,
       criterios,
       pasos: proximosPasos,
-      notas
+      notas,
+      // Contexto adicional de ElevenLabs (para enriquecimiento futuro del template)
+      session_context: {
+        progression: sessionProgression,
+        objections_count: objectionsCount,
+        pnl_techniques: pnlTechniquesUsed,
+        prospect_engagement: prospectEngagement,
+        next_steps: nextStepsAgreed,
+        interaction_quality: interactionQuality,
+        conversion_potential: conversionPotential,
+        call_efficiency: callEfficiency,
+        coach_notes: coachNotes
+      }
     },
     // Compatibilidad hacia atrás: el email y las integraciones viejas leen
     // plan_1/2/3. Se mantienen, ahora derivados del plan expandido.
