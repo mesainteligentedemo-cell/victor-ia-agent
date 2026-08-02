@@ -568,8 +568,13 @@ function stripWrappingQuotes(text) {
 function cleanTurnText(raw) {
   let t = String(raw == null ? '' : raw);
 
-  // REGLA BLOQUEADA: Eliminar TODO entre < y > (incluyendo símbolos)
-  t = t.replace(/<[^>]*>/g, '');
+  // REGLA BLOQUEADA ESTRICTA: Eliminar TODO entre < y > (símbolos + contenido)
+  // Pasar múltiples veces para asegurar que se elimine COMPLETAMENTE
+  let prevLength = t.length;
+  do {
+    prevLength = t.length;
+    t = t.replace(/<[^>]*>/g, '');
+  } while (t.length < prevLength && t.includes('<'));
 
   t = t.replace(SSML_TAGS, ' ');
   t = t.replace(SYSTEM_MARKERS, ' ');
@@ -582,8 +587,11 @@ function cleanTurnText(raw) {
     .replace(/\s*\n\s*/g, '\n')
     .trim();
 
+  // VALIDACIÓN ESTRICTA: NO puede haber < o > en el resultado
   if (cleaned.includes('<') || cleaned.includes('>')) {
-    console.warn('[TRANSCRIPT] Símbolos < > detectados:', cleaned.slice(0, 80));
+    console.error('[TRANSCRIPT] ❌ ERROR CRÍTICO: Símbolos < > NO fueron eliminados:', cleaned.slice(0, 120));
+    // Si aún quedan, eliminar agresivamente
+    cleaned = cleaned.replace(/[<>]/g, '').trim();
   }
 
   return cleaned;
