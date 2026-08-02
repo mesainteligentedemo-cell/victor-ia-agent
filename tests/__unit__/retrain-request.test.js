@@ -167,8 +167,11 @@ describe('cuerpo del reentrenamiento', () => {
       links: LINKS,
       origenCompetencias: 'ninguno'
     });
-    expect(pobre.text).toContain('Asesor VTC');
+    expect(pobre.text).toContain('Colaborador sin identificar');
     expect(pobre.text).toContain('Sin foco definido');
+    // Cada hueco se nombra: el gerente sabe qué NO se registró de esa sesión
+    expect(pobre.text).toContain('Pendiente de evaluación');
+    expect(pobre.text).toContain('Duración: No disponible');
     expect(pobre.text).not.toContain('undefined');
     expect(pobre.html).not.toContain('undefined');
   });

@@ -43,14 +43,20 @@ describe('mapElevenLabsData — los ceros son datos, no huecos', () => {
     expect(out.score_overall).toBe(0);
   });
 
-  test('score ausente sí toma el default', () => {
+  // ⚠️ Estas pruebas afirmaban lo contrario: que un score ausente "sí toma el
+  // default" de 8. Codificaban el fallo — el reporte declaraba 8/10 (80%,
+  // "Desempeño sólido") sobre sesiones que nadie evaluó. Ahora la ausencia
+  // sobrevive como ausencia hasta el documento, que la nombra.
+  test('score ausente queda en null: NO se inventa un 8', () => {
     const out = mapElevenLabsData({ conversation_id: 'c1' });
-    expect(out.score_overall).toBe(8);
+    expect(out.score_overall).toBeNull();
+    expect(out.scoreTotal).toBeNull();
+    expect(out.evaluacion_disponible).toBe(false);
   });
 
-  test('score null o cadena vacía toman el default', () => {
-    expect(mapElevenLabsData({ score_overall: null }).score_overall).toBe(8);
-    expect(mapElevenLabsData({ score_overall: '' }).score_overall).toBe(8);
+  test('score null o cadena vacía quedan en null', () => {
+    expect(mapElevenLabsData({ score_overall: null }).score_overall).toBeNull();
+    expect(mapElevenLabsData({ score_overall: '' }).score_overall).toBeNull();
   });
 
   test('scores fuera de rango se clampan a [0,10]', () => {
@@ -58,10 +64,25 @@ describe('mapElevenLabsData — los ceros son datos, no huecos', () => {
     expect(mapElevenLabsData({ score_overall: -7 }).score_overall).toBe(0);
   });
 
-  test('score no numérico cae al default en vez de propagar NaN', () => {
+  test('score no numérico queda en null en vez de propagar NaN o inventar un 8', () => {
     const out = mapElevenLabsData({ score_overall: 'excelente' });
-    expect(Number.isFinite(out.score_overall)).toBe(true);
-    expect(out.score_overall).toBe(8);
+    expect(out.score_overall).toBeNull();
+  });
+
+  test('sin scores no hay competencias, ni plan, ni recomendación', () => {
+    const out = mapElevenLabsData({ conversation_id: 'c1' });
+    expect(out.competencias).toEqual([]);
+    expect(out.comp_alta).toBeNull();
+    expect(out.comp_baja).toBeNull();
+    expect(out.plan_1).toBeNull();
+    expect(out.plan_2).toBeNull();
+    expect(out.plan_3).toBeNull();
+    expect(out.recomendacion_coach).toBeNull();
+  });
+
+  test('solo entran a competencias las que el agente puntuó', () => {
+    const out = mapElevenLabsData({ conversation_id: 'c1', score_rapport: 7, score_cierre: 3 });
+    expect(out.competencias.map((c) => c.name)).toEqual(['Conexión', 'Cierre']);
   });
 
   test('score decimal se conserva sin redondear', () => {
@@ -125,7 +146,7 @@ describe('mapElevenLabsData — los 25 campos del agente', () => {
   });
 
   test('ninguna competencia conserva jerga del manual de ventas', () => {
-    const nombres = mapElevenLabsData({}).competencias.map((c) => c.name);
+    const nombres = mapElevenLabsData(payload).competencias.map((c) => c.name);
     expect(nombres).not.toContain('Rapport');
     expect(nombres).not.toContain('PNL');
     expect(nombres).toEqual(
@@ -147,6 +168,14 @@ describe('mapElevenLabsData — los 25 campos del agente', () => {
     expect(mapElevenLabsData({ cumplimiento_neuro: 85 }).cumplimiento_neuro).toBe(85);
   });
 
+  test('sin cumplimiento_neuro no se inventa el 85%', () => {
+    expect(mapElevenLabsData({ conversation_id: 'c1' }).cumplimiento_neuro).toBeNull();
+  });
+
+  test('sin principios del agente la lista va vacía, no con los 5 párrafos fijos', () => {
+    expect(mapElevenLabsData({ conversation_id: 'c1' }).principios_neuro).toEqual([]);
+  });
+
   test('convierte el transcript en burbujas con lado y tipo', () => {
     const out = mapElevenLabsData(payload);
     expect(out.transcription.length).toBe(2);
@@ -161,18 +190,26 @@ describe('mapElevenLabsData — los 25 campos del agente', () => {
     expect(out.retrain_url).toContain('/retrain?conv=conv_test_25');
   });
 
-  test('los defaults narrativos no inventan hallazgos', () => {
+  // Antes esta prueba aceptaba un respaldo "neutro" ("Continuar desarrollando
+  // las fortalezas identificadas"). Sigue siendo una afirmación: da por hecho
+  // que se identificaron fortalezas. Sin análisis del agente, no hay texto.
+  test('sin análisis del agente NO se escribe ningún hallazgo', () => {
     const out = mapElevenLabsData({ conversation_id: 'c1' });
-    expect(out.fortalezas).toBe('Continuar desarrollando las fortalezas identificadas');
-    expect(out.areas_mejora).toBe('Mantener el enfoque en las competencias clave');
-    // El texto viejo afirmaba observaciones que nadie hizo
-    expect(out.fortalezas).not.toMatch(/calibración visual/i);
-    expect(out.analisis_pnl).not.toMatch(/anclajes emocionales/i);
+    expect(out.fortalezas).toBeNull();
+    expect(out.areas_mejora).toBeNull();
+    expect(out.analisis_pnl).toBeNull();
+    expect(out.fortalezas_list).toEqual([]);
+    expect(out.areas_list).toEqual([]);
   });
 
   test('los fundamentos de comunicación se explican sin lenguaje clínico', () => {
-    const descripciones = mapElevenLabsData({ conversation_id: 'c1' })
-      .principios_neuro.map((p) => `${p.titulo} ${p.descripcion}`).join(' ');
+    const descripciones = mapElevenLabsData({
+      conversation_id: 'c1',
+      principios_neuro: [
+        'Conexión emocional: la familia compartió sus planes de viaje',
+        'Sintonía con el interlocutor: el ritmo del habla se adaptó al del cliente'
+      ]
+    }).principios_neuro.map((p) => `${p.titulo} ${p.descripcion}`).join(' ');
 
     for (const jerga of [/límbic/i, /submodalidad/i, /córtex/i, /neuronal/i, /reencuadre/i]) {
       expect(descripciones).not.toMatch(jerga);
@@ -243,6 +280,7 @@ describe('extractDataCollection — campos del agente ElevenLabs', () => {
 
 describe('validateReportData — cero no es "falta el dato"', () => {
   const base = {
+    conversationId: 'conv_1',
     nombre: 'Ana', empleado_id: 'VTC-1', modulo: 'M1',
     fecha_sesion: '01/08/2026', duracion_texto: '10:00',
     score_overall: 8, scoreTotal: 80,
@@ -259,19 +297,19 @@ describe('validateReportData — cero no es "falta el dato"', () => {
   });
 
   test('rechaza cuando un campo crítico es null', () => {
-    const r = validateReportData({ ...base, nombre: null });
+    const r = validateReportData({ ...base, fecha_sesion: null });
     expect(r.ok).toBe(false);
-    expect(r.missing).toContain('nombre');
+    expect(r.missing).toContain('fecha_sesion');
   });
 
-  test('rechaza cuando un campo crítico es cadena vacía', () => {
-    expect(validateReportData({ ...base, modulo: '' }).ok).toBe(false);
-  });
-
-  test('rechaza un score no numérico', () => {
-    const r = validateReportData({ ...base, score_overall: 'ocho' });
-    expect(r.ok).toBe(false);
-    expect(r.missing.join(' ')).toMatch(/score_overall/);
+  // Ya NO bloquean: el reporte se emite declarando el hueco. Bloquear
+  // significaría no entregar nada, y entonces la sesión se pierde entera.
+  test('un dato faltante avisa pero no impide emitir el reporte', () => {
+    const r = validateReportData({ ...base, nombre: null, modulo: '', score_overall: null });
+    expect(r.ok).toBe(true);
+    expect(r.warnings.join(' ')).toMatch(/nombre/);
+    expect(r.warnings.join(' ')).toMatch(/modulo/);
+    expect(r.warnings.join(' ')).toMatch(/score_overall/);
   });
 
   test('avisa (sin bloquear) cuando faltan competencias o transcripción', () => {
@@ -468,11 +506,15 @@ describe('resolveIdentity — el reporte siempre lleva apellido', () => {
   test('NO inventa apellidos para quien no está en el roster', () => {
     const id = resolveIdentity({ nombre: 'Rodrigo', empleado_id: '777' });
     expect(id.nombre_completo).toBe('Rodrigo');
-    expect(id.apellido).toBe('');
+    expect(id.apellido).toBeNull();
   });
 
-  test('sin datos no deja el reporte sin destinatario', () => {
-    expect(resolveIdentity({}).nombre_completo).toBe('Asesor VTC');
+  // Antes devolvía "Asesor VTC", que en la portada de un reporte de RR. HH. se
+  // lee como un colaborador que se llama así. La capa de datos deja el hueco;
+  // la presentación es la que decide cómo nombrarlo.
+  test('sin datos NO inventa una identidad', () => {
+    expect(resolveIdentity({}).nombre_completo).toBeNull();
+    expect(resolveIdentity({}).nombre_pila).toBeNull();
   });
 });
 

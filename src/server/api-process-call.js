@@ -49,15 +49,24 @@ const SCORE_FIELDS = [
  * Campos sin los que el reporte no se puede emitir.
  * `numeric: true` marca los que aceptan 0 como valor legítimo.
  */
+/**
+ * Campos sin los que el reporte no se puede emitir.
+ * `numeric: true` marca los que aceptan 0 como valor legítimo.
+ *
+ * La lista es DELIBERADAMENTE mínima. Antes exigía nombre, empleado_id, módulo,
+ * duración y scores; como el mapeador rellenaba todos esos huecos con defaults
+ * ficticios, la validación SIEMPRE pasaba y no protegía nada. Ahora que los
+ * huecos son huecos de verdad, exigirlos aquí solo lograría que una sesión con
+ * datos parciales no generara ningún reporte — cuando lo correcto es emitirlo
+ * declarando qué falta. Lo demás viaja como aviso en `warnings`.
+ */
 const CRITICAL_FIELDS = [
-  { key: 'nombre', numeric: false },
-  { key: 'empleado_id', numeric: false },
-  { key: 'modulo', numeric: false },
-  { key: 'fecha_sesion', numeric: false },
-  { key: 'duracion_texto', numeric: false },
-  { key: 'score_overall', numeric: true },
-  { key: 'scoreTotal', numeric: true }
+  { key: 'conversationId', numeric: false },
+  { key: 'fecha_sesion', numeric: false }
 ];
+
+/** Campos que, si faltan, degradan el reporte pero no impiden emitirlo. */
+const EXPECTED_FIELDS = ['nombre', 'empleado_id', 'modulo', 'duracion_texto', 'score_overall'];
 
 /**
  * Verifica que los datos alcancen para renderizar el reporte.
@@ -86,6 +95,12 @@ function validateReportData(data) {
 
   // Avisos: no bloquean el envío, pero quedan en el log para diagnosticar
   // un reporte pobre sin tener que reproducir la sesión.
+  for (const key of EXPECTED_FIELDS) {
+    const value = d[key];
+    if (value === null || value === undefined || value === '') {
+      warnings.push(`Sin dato real para ${key}: el reporte lo declarará como no disponible`);
+    }
+  }
   if (!Array.isArray(d.competencias) || d.competencias.length < 3) {
     warnings.push('Menos de 3 competencias: los gráficos saldrán degradados');
   }
@@ -252,15 +267,26 @@ async function processCallWebhook(webhookBody, hmacSignature, rawBody) {
     // OJO: `typeof NaN === 'number'` y NaN falla toda comparación, así que la
     // validación anterior (`score < 0 || score > 10`) dejaba pasar NaN entero.
     // Number.isFinite es la única comprobación que lo atrapa.
+    //
+    // Un score AUSENTE (null) ya no es un error: significa que el agente no
+    // evaluó esa competencia, y el reporte lo dirá como "Pendiente de
+    // evaluación". Lo que sigue siendo un error es un score PRESENTE pero
+    // corrupto (NaN, texto, fuera de rango) — ese sí mentiría con un número.
     for (const field of SCORE_FIELDS) {
       const score = mappedData[field];
+      if (score === null || score === undefined) continue;
       if (!Number.isFinite(score) || score < 0 || score > 10) {
         throw new Error(`Invalid score for ${field}: ${JSON.stringify(score)}`);
       }
     }
-    step(6, 'success', 'Scores validados (número finito en 0-10)', {
-      scores: Object.fromEntries(SCORE_FIELDS.map((f) => [f, mappedData[f]]))
-    });
+    const evaluados = SCORE_FIELDS.filter((f) => Number.isFinite(mappedData[f]));
+    if (!evaluados.length) {
+      console.warn('[STEP 6] El agente no envió NINGUNA calificación — el reporte saldrá sin evaluación');
+    }
+    step(6, `${evaluados.length ? 'success' : 'warning'}`,
+      `Scores validados (${evaluados.length}/${SCORE_FIELDS.length} con dato real)`, {
+        scores: Object.fromEntries(SCORE_FIELDS.map((f) => [f, mappedData[f]]))
+      });
 
     // ════════════════════════════════════════════
     // STEP 7: IA ANALYZE TRANSCRIPT (opcional)
@@ -403,8 +429,11 @@ async function processCallWebhook(webhookBody, hmacSignature, rawBody) {
       });
     }
 
+    const cc = resolveCc(recipients);
+
     const emailResult = await sendEmailWithAttachments({
       to: recipients,
+      cc,
       from: process.env.EMAIL_FROM || 'info@victor-ia.xyz',
       subject: email.subject,
       htmlBody: email.html,
@@ -416,7 +445,9 @@ async function processCallWebhook(webhookBody, hmacSignature, rawBody) {
       throw new Error(`Email sending failed: ${emailResult.error}`);
     }
     step(14, 'success',
-      `Email sent to ${recipients.join(', ')} (${attachments.map((a) => a.filename).join(', ')})`);
+      `Email sent to ${recipients.join(', ')}`
+      + `${cc.length ? ` · CC: ${cc.join(', ')}` : ' · sin CC (REPORT_CC no configurado)'}`
+      + ` (${attachments.map((a) => a.filename).join(', ')})`);
 
     // El nombre del PDF ya es definitivo: lo guardamos para /api/pdf/:id
     cacheReport(conversationId, {
@@ -429,6 +460,7 @@ async function processCallWebhook(webhookBody, hmacSignature, rawBody) {
     results.email = {
       subject: email.subject,
       to: recipients,
+      cc,
       attachments: attachments.map((a) => a.filename),
       messageId: emailResult.messageId
     };
@@ -493,6 +525,43 @@ function resolveRecipients() {
     .map((s) => s.trim())
     .filter(Boolean);
   return list.length ? list : ['mesainteligentedemo@gmail.com'];
+}
+
+/** Formato de correo aceptado — el mismo que valida el resto del sistema. */
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/**
+ * Copias del reporte (REPORT_CC).
+ *
+ * ⚠️ Esto NO existía. La variable `REPORT_CC` se documentó y se configuró, pero
+ * ninguna línea del código la leía y `sendEmailWithAttachments` ni siquiera
+ * aceptaba un campo `cc` — así que jamás llegaba al API de Resend y el correo
+ * salía solo para el destinatario principal. Por eso las copias a Dirección
+ * nunca aparecían en el mensaje recibido.
+ *
+ * Se descartan las direcciones que ya están en `to`: Resend las trataría como
+ * duplicado y el gerente recibiría el mismo reporte dos veces.
+ *
+ * @param {string[]} destinatarios Direcciones que ya van en el "para"
+ * @returns {string[]} Lista limpia y sin duplicados (vacía si no hay CC)
+ */
+function resolveCc(destinatarios = []) {
+  const raw = process.env.REPORT_CC || process.env.EMAIL_CC || '';
+  const yaEnviados = new Set(destinatarios.map((d) => String(d).trim().toLowerCase()));
+
+  const lista = String(raw)
+    .split(/[,;]/)
+    .map((s) => s.trim())
+    .filter((s) => EMAIL_RE.test(s))
+    .filter((s) => !yaEnviados.has(s.toLowerCase()));
+
+  const unicos = [...new Set(lista.map((s) => s.toLowerCase()))]
+    .map((low) => lista.find((s) => s.toLowerCase() === low));
+
+  if (raw && !unicos.length) {
+    console.warn(`[EMAIL] REPORT_CC definido pero sin direcciones válidas nuevas: "${raw}"`);
+  }
+  return unicos;
 }
 
 /**
@@ -741,21 +810,51 @@ function generateChartsData(mappedData, transcript, turns) {
     // ("Rapport", "PNL"…). Sin el respaldo, un payload de una integración
     // anterior dejaba la gráfica de etapas en ceros — y un cero pintado se lee
     // como un desempeño nulo, no como un dato ausente.
-    timeline: {
-      labels: ['Bienvenida', 'Exploración', 'Presentación', 'Inquietudes', 'Conclusión'],
-      points: [
-        comp['Conexión'] ?? comp['Rapport'] ?? mappedData.score_rapport,
-        comp['Percepción'] ?? comp['Lectura Sala'] ?? mappedData.score_lectura_sala,
-        comp['Comunicación'] ?? comp['PNL'] ?? mappedData.score_pnl,
-        comp['Inquietudes'] ?? comp['Objeciones'] ?? mappedData.score_objecciones,
-        comp['Cierre'] ?? mappedData.score_cierre
-      ].map((v) => Number(v) || 0)
-    },
+    //
+    // `Number(v) || 0` convertía cada competencia sin nota en un CERO pintado.
+    // Un cero en esta gráfica se lee como "lo hizo pésimo", no como "no se
+    // midió": es la lectura opuesta a la verdad. Ahora, si falta alguna fase,
+    // la serie entera se descarta y el gráfico se declara sin datos.
+    timeline: buildTimelineSeries(comp, mappedData),
     emotional: {
       points: buildEngagementCurve(transcript, mappedData.duracion_sec)
     },
     speech: buildSpeechSplit(transcript, turns)
   };
+}
+
+/**
+ * Serie de "desempeño por fase", solo con fases realmente puntuadas.
+ *
+ * Se aceptan los DOS nombres de cada competencia: el actual del reporte
+ * ("Conexión", "Comunicación"…) y el histórico del manual de ventas
+ * ("Rapport", "PNL"…), porque siguen llegando payloads de integraciones
+ * anteriores.
+ *
+ * Regla: si alguna fase no tiene nota real, NO se dibuja la línea. Media línea
+ * verdadera y media inventada es peor que ninguna, porque el gerente no puede
+ * distinguir qué tramo creerse.
+ *
+ * @returns {{labels:string[], points:number[]}}
+ */
+function buildTimelineSeries(comp, mappedData) {
+  const labels = ['Bienvenida', 'Exploración', 'Presentación', 'Inquietudes', 'Conclusión'];
+
+  const crudos = [
+    comp['Conexión'] ?? comp['Rapport'] ?? mappedData.score_rapport,
+    comp['Percepción'] ?? comp['Lectura Sala'] ?? mappedData.score_lectura_sala,
+    comp['Comunicación'] ?? comp['PNL'] ?? mappedData.score_pnl,
+    comp['Inquietudes'] ?? comp['Objeciones'] ?? mappedData.score_objecciones,
+    comp['Cierre'] ?? mappedData.score_cierre
+  ].map((v) => (v === null || v === undefined || v === '' ? null : Number(v)));
+
+  const completa = crudos.every((v) => Number.isFinite(v));
+  if (!completa) {
+    console.warn('[CHARTS] Fases sin calificación real: el gráfico de fases queda sin datos');
+    return { labels: [], points: [] };
+  }
+
+  return { labels, points: crudos };
 }
 
 /**
@@ -770,11 +869,16 @@ function generateChartsData(mappedData, transcript, turns) {
  */
 function buildEngagementCurve(transcript, duracionSec) {
   const lines = String(transcript || '').split('\n').filter((l) => l.trim());
-  const minutos = Math.max(2, Math.min(20, Math.round((Number(duracionSec) || 600) / 60)));
 
-  if (lines.length < 2) {
-    return Array.from({ length: minutos }, (_, i) => ({ x: i, y: 5 }));
-  }
+  // Sin conversación medible no hay curva. La línea plana en 5/10 que se
+  // devolvía antes se veía exactamente igual que un engagement real y medio
+  // durante toda la sesión — y encima usaba una duración inventada de 600s.
+  if (lines.length < 2) return [];
+
+  const segundos = Number(duracionSec);
+  if (!Number.isFinite(segundos) || segundos <= 0) return [];
+
+  const minutos = Math.max(2, Math.min(20, Math.round(segundos / 60)));
 
   const porSegmento = Math.max(1, Math.ceil(lines.length / minutos));
   const bruto = [];
@@ -831,7 +935,9 @@ function buildSpeechSplit(transcript, turns) {
   }
 
   const total = agentChars + userChars;
-  if (!total) return { victor: 55, usuario: 40, otros: 5 };
+  // 55/40/5 era un reparto inventado que se pintaba como si se hubiera medido.
+  // Sin habla que contar, el donut se declara sin datos.
+  if (!total) return { victor: null, usuario: null, otros: null };
 
   // 'otros' representa silencios/ruido: no se puede medir desde el texto,
   // así que se reserva un 5% fijo y se declara como tal en el gráfico.
@@ -998,10 +1104,17 @@ module.exports = {
   processCallWebhook,
   validateHMACSignature,
   extractDataCollection,
+  // Lo consume rebuild-report.js: sin esto, el reporte reconstruido perdía la
+  // identidad capturada en el formulario y caía a los datos del agente.
+  extractInitiationVariables,
   validateReportData,
   generateChartsData,
+  buildTimelineSeries,
   buildSpeechSplit,
   buildEngagementCurve,
+  resolveRecipients,
+  resolveCc,
   SCORE_FIELDS,
-  CRITICAL_FIELDS
+  CRITICAL_FIELDS,
+  EXPECTED_FIELDS
 };

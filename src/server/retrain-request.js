@@ -28,6 +28,12 @@ const {
 const { buildReportLinks } = require('./report-links');
 
 const DEFAULT_MANAGER = 'mesainteligentedemo@gmail.com';
+
+/**
+ * Texto con el que la solicitud DECLARA un dato que no llegó.
+ * Misma regla que el reporte y el correo: el hueco se nombra, no se rellena.
+ */
+const SIN_DATO = 'No disponible';
 const MAX_NOTAS = 5000;
 const MAX_MEMORIA = 100;
 
@@ -77,6 +83,24 @@ function managerRecipients(override) {
   const lista = parseEmails(raw);
 
   return lista.length ? lista : [DEFAULT_MANAGER];
+}
+
+/**
+ * Copias de la solicitud de reentrenamiento.
+ *
+ * Lee `RETRAIN_CC` y, si no existe, reutiliza `REPORT_CC`: quien recibe copia
+ * del reporte espera recibir tambien la peticion de repetir la practica.
+ * Se excluye a quien ya esta en el "para" para no duplicar el mensaje.
+ *
+ * @param {string[]} destinatarios
+ * @returns {string[]}
+ */
+function retrainCc(destinatarios = []) {
+  const raw = process.env.RETRAIN_CC || process.env.REPORT_CC || process.env.EMAIL_CC || '';
+  const yaEnviados = new Set(destinatarios.map((d) => String(d).trim().toLowerCase()));
+
+  const lista = parseEmails(raw).filter((e) => !yaEnviados.has(e.toLowerCase()));
+  return [...new Map(lista.map((e) => [e.toLowerCase(), e])).values()];
 }
 
 /** ¿Es un correo con forma válida? Se usa antes de aceptar el destino del formulario. */
@@ -322,7 +346,9 @@ function notasDelGerente(record) {
 function buildRetrainEmail({ summary, record, links, origenCompetencias }) {
   const s = summary || {};
   const ahora = new Date(record.created_at);
-  const nombre = String(s.nombre_completo || s.nombre || 'Asesor VTC');
+  // Sin identidad NO se inventa una: "Asesor VTC" hacía que el gerente
+  // agendara un reentrenamiento sin saber para quién.
+  const nombre = String(s.nombre_completo || s.nombre || 'Colaborador sin identificar');
 
   // Las competencias marcadas viajan CON su score: el gerente no debería tener
   // que abrir el PDF para saber de qué número parte cada una.
@@ -349,9 +375,18 @@ function buildRetrainEmail({ summary, record, links, origenCompetencias }) {
 
   const notas = notasDelGerente(record);
 
+  //
+  // Cada fila declara su hueco. Antes el correo mostraba "—" para lo que no
+  // llegó y, al mismo tiempo, un módulo y un desempeño que el mapeo había
+  // rellenado con defaults: unos huecos se veían y otros no.
   const detalles = [
-    ['Fecha de Sesión Original', String(s.fecha_sesion || '—')],
-    ['Hora', `${s.hora_cancun || '—'} (America/Cancun)`],
+    ['Módulo', String(s.modulo || SIN_DATO)],
+    ['Fecha de Sesión Original', String(s.fecha_sesion || SIN_DATO)],
+    ['Hora', s.hora_cancun ? `${s.hora_cancun} (America/Cancun)` : SIN_DATO],
+    ['Duración', String(s.duracion_humana || SIN_DATO)],
+    ['Desempeño General', Number.isFinite(Number(s.score_overall))
+      ? `${s.score_overall}/10`
+      : 'Pendiente de evaluación'],
     ['Competencias a Mejorar', `${competencias}${notaOrigen}`]
   ];
 
@@ -362,8 +397,8 @@ function buildRetrainEmail({ summary, record, links, origenCompetencias }) {
     '✅ Hemos registrado tu solicitud de reentrenamiento.',
     '',
     '👤 EMPLEADO:',
-    `${nombre} (${s.empleado_id || '—'})`,
-    `Departamento: ${s.departamento || '—'}`,
+    `${nombre} (${s.empleado_id || SIN_DATO})`,
+    `Departamento: ${s.departamento || SIN_DATO}`,
     '',
     '📅 DETALLES:',
     ...detalles.map(([k, v]) => `• ${k}: ${v}`),
@@ -412,7 +447,7 @@ function buildRetrainEmail({ summary, record, links, origenCompetencias }) {
   <tr><td style="background:#262626;padding:28px 32px;border-bottom:3px solid #E5B33E">
     <p style="${font};font-size:10px;letter-spacing:3px;text-transform:uppercase;color:#E5B33E;font-weight:700;margin:0 0 8px">Victorious Travelers Club · Desarrollo Profesional</p>
     <h1 style="${font};font-size:22px;color:#fff;margin:0;font-weight:700">🔄 Solicitud de Reentrenamiento Registrada</h1>
-    <p style="${font};font-size:14px;color:#B8B8B8;margin:8px 0 0">${escapeHtml(nombre)} · ${escapeHtml(String(s.modulo || '—'))} · prioridad ${escapeHtml(record.prioridad)}</p>
+    <p style="${font};font-size:14px;color:#B8B8B8;margin:8px 0 0">${escapeHtml(nombre)} · ${escapeHtml(String(s.modulo || SIN_DATO))} · prioridad ${escapeHtml(record.prioridad)}</p>
     <p style="${font};font-size:11px;color:#B8B8B8;margin:8px 0 0">Folio ${escapeHtml(record.id)}</p>
   </td></tr>
 
@@ -423,8 +458,8 @@ function buildRetrainEmail({ summary, record, links, origenCompetencias }) {
     </table>
 
     <p style="${label}">👤 Empleado</p>
-    <p style="${para};margin:0 0 4px"><strong style="color:#fff;font-size:16px">${escapeHtml(nombre)}</strong> <span style="color:#B8B8B8">(${escapeHtml(String(s.empleado_id || '—'))})</span></p>
-    <p style="${para}">Departamento: ${escapeHtml(String(s.departamento || '—'))}</p>
+    <p style="${para};margin:0 0 4px"><strong style="color:#fff;font-size:16px">${escapeHtml(nombre)}</strong> <span style="color:#B8B8B8">(${escapeHtml(String(s.empleado_id || SIN_DATO))})</span></p>
+    <p style="${para}">Departamento: ${escapeHtml(String(s.departamento || SIN_DATO))}</p>
     <div style="height:14px"></div>
 
     <p style="${label}">📅 Detalles</p>
@@ -509,8 +544,13 @@ async function submitRetrainRequest(options = {}) {
     origenCompetencias: origen
   });
 
+  // Las mismas copias que el reporte: si Dirección recibe el reporte, tiene que
+  // enterarse también de que se pidió repetir la práctica.
+  const cc = retrainCc(recipients);
+
   const emailResult = await sendEmailWithAttachments({
     to: recipients,
+    cc,
     from: process.env.EMAIL_FROM || 'info@victor-ia.com.mx',
     subject,
     htmlBody: html,
@@ -529,6 +569,7 @@ async function submitRetrainRequest(options = {}) {
     success: true,
     record,
     recipients,
+    cc,
     messageId: emailResult.messageId || null,
     message: `Solicitud enviada a ${recipients.join(', ')}.`
   };
@@ -536,6 +577,7 @@ async function submitRetrainRequest(options = {}) {
 
 module.exports = {
   managerRecipients,
+  retrainCc,
   isValidEmail,
   submitRetrainRequest,
   createRetrainRecord,

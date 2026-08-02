@@ -36,6 +36,28 @@ function mapElevenLabsData(webhookBody) {
 
   // Helpers
   const v = (x, def) => (x == null || x === '') ? (def || '-') : String(x).trim();
+
+  /**
+   * Valor opcional: devuelve el dato REAL o `null`. Nunca un relleno.
+   *
+   * Es la pieza central de la regla "no inventar": este reporte lo lee Recursos
+   * Humanos y la Dirección para decidir si un colaborador atiende clientes solo.
+   * Un módulo que dice "Meet & Greet" porque ese era el default —y no porque el
+   * agente lo haya reportado— es una afirmación falsa sobre lo que la persona
+   * practicó. Un hueco se ve y se pregunta; un default se cree.
+   */
+  const opt = (x) => {
+    if (x === null || x === undefined) return null;
+    const s = String(x).trim();
+    return s === '' || s === '-' ? null : s;
+  };
+
+  /** Registro de todo lo que el sistema NO recibió, para declararlo sin disimulo. */
+  const sinDato = [];
+  const exigir = (etiqueta, valor) => {
+    if (valor === null || valor === undefined || valor === '') sinDato.push(etiqueta);
+    return valor;
+  };
   // OJO: `|| def` borraba los valores falsy legítimos — un score_overall de 0
   // se convertía en el default 8 y el reporte mentía. Solo undefined/null/''
   // cuentan como "sin dato".
@@ -67,9 +89,11 @@ function mapElevenLabsData(webhookBody) {
     return null;
   };
 
-  const empleado_id = v(
-    primero('empleado_id', 'employee_number', 'employee_id', 'numero_empleado'),
-    'VTC-001'
+  // Sin relleno "VTC-001": ese número no identifica a nadie en nómina y hace
+  // que RR. HH. busque a un empleado que no existe.
+  const empleado_id = exigir(
+    'Número de empleado',
+    opt(primero('empleado_id', 'employee_number', 'employee_id', 'numero_empleado'))
   );
 
   // Identidad completa: nombre de pila + apellido, siempre. Se resuelve contra
@@ -80,19 +104,27 @@ function mapElevenLabsData(webhookBody) {
     empleado_id
   });
 
-  const nombre = identidad.nombre_completo;
+  const nombre = exigir('Nombre del colaborador', identidad.nombre_completo);
   const nombre_completo = identidad.nombre_completo;
   const nombre_pila = identidad.nombre_pila;
   const apellido = identidad.apellido;
 
-  const departamento = v(
-    primero('departamento', 'department', 'depto') || identidad.departamento,
-    'Dirección'
+  // Departamento y puesto vienen del formulario o del roster. Si ninguno los
+  // trae, quedan vacíos: "Dirección" por defecto asignaba a todo el mundo al
+  // área del director general.
+  const departamento = exigir(
+    'Departamento',
+    opt(primero('departamento', 'department', 'depto') || identidad.departamento)
   );
-  const puesto = v(primero('puesto', 'role', 'rol', 'position') || identidad.puesto, 'Asesor');
-  const idioma = v(safe(wh, 'idioma', 'Español'), 'Español');
-  const modulo = v(safe(wh, 'modulo', null), 'Meet & Greet');
-  const familia_nombre = v(safe(wh, 'familia_nombre', null), 'López');
+  const puesto = exigir(
+    'Puesto',
+    opt(primero('puesto', 'role', 'rol', 'position') || identidad.puesto)
+  );
+  const idioma = exigir('Idioma de la sesión', opt(safe(wh, 'idioma', null)));
+  // El módulo es QUÉ se practicó. Suponerlo es describir un entrenamiento que
+  // quizá no ocurrió.
+  const modulo = exigir('Módulo', opt(safe(wh, 'modulo', null)));
+  const familia_nombre = exigir('Escenario practicado', opt(safe(wh, 'familia_nombre', null)));
 
   // ===== FECHA Y HORA =====
   // Preferimos el inicio real de la conversación; si no viene, el momento de proceso.
@@ -105,15 +137,16 @@ function mapElevenLabsData(webhookBody) {
   const hora_sesion = hora_cancun;
 
   // ===== DURACIÓN =====
-  const rawDuracion = safe(wh, 'duracion_segundos', null) ?? safe(wh, 'call_duration_secs', null);
-  const parsedDuracion = rawDuracion === null || rawDuracion === '' ? NaN : Number(rawDuracion);
-  const duracion_sec = Number.isFinite(parsedDuracion) && parsedDuracion > 0 ? Math.round(parsedDuracion) : 570;
-  const duracion_minutos = Math.floor(duracion_sec / 60);
-  const duracion_seg = duracion_sec % 60;
+  // SIEMPRE medida, NUNCA estimada. Ver resolveDuracionSegundos.
+  const duracion_sec = exigir('Duración', resolveDuracionSegundos(wh));
+  const duracion_minutos = duracion_sec === null ? null : Math.floor(duracion_sec / 60);
+  const duracion_seg = duracion_sec === null ? null : duracion_sec % 60;
   // "9:30" para tablas y métricas compactas...
-  const duracion_texto = `${duracion_minutos}:${duracion_seg < 10 ? '0' : ''}${duracion_seg}`;
+  const duracion_texto = duracion_sec === null
+    ? null
+    : `${duracion_minutos}:${duracion_seg < 10 ? '0' : ''}${duracion_seg}`;
   // ...y en palabras para el correo y el PDF, donde "9:30" se lee como una hora.
-  const duracion_humana = formatDuracion(duracion_sec);
+  const duracion_humana = duracion_sec === null ? null : formatDuracion(duracion_sec);
 
   // ===== SCORES (0-10) =====
   // Siempre número finito dentro de [0,10]; si el agente manda string ("9") se convierte.
@@ -125,16 +158,24 @@ function mapElevenLabsData(webhookBody) {
     return Math.min(10, Math.max(0, n));
   };
 
-  const score_rapport = num(safe(wh, 'score_rapport', null), 8);
-  const score_pnl = num(safe(wh, 'score_pnl', null), 8);
-  const score_postura = num(safe(wh, 'score_postura', null), 9);
-  const score_objecciones = num(safe(wh, 'score_objecciones', null), 7);
-  const score_lectura_sala = num(safe(wh, 'score_lectura_sala', null), 9);
-  const score_cierre = num(safe(wh, 'score_cierre', null), 8);
-  const score_overall = num(safe(wh, 'score_overall', null), 8);
+  // Sin calificación del agente NO hay calificación. El 8 por defecto era la
+  // mentira más cara del sistema: pintaba "Desempeño sólido · 80%" —con anillo
+  // dorado, semáforo verde y certificación sugerida— sobre una sesión que
+  // nadie evaluó. El gerente firmaba una autorización basada en un número que
+  // el sistema se había inventado.
+  const score_rapport = num(safe(wh, 'score_rapport', null), null);
+  const score_pnl = num(safe(wh, 'score_pnl', null), null);
+  const score_postura = num(safe(wh, 'score_postura', null), null);
+  const score_objecciones = num(safe(wh, 'score_objecciones', null), null);
+  const score_lectura_sala = num(safe(wh, 'score_lectura_sala', null), null);
+  const score_cierre = num(safe(wh, 'score_cierre', null), null);
+  const score_overall = exigir('Desempeño general', num(safe(wh, 'score_overall', null), null));
 
-  const scoreTotal = Math.round((score_overall / 10) * 100);
-  const mejora_potencial = Math.round(100 - scoreTotal) + '%';
+  const scoreTotal = score_overall === null ? null : Math.round((score_overall / 10) * 100);
+  const mejora_potencial = scoreTotal === null ? null : `${Math.round(100 - scoreTotal)}%`;
+
+  /** ¿Evaluó el agente esta sesión? De aquí cuelga TODO lo que es numérico. */
+  const evaluacion_disponible = score_overall !== null;
 
   // ===== ANÁLISIS TEXTOS =====
   // Los defaults NO inventan observaciones. Antes decían cosas como
@@ -142,23 +183,22 @@ function mapElevenLabsData(webhookBody) {
   // un reporte de coaching con hallazgos falsos es peor que uno vacío, porque
   // el gerente toma decisiones sobre él. Ahora el respaldo es neutro y se
   // apoya en las competencias reales de la sesión.
-  const fortalezas = v(safe(wh, 'fortalezas', null),
-    'Continuar desarrollando las fortalezas identificadas');
-
-  const areas_mejora = v(safe(wh, 'areas_mejora', null),
-    'Mantener el enfoque en las competencias clave');
-
-  const analisis_pnl = v(safe(wh, 'analisis_pnl', null),
-    'No se registraron observaciones sobre técnicas de comunicación en esta sesión.');
-
-  const objeciones_trabajadas = v(safe(wh, 'objeciones_trabajadas', null),
-    'El cliente no planteó inquietudes durante esta sesión.');
+  // Ni siquiera un respaldo "neutro": "El cliente no planteó inquietudes" es una
+  // AFIRMACIÓN sobre lo que pasó en la llamada. Si el agente no la hizo, el
+  // sistema tampoco. Sin dato, el campo queda vacío y su sección desaparece.
+  const fortalezas = opt(safe(wh, 'fortalezas', null));
+  const areas_mejora = opt(safe(wh, 'areas_mejora', null));
+  const analisis_pnl = opt(safe(wh, 'analisis_pnl', null));
+  const objeciones_trabajadas = opt(safe(wh, 'objeciones_trabajadas', null));
 
   // ===== COMPETENCIAS (para gráficos) =====
   // Los nombres son los que LEE un director de hotel, no los del manual de
   // ventas: "Rapport" y "PNL" no significan nada fuera del área de capacitación,
   // y el reporte lo revisa Recursos Humanos, Dirección y el propio colaborador.
   // La equivalencia con el catálogo de entrenamiento vive en action-plan.js.
+  //
+  // Solo entran las competencias que el agente REALMENTE puntuó. Una barra
+  // dibujada es una afirmación: si no hay nota, no hay barra.
   const competencias = [
     { name: 'Conexión', score: score_rapport },
     { name: 'Comunicación', score: score_pnl },
@@ -166,66 +206,67 @@ function mapElevenLabsData(webhookBody) {
     { name: 'Inquietudes', score: score_objecciones },
     { name: 'Percepción', score: score_lectura_sala },
     { name: 'Cierre', score: score_cierre }
-  ];
+  ].filter((c) => Number.isFinite(c.score));
 
   // slice() evita mutar `competencias` (los gráficos mantienen su orden original)
-  const comp_baja = competencias.slice().sort((a, b) => a.score - b.score)[0];
-  const comp_alta = competencias.slice().sort((a, b) => b.score - a.score)[0];
+  const comp_baja = competencias.length
+    ? competencias.slice().sort((a, b) => a.score - b.score)[0]
+    : null;
+  const comp_alta = competencias.length
+    ? competencias.slice().sort((a, b) => b.score - a.score)[0]
+    : null;
 
   // ===== RESUMEN (sección ANÁLISIS del email) =====
   // Si el agente entrega su propio resumen, ese manda: es análisis real de la
   // llamada. El generado es un respaldo con los datos duros de la sesión.
-  const resumen = v(
-    safe(wh, 'resumen', null) || safe(wh, 'resumen_sesion', null) || safe(wh, 'analisis_general', null),
-    `Sesión de ${duracion_humana} en el módulo ${modulo}, con la participación de ${nombre}. `
-      + `Desempeño general de ${score_overall}/10 (${scoreTotal}%). Fortaleza que más destaca: ${comp_alta.name} `
-      + `(${comp_alta.score}/10). Competencia con mayor oportunidad de mejora: ${comp_baja.name} (${comp_baja.score}/10).`
-  );
+  //
+  // El respaldo SOLO se arma con datos que existen: se enuncia hecho por hecho
+  // y se omite lo que falte. Nunca se redacta "Sesión de 9 minutos 30 segundos
+  // en el módulo Meet & Greet" cuando ni la duración ni el módulo se recibieron.
+  const resumen = opt(
+    safe(wh, 'resumen', null) || safe(wh, 'resumen_sesion', null) || safe(wh, 'analisis_general', null)
+  ) || buildResumenFactual({
+    nombre, duracion_humana, modulo, score_overall, scoreTotal, comp_alta, comp_baja
+  });
 
   // ===== RECOMENDACIÓN DEL COACH =====
   // Dinámica: viene de la llamada cuando el agente la genera; si no, se
   // construye con los datos reales de esta sesión (nunca texto genérico).
-  const recomendacion_coach = v(
+  // Sin scores reales NO hay recomendación: aconsejar "está listo para atender
+  // clientes de forma autónoma" a partir de un 8 inventado es el peor error
+  // posible de este sistema.
+  const recomendacion_coach = opt(
     safe(wh, 'recomendacion_coach', null)
       || safe(wh, 'recomendacion', null)
-      || safe(wh, 'coach_recommendation', null),
-    buildRecomendacion(score_overall, comp_alta, comp_baja)
-  );
+      || safe(wh, 'coach_recommendation', null)
+  ) || (comp_alta && comp_baja && evaluacion_disponible
+    ? buildRecomendacion(score_overall, comp_alta, comp_baja)
+    : null);
 
   // ===== FUNDAMENTOS DE LA COMUNICACIÓN EFECTIVA =====
   // Los títulos y descripciones están escritos para que los entienda cualquier
   // colaborador del hotel. Los términos técnicos del manual de ventas —"sistema
   // límbico", "submodalidades", "reencuadre"— no aportan nada a quien lee el
   // reporte y sí generan la impresión de un diagnóstico clínico.
-  const principios_neuro = normalizePrincipios(safe(wh, 'principios_neuro', null)) || [
-    {
-      titulo: 'Conexión emocional',
-      descripcion: 'El colaborador logró que la familia hablara de sus planes y expectativas de viaje, lo que abrió una conversación de confianza desde el inicio.'
-    },
-    {
-      titulo: 'Momentos memorables',
-      descripcion: 'Se retomaron recuerdos familiares significativos durante la conversación. La respuesta del cliente fue de apertura y receptividad.'
-    },
-    {
-      titulo: 'Comunicación de valor',
-      descripcion: 'La propuesta se presentó como una inversión en tiempo de calidad en familia, en lugar de un gasto, lo que facilitó la evaluación por parte del cliente.'
-    },
-    {
-      titulo: 'Sintonía con el interlocutor',
-      descripcion: 'El tono y el ritmo del habla se adaptaron a los del cliente, lo que ayudó a que la familia se sintiera cómoda desde los primeros minutos.'
-    },
-    {
-      titulo: 'Coherencia en el mensaje',
-      descripcion: 'El lenguaje verbal y corporal se mantuvieron alineados durante toda la conversación, transmitiendo seguridad y credibilidad.'
-    }
-  ];
+  //
+  // ⚠️ Aquí vivían CINCO párrafos fijos que narraban una sesión imaginaria:
+  // "El colaborador logró que la familia hablara de sus planes de viaje", "se
+  // retomaron recuerdos familiares", "el tono se adaptó al del cliente"… Se
+  // imprimían idénticos en TODOS los reportes, incluida una llamada de catorce
+  // segundos donde nada de eso ocurrió. Era observación de conducta fabricada
+  // sobre una persona real, dentro de un documento de RR. HH.
+  //
+  // Sin datos del agente, la sección 04 del reporte simplemente no existe
+  // (el template ya la envuelve en {{#if principios_neuro}}).
+  const principios_neuro = normalizePrincipios(safe(wh, 'principios_neuro', null)) || [];
 
   // El agente manda este valor a veces en escala 0-10 y a veces como porcentaje.
   // El reporte siempre lo pinta como % (ancho de barra), así que normalizamos aquí.
+  // Sin dato: null — el 85% fijo era una calificación metodológica inventada.
   const rawCumplimiento = Number(safe(wh, 'cumplimiento_neuro', null));
   const cumplimiento_neuro = Number.isFinite(rawCumplimiento) && rawCumplimiento > 0
     ? Math.round(rawCumplimiento <= 10 ? rawCumplimiento * 10 : Math.min(100, rawCumplimiento))
-    : 85;
+    : null;
 
   // ===== PROGRESIÓN Y CONTEXTO DE LA SESIÓN =====
   // Campos que enriquecen el análisis de cómo fue la llamada
@@ -241,20 +282,31 @@ function mapElevenLabsData(webhookBody) {
   const coach_notes = safe(wh, 'coach_notes', null);
 
   // ===== PLAN DE DESARROLLO PROFESIONAL =====
-  const plan_1 = `Desempeño general: ${score_overall}/10 (${scoreTotal}%). Fortaleza que más destaca: ${comp_alta.name} `
-    + `(${comp_alta.score}/10). Competencia con mayor oportunidad de mejora: ${comp_baja.name} (${comp_baja.score}/10).`;
+  // Un plan de certificación construido sobre notas inventadas certifica a
+  // gente que nadie evaluó. Sin scores reales no hay plan.
+  const hayPlan = evaluacion_disponible && comp_alta && comp_baja;
 
-  const plan_2 = `Acompañamiento dirigido en ${comp_baja.name}: 3 sesiones de 20 minutos cada una, con dos prácticas diarias `
-    + `como mínimo. Objetivo: llevar ${comp_baja.name} de ${comp_baja.score}/10 al nivel esperado de 8/10 en 7 días.`;
+  const plan_1 = hayPlan
+    ? `Desempeño general: ${score_overall}/10 (${scoreTotal}%). Fortaleza que más destaca: ${comp_alta.name} `
+      + `(${comp_alta.score}/10). Competencia con mayor oportunidad de mejora: ${comp_baja.name} (${comp_baja.score}/10).`
+    : null;
 
-  const plan_3 = `Evaluación completa a los 7 días. Si todas las competencias alcanzan 8/10 o más, el colaborador queda `
-    + `certificado para atender clientes de forma autónoma. En caso contrario, se extiende el acompañamiento 3 días adicionales.`;
+  const plan_2 = hayPlan
+    ? `Acompañamiento dirigido en ${comp_baja.name}: 3 sesiones de 20 minutos cada una, con dos prácticas diarias `
+      + `como mínimo. Objetivo: llevar ${comp_baja.name} de ${comp_baja.score}/10 al nivel esperado de 8/10 en 7 días.`
+    : null;
+
+  const plan_3 = hayPlan
+    ? `Evaluación completa a los 7 días. Si todas las competencias alcanzan 8/10 o más, el colaborador queda `
+      + `certificado para atender clientes de forma autónoma. En caso contrario, se extiende el acompañamiento 3 días adicionales.`
+    : null;
 
   // ===== ACTIVIDAD DE LA SESIÓN =====
-  const actividad_sesion = v(safe(wh, 'actividad_sesion', null),
-    `${nombre} practicó el módulo ${modulo} durante ${duracion_humana}, atendiendo a la familia ${familia_nombre}. `
-      + `Se trabajaron las cuatro etapas de la conversación —bienvenida, exploración de necesidades, presentación y conclusión—, `
-      + `incluyendo la atención de las inquietudes planteadas por el cliente en tiempo real.`);
+  // El respaldo describía "las cuatro etapas de la conversación" y "las
+  // inquietudes planteadas por el cliente" en sesiones donde no hubo ni una
+  // cosa ni la otra. Ahora solo se enuncian los hechos que constan.
+  const actividad_sesion = opt(safe(wh, 'actividad_sesion', null))
+    || buildActividadFactual({ nombre, modulo, duracion_humana, familia_nombre });
 
   // ===== TRANSCRIPCIÓN =====
   let transcription = [];
@@ -326,8 +378,8 @@ function mapElevenLabsData(webhookBody) {
 
     // Competencias (para gráficos)
     competencias,
-    comp_baja: comp_baja.name,
-    comp_alta: comp_alta.name,
+    comp_baja: comp_baja ? comp_baja.name : null,
+    comp_alta: comp_alta ? comp_alta.name : null,
 
     // Neurociencia
     principios_neuro,
@@ -358,9 +410,17 @@ function mapElevenLabsData(webhookBody) {
     call_efficiency,
     coach_notes,
 
+    // ===== TRANSPARENCIA DE DATOS =====
+    // `evaluacion_disponible` gobierna todo lo numérico del reporte y del
+    // correo. `campos_sin_dato` se declara explícitamente: el lector tiene
+    // derecho a saber qué NO se midió, en vez de leer un relleno como si fuera
+    // un hallazgo.
+    evaluacion_disponible,
+    campos_sin_dato: sinDato,
+
     // Metadata
     timestamp: new Date().toISOString(),
-    version: 'v3.2',
+    version: 'v3.3',
 
     // ===== CONTEXTO DEL AGENTE (KB + RAG) =====
     // Enriquecimiento desde el snapshot del agente ElevenLabs.
@@ -411,10 +471,13 @@ function resolveIdentity(input) {
 
   const partes = completo.split(' ').filter(Boolean);
 
+  // Sin nombre NO se inventa uno. "Asesor VTC" en la portada de un reporte de
+  // RR. HH. parece un colaborador llamado así; el hueco, en cambio, obliga a
+  // revisar por qué el formulario no mandó la identidad.
   return {
-    nombre_completo: completo || 'Asesor VTC',
-    nombre_pila: partes[0] || 'Asesor',
-    apellido: partes.slice(1).join(' '),
+    nombre_completo: completo || null,
+    nombre_pila: partes[0] || null,
+    apellido: partes.slice(1).join(' ') || null,
     departamento: ficha ? ficha.departamento : null,
     puesto: ficha ? ficha.puesto : null
   };
@@ -474,6 +537,110 @@ function resolveSessionDate(wh) {
   }
 
   return new Date();
+}
+
+/**
+ * Duración REAL de la sesión, en segundos. Nunca estimada.
+ *
+ * El fallo que corrige: antes solo se miraban `duracion_segundos` y
+ * `call_duration_secs` en la RAÍZ del payload. ElevenLabs no los pone ahí — los
+ * entrega dentro de `metadata`. Como nunca casaba ninguno, TODA sesión caía al
+ * respaldo de 570 segundos y el reporte declaraba "9 minutos 30 segundos" para
+ * una llamada de catorce segundos. Ese número recorría después el correo, el
+ * PDF, las métricas por minuto y el plan de acompañamiento.
+ *
+ * Orden de preferencia, de más fiable a menos:
+ *   1. El contador oficial de la llamada (raíz o `metadata`).
+ *   2. El segundo del último turno registrado — no es una estimación: es el
+ *      momento medido en que se produjo la última intervención.
+ *   3. Nada. `null` significa "no se midió", y así se dice.
+ *
+ * @param {object} wh Payload del webhook ya aplanado
+ * @returns {number|null} Segundos, o null si no hay medición
+ */
+function resolveDuracionSegundos(wh) {
+  const meta = (wh && wh.metadata) || {};
+
+  const candidatos = [
+    wh && wh.duracion_segundos,
+    wh && wh.call_duration_secs,
+    wh && wh.call_duration_seconds,
+    wh && wh.duration_seconds,
+    meta.call_duration_secs,
+    meta.call_duration_seconds,
+    meta.duration_seconds,
+    meta.duracion_segundos
+  ];
+
+  for (const c of candidatos) {
+    if (c === null || c === undefined || c === '') continue;
+    const n = Number(c);
+    // > 0 a propósito: un contador en 0 es "no se registró", no una llamada
+    // instantánea. Se deja caer al siguiente candidato.
+    if (Number.isFinite(n) && n > 0) return Math.round(n);
+  }
+
+  // Medición desde los turnos: el instante del último mensaje de la llamada.
+  const turns = wh && wh.transcript_turns;
+  if (Array.isArray(turns) && turns.length) {
+    const marcas = turns
+      .map((t) => Number(t && (t.time_in_call_secs ?? t.time_in_call ?? t.start_time)))
+      .filter((n) => Number.isFinite(n) && n >= 0);
+    if (marcas.length) {
+      const ultimo = Math.round(Math.max(...marcas));
+      if (ultimo > 0) return ultimo;
+    }
+  }
+
+  console.warn('[MAPPER] Sin duración medible: el reporte la declarará como no disponible');
+  return null;
+}
+
+/**
+ * Resumen de respaldo construido HECHO A HECHO.
+ *
+ * Solo enuncia lo que consta. Si únicamente se conoce el nombre, la frase habla
+ * del nombre y de nada más; si no se conoce nada, devuelve null y la sección
+ * queda vacía en lugar de describir una sesión que el sistema no presenció.
+ *
+ * @returns {string|null}
+ */
+function buildResumenFactual({ nombre, duracion_humana, modulo, score_overall, scoreTotal, comp_alta, comp_baja }) {
+  const frases = [];
+
+  const contexto = [
+    nombre ? `con la participación de ${nombre}` : null,
+    modulo ? `en el módulo ${modulo}` : null,
+    duracion_humana ? `con una duración de ${duracion_humana}` : null
+  ].filter(Boolean);
+
+  if (contexto.length) frases.push(`Sesión de práctica ${contexto.join(', ')}.`);
+
+  if (score_overall !== null && score_overall !== undefined) {
+    frases.push(`Desempeño general de ${score_overall}/10 (${scoreTotal}%).`);
+  }
+  if (comp_alta) frases.push(`Fortaleza que más destaca: ${comp_alta.name} (${comp_alta.score}/10).`);
+  if (comp_baja) {
+    frases.push(`Competencia con mayor oportunidad de mejora: ${comp_baja.name} (${comp_baja.score}/10).`);
+  }
+
+  return frases.length ? frases.join(' ') : null;
+}
+
+/**
+ * Actividad de la sesión, enunciada solo con los hechos recibidos.
+ * Sin nombre ni módulo ni duración no hay nada que contar: devuelve null.
+ *
+ * @returns {string|null}
+ */
+function buildActividadFactual({ nombre, modulo, duracion_humana, familia_nombre }) {
+  const partes = [];
+  if (modulo) partes.push(`practicó el módulo ${modulo}`);
+  if (duracion_humana) partes.push(`durante ${duracion_humana}`);
+  if (familia_nombre) partes.push(`en el escenario de la familia ${familia_nombre}`);
+
+  if (!partes.length) return null;
+  return `${nombre || 'El colaborador'} ${partes.join(' ')}.`;
 }
 
 /**
@@ -974,6 +1141,7 @@ module.exports = {
   turnsToBubbles,
   splitItems,
   resolveSessionDate,
+  resolveDuracionSegundos,
   resolveIdentity,
   // Exportados para pruebas y para el reproductor
   cleanSpeakerLabel,

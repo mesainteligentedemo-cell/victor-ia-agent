@@ -16,7 +16,12 @@
 
 const { mapElevenLabsData } = require('./n8n-mapper');
 const ElevenLabsAPI = require('./elevenlabs-api');
-const { extractDataCollection, generateChartsData, validateReportData } = require('./api-process-call');
+const {
+  extractDataCollection,
+  extractInitiationVariables,
+  generateChartsData,
+  validateReportData
+} = require('./api-process-call');
 const { getCachedReport } = require('./report-cache');
 
 /**
@@ -56,9 +61,18 @@ async function buildReportPayload(conversationId, options = {}) {
   const transcript = ElevenLabsAPI.normalizeTranscript(conversation);
   const transcriptTurns = ElevenLabsAPI.extractTurns(conversation);
   const collected = extractDataCollection(conversation);
+  // La identidad que el empleado capturó en el formulario de /training y que
+  // ElevenLabs devuelve en conversation_initiation_client_data.
+  //
+  // Faltaba: el pipeline principal SÍ la extraía, pero esta reconstrucción no,
+  // así que el correo de reentrenamiento —que se arma por esta vía— perdía el
+  // nombre, el número de empleado y el departamento reales y caía a los
+  // defaults. El gerente recibía la solicitud de un "Asesor VTC / VTC-001".
+  const identidad = extractInitiationVariables(conversation, {});
 
   const mapped = mapElevenLabsData({
     ...collected,
+    ...identidad,
     conversation_id: conversationId,
     transcript,
     transcript_turns: transcriptTurns,
@@ -119,6 +133,10 @@ async function buildReportSummary(conversationId) {
     duracion_texto: d.duracion_texto,
     duracion_humana: d.duracion_humana,
     duracion_sec: d.duracion_sec,
+    // Viajan hasta el correo de reentrenamiento para que también él pueda
+    // declarar los huecos en vez de rellenarlos.
+    evaluacion_disponible: d.evaluacion_disponible,
+    campos_sin_dato: d.campos_sin_dato,
     session_iso: d.session_iso,
     score_overall: d.score_overall,
     scoreTotal: d.scoreTotal,

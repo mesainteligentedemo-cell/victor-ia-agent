@@ -18,3 +18,5 @@ coverage/
 .env.production
 .env
 *SECRETS*
+
+.env*

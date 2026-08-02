@@ -21,6 +21,17 @@ const { formatDuracion } = require('./email-sender');
 // Circunferencia del anillo de score (r = 58 en el viewBox del template)
 const RING_CIRCUMFERENCE = 2 * Math.PI * 58;
 
+/**
+ * Textos con los que el reporte DECLARA un hueco.
+ *
+ * Regla del documento: un dato que no llegó se nombra, no se sustituye. Este
+ * PDF lo archiva Recursos Humanos y sostiene decisiones sobre personas; un
+ * valor de fábrica impreso aquí es indistinguible de un hallazgo real.
+ */
+const SIN_DATO = 'No disponible';
+const SIN_EVALUACION = 'Pendiente de evaluación';
+const SIN_IDENTIFICAR = 'Colaborador sin identificar';
+
 class ReportGenerator {
   constructor() {
     // En Lambda, __dirname apunta al bundle; process.cwd() sí resuelve al proyecto.
@@ -61,16 +72,33 @@ class ReportGenerator {
    * Preparar y normalizar datos para el template
    */
   prepareData(data) {
-    const score = this.num(data.score_overall, 8);
-    const scoreTotal = this.num(data.scoreTotal, Math.round((score / 10) * 100));
-    const nivel = this.nivelDesempeno(score);
+    //
+    // ⚠️ Aquí había una SEGUNDA capa de defaults ficticios, independiente de la
+    // del mapeador: aunque el mapeo dejara el hueco, esta función volvía a
+    // rellenarlo con un 8. Cualquier corrección aguas arriba quedaba anulada
+    // justo antes de imprimir el PDF.
+    //
+    // `score` es ahora `null` cuando nadie evaluó, y de ese null cuelga todo lo
+    // numérico del documento.
+    const score = this.optNum(data.score_overall);
+    const evaluado = score !== null;
+    const scoreTotal = this.optNum(data.scoreTotal) ?? (evaluado ? Math.round((score / 10) * 100) : null);
+    const nivel = evaluado ? this.nivelDesempeno(score) : this.nivelSinEvaluar();
 
-    // Anillo de progreso: stroke-dasharray precalculado (Handlebars no hace aritmética)
-    const dash = (RING_CIRCUMFERENCE * Math.min(100, Math.max(0, scoreTotal))) / 100;
+    // Anillo de progreso: stroke-dasharray precalculado (Handlebars no hace
+    // aritmética). Sin evaluación el anillo queda vacío en vez de dibujar un
+    // arco que representaría una nota inexistente.
+    const dash = evaluado
+      ? (RING_CIRCUMFERENCE * Math.min(100, Math.max(0, scoreTotal))) / 100
+      : 0;
 
-    const competencias = Array.isArray(data.competencias) && data.competencias.length
+    // Solo competencias con nota REAL. Si el payload no trae la lista armada
+    // (integraciones que mandan los `score_*` sueltos), se reconstruye —pero
+    // únicamente con las notas que existen, nunca completando las que faltan.
+    const competencias = (Array.isArray(data.competencias) && data.competencias.length
       ? data.competencias
-      : this.competenciasFallback(data);
+      : this.competenciasDesdeScores(data)
+    ).filter((c) => c && c.name && Number.isFinite(Number(c.score)));
 
     // Los gráficos se construyen sobre los datos ya normalizados
     const charts = buildReportCharts({
@@ -95,18 +123,24 @@ class ReportGenerator {
     // Plan de acción expandido (bloques A–F). Se construye sobre las mismas
     // competencias que alimentan los gráficos, así que reporte y plan nunca
     // pueden contradecirse.
-    const accion = buildActionPlan(
-      {
-        ...data,
-        score_overall: score,
-        scoreTotal,
-        transcription,
-        fortalezas_list,
-        areas_list,
-        duracion_minutos: metricas.duracion_minutos
-      },
-      competencias
-    );
+    //
+    // Sin evaluación NO hay plan: el bloque proponía sesiones de refuerzo,
+    // plazos y una certificación "para atender clientes de forma autónoma"
+    // calculados sobre notas que nadie puso.
+    const accion = evaluado && competencias.length
+      ? buildActionPlan(
+        {
+          ...data,
+          score_overall: score,
+          scoreTotal,
+          transcription,
+          fortalezas_list,
+          areas_list,
+          duracion_minutos: metricas.duracion_minutos
+        },
+        competencias
+      )
+      : { plan: null, plan_1: null, plan_2: null, plan_3: null };
 
     // A dónde llega una solicitud de reentrenamiento. El reporte lo dice
     // explícitamente: un CTA sin destino visible no se usa.
@@ -118,20 +152,31 @@ class ReportGenerator {
       // apellido, completado contra el roster si el agente solo dio el de pila).
       // `nombre_completo` es el que pinta el reporte; el respaldo evita que un
       // payload viejo deje la portada en blanco.
-      nombre: this.v(data.nombre, 'Asesor VTC'),
-      nombre_completo: this.v(data.nombre_completo || data.nombre, 'Asesor VTC'),
+      // Ningún relleno de fábrica: "VTC-001", "Dirección", "Meet & Greet" y
+      // "Español" se imprimían como hechos verificados sobre la persona y la
+      // sesión. Ahora el hueco se declara.
+      nombre: this.v(data.nombre, SIN_IDENTIFICAR),
+      nombre_completo: this.v(data.nombre_completo || data.nombre, SIN_IDENTIFICAR),
       apellido: this.v(data.apellido, ''),
-      empleado_id: this.v(data.empleado_id, 'VTC-001'),
+      empleado_id: this.v(data.empleado_id, SIN_DATO),
       // Capturado por el empleado en el formulario de /training y verificado
       // contra el roster antes de abrir la sesión.
-      departamento: this.v(data.departamento, 'Dirección'),
-      puesto: this.v(data.puesto, 'Asesor'),
-      modulo: this.v(data.modulo, 'Meet & Greet'),
-      familia_nombre: this.v(data.familia_nombre, 'Familia simulada'),
-      idioma: this.v(data.idioma, 'Español'),
-      conversationId: this.v(data.conversationId, '—'),
+      departamento: this.v(data.departamento, SIN_DATO),
+      puesto: this.v(data.puesto, SIN_DATO),
+      modulo: this.v(data.modulo, SIN_DATO),
+      familia_nombre: this.v(data.familia_nombre, null),
+      idioma: this.v(data.idioma, SIN_DATO),
+      conversationId: this.v(data.conversationId, SIN_DATO),
+
+      // ── Transparencia ──────────────────────────────────────
+      // Gobierna las secciones numéricas del template y alimenta el aviso de
+      // "datos no registrados".
+      evaluacion_disponible: evaluado,
+      campos_sin_dato: Array.isArray(data.campos_sin_dato) ? data.campos_sin_dato : [],
 
       // ── Fecha y hora ───────────────────────────────────────
+      // Fecha y hora son la ÚNICA excepción con respaldo: siempre viajan en el
+      // webhook y, en su defecto, el instante de proceso es un dato real.
       fecha_sesion: this.v(data.fecha_sesion, new Date().toLocaleDateString('es-MX')),
       hora_sesion: this.v(data.hora_sesion, ''),
       hora_cancun: this.v(data.hora_cancun, data.hora_sesion),
@@ -141,21 +186,33 @@ class ReportGenerator {
         data.fecha_hora_larga,
         `${this.v(data.fecha_larga, data.fecha_sesion)} • ${this.v(data.hora_cancun, data.hora_sesion)}`
       ),
-      duracion_texto: this.v(data.duracion_texto, '00:00'),
+      // "00:00" y `formatDuracion(undefined)` → "0 minutos": el reporte afirmaba
+      // que la sesión había durado cero. Ahora dice que no se midió.
+      duracion_texto: this.v(data.duracion_texto, SIN_DATO),
       // "9 minutos 30 segundos": en el PDF se lee, no se descifra.
-      duracion_humana: this.v(data.duracion_humana, formatDuracion(data.duracion_sec)),
-      duracion_minutos: this.num(data.duracion_minutos, 0),
+      duracion_humana: this.v(
+        data.duracion_humana,
+        Number.isFinite(Number(data.duracion_sec)) ? formatDuracion(data.duracion_sec) : SIN_DATO
+      ),
+      duracion_minutos: this.optNum(data.duracion_minutos),
 
       // ── Scores ─────────────────────────────────────────────
-      score_rapport: this.num(data.score_rapport, 8),
-      score_pnl: this.num(data.score_pnl, 8),
-      score_postura: this.num(data.score_postura, 9),
-      score_objecciones: this.num(data.score_objecciones, 7),
-      score_lectura_sala: this.num(data.score_lectura_sala, 9),
-      score_cierre: this.num(data.score_cierre, 8),
+      // Todos opcionales. El template los pinta solo si `evaluacion_disponible`.
+      score_rapport: this.optNum(data.score_rapport),
+      score_pnl: this.optNum(data.score_pnl),
+      score_postura: this.optNum(data.score_postura),
+      score_objecciones: this.optNum(data.score_objecciones),
+      score_lectura_sala: this.optNum(data.score_lectura_sala),
+      score_cierre: this.optNum(data.score_cierre),
       score_overall: score,
       scoreTotal,
-      mejora_potencial: this.v(data.mejora_potencial, `${Math.max(0, 100 - scoreTotal)}%`),
+      // Textos listos para imprimir sin que el template tenga que decidir nada.
+      score_overall_txt: evaluado ? `${score}/10` : SIN_EVALUACION,
+      score_total_txt: evaluado ? `${scoreTotal}%` : SIN_EVALUACION,
+      mejora_potencial: this.v(
+        data.mejora_potencial,
+        evaluado ? `${Math.max(0, 100 - scoreTotal)}%` : SIN_EVALUACION
+      ),
 
       // Anillo + nivel
       ring_dash: Math.round(dash * 100) / 100,
@@ -173,18 +230,19 @@ class ReportGenerator {
       // devolvió "(1) … (2) … (3) …" en un solo bloque, aquí se convierte en
       // lista numerada con saltos de línea. Se inyecta con triple stash en el
       // template, por eso el escape de HTML ocurre dentro del formateador.
-      resumen: this.formatRichText(this.v(data.resumen, 'Sesión de práctica completada.')),
-      actividad_sesion: this.formatRichText(this.v(data.actividad_sesion, 'Sesión de práctica completada.')),
+      //
+      // Los respaldos afirmaban cosas: "Sesión de práctica completada", "El
+      // cliente no planteó inquietudes durante esta sesión". Eso es narrar la
+      // llamada sin haberla analizado. Sin texto del análisis, el campo va
+      // vacío y su bloque desaparece del documento.
+      resumen: this.formatRichText(this.v(data.resumen, '')),
+      actividad_sesion: this.formatRichText(this.v(data.actividad_sesion, '')),
       recomendacion_coach: this.formatRichText(this.v(
         data.recomendacion_coach,
-        this.recomendacionFallback(score, competencias)
+        evaluado && competencias.length ? this.recomendacionFallback(score, competencias) : ''
       )),
-      analisis_pnl: this.formatRichText(
-        this.v(data.analisis_pnl, 'No se registraron observaciones sobre técnicas de comunicación en esta sesión.')
-      ),
-      objeciones_trabajadas: this.formatRichText(
-        this.v(data.objeciones_trabajadas, 'El cliente no planteó inquietudes durante esta sesión.')
-      ),
+      analisis_pnl: this.formatRichText(this.v(data.analisis_pnl, '')),
+      objeciones_trabajadas: this.formatRichText(this.v(data.objeciones_trabajadas, '')),
 
       // Texto plano (fallback) + listas (presentación preferida)
       fortalezas: this.formatRichText(data.fortalezas),
@@ -195,16 +253,18 @@ class ReportGenerator {
 
       // ── Neurociencia ───────────────────────────────────────
       principios_neuro: this.formatPrincipios(data.principios_neuro),
-      cumplimiento_neuro: this.num(data.cumplimiento_neuro, 85),
+      // Sin dato NO hay medidor: el 85% fijo era una calificación inventada de
+      // la aplicación de la metodología.
+      cumplimiento_neuro: this.optNum(data.cumplimiento_neuro),
 
       // ── Plan de acción ─────────────────────────────────────
       // Los tres campos históricos siguen existiendo (el correo y N8N los
       // leen), pero ahora se derivan del plan expandido en vez de ser texto
       // suelto. `plan` trae los bloques A–F que pinta la sección 09.
-      plan_1: this.formatRichText(this.v(data.plan_1, accion.plan_1)),
-      plan_2: this.formatRichText(this.v(data.plan_2, accion.plan_2)),
-      plan_3: this.formatRichText(this.v(data.plan_3, accion.plan_3)),
-      plan: this.formatPlan(accion.plan),
+      plan_1: this.formatRichText(this.v(data.plan_1, accion.plan_1 || '')),
+      plan_2: this.formatRichText(this.v(data.plan_2, accion.plan_2 || '')),
+      plan_3: this.formatRichText(this.v(data.plan_3, accion.plan_3 || '')),
+      plan: accion.plan ? this.formatPlan(accion.plan) : null,
 
       // ── Flujo de reentrenamiento ───────────────────────────
       gerente_email: gerentes.join(', '),
@@ -252,6 +312,31 @@ class ReportGenerator {
   num(value, def) {
     const n = Number(value);
     return Number.isFinite(n) ? n : def;
+  }
+
+  /**
+   * Número REAL o `null`. Nunca un relleno.
+   *
+   * La diferencia con `num()` es toda la auditoría: `Number(null)` es 0 y
+   * `Number(undefined)` es NaN, así que cualquier ausencia acababa cayendo en
+   * el default que se le pasara —normalmente un 8—. Aquí la ausencia sobrevive
+   * como ausencia hasta el template, que decide no pintarla.
+   */
+  optNum(value) {
+    if (value === null || value === undefined || value === '') return null;
+    const n = Number(value);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  /** Estado del badge cuando la sesión no tiene evaluación. */
+  nivelSinEvaluar() {
+    return {
+      label: SIN_EVALUACION,
+      cls: 'b-gold',
+      metric: 'gold',
+      // Gris neutro: el anillo no debe sugerir aprobado ni reprobado.
+      color: 'rgba(255,255,255,.18)'
+    };
   }
 
   /**
@@ -439,19 +524,30 @@ class ReportGenerator {
   }
 
   /**
-   * Competencias mínimas cuando el mapper no las entrega.
-   * Los nombres son los mismos que usa el mapper: lenguaje de negocio, no de
-   * manual de ventas. Ver la nota en src/server/n8n-mapper.js.
+   * Competencias reconstruidas desde los `score_*` sueltos del payload.
+   *
+   * Sustituye a `competenciasFallback()`, que fabricaba las SEIS competencias
+   * con las notas 8, 8, 9, 7, 9 y 8 cuando el mapeo no traía ninguna. Con aquel
+   * respaldo, una sesión sin evaluar producía un radar completo, un ranking
+   * ordenado y un gráfico de brechas: seis afirmaciones gráficas sobre el
+   * desempeño de una persona, ninguna de ellas medida.
+   *
+   * La diferencia está en el `.filter`: aquí solo sobrevive lo que el agente
+   * puntuó de verdad. Si no puntuó nada, la lista va vacía y los gráficos se
+   * declaran sin datos (ver emptyChart en src/server/chart-svg.js).
+   *
+   * Los nombres son los que lee un director de hotel, no los del manual de
+   * ventas. Ver la nota en src/server/n8n-mapper.js.
    */
-  competenciasFallback(data) {
+  competenciasDesdeScores(data) {
     return [
-      { name: 'Conexión', score: this.num(data.score_rapport, 8) },
-      { name: 'Comunicación', score: this.num(data.score_pnl, 8) },
-      { name: 'Presencia', score: this.num(data.score_postura, 9) },
-      { name: 'Inquietudes', score: this.num(data.score_objecciones, 7) },
-      { name: 'Percepción', score: this.num(data.score_lectura_sala, 9) },
-      { name: 'Cierre', score: this.num(data.score_cierre, 8) }
-    ];
+      { name: 'Conexión', score: this.optNum(data.score_rapport) },
+      { name: 'Comunicación', score: this.optNum(data.score_pnl) },
+      { name: 'Presencia', score: this.optNum(data.score_postura) },
+      { name: 'Inquietudes', score: this.optNum(data.score_objecciones) },
+      { name: 'Percepción', score: this.optNum(data.score_lectura_sala) },
+      { name: 'Cierre', score: this.optNum(data.score_cierre) }
+    ].filter((c) => c.score !== null);
   }
 
   /** Texto multilínea -> HTML con <br> (se inyecta con triple stash). */

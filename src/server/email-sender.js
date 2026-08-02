@@ -214,8 +214,12 @@ function buildAttachmentBasename(input, when, idFallback) {
   // Convertir nombre completo a formato seguro para archivo:
   // "Andrés Mateos" → "Andres_Mateos"
   // "Christian Soria" → "Christian_Soria"
-  // Elimina acentos y reemplaza espacios por guiones bajos
-  const safeName = String(nombreCompleto || 'Asesor')
+  // Elimina acentos y reemplaza espacios por guiones bajos.
+  //
+  // Sin identidad el archivo se llama "Sin_Identificar_…" y no "Asesor_…": el
+  // segundo parece el reporte de alguien; el primero avisa de que la sesión
+  // llegó sin datos del colaborador y hay que revisar el formulario.
+  const safeName = String(nombreCompleto || 'Sin Identificar')
     .normalize('NFD')
     .replace(/\p{Diacritic}/gu, '')      // Quitar acentos
     .replace(/\s+/g, '_')                // Espacios → guiones bajos
@@ -245,11 +249,34 @@ function buildAttachmentBasename(input, when, idFallback) {
  */
 const SUBJECT_MAX = 78;
 
-/** Nombre completo del asesor, con respaldo por si el mapeo no lo trae. */
+/**
+ * Texto que se muestra cuando un dato NO llegó.
+ *
+ * Es la contraparte de la regla "no inventar": el hueco se declara, no se
+ * rellena. Quien lee sabe que el sistema no lo recibió, en vez de creerse un
+ * valor de fábrica.
+ */
+const SIN_DATO = 'No disponible';
+const SIN_EVALUACION = 'Pendiente de evaluación';
+
+/** Nombre completo del asesor, o la declaración de que no se identificó. */
 function nombreCompleto(d) {
   const data = d || {};
   const n = String(data.nombre_completo || data.nombre || '').trim();
-  return n || 'Asesor VTC';
+  return n || 'Colaborador sin identificar';
+}
+
+/**
+ * Identidad en corto, para el asunto y los nombres de archivo.
+ *
+ * "Colaborador sin identificar" son 27 caracteres: en el asunto se comía el
+ * espacio de la fecha y quedaba recortado en "Colaborador sin…", que no
+ * comunica nada. Aquí se dice lo mismo en la mitad de espacio.
+ */
+function nombreCorto(d) {
+  const data = d || {};
+  const n = String(data.nombre_completo || data.nombre || '').trim();
+  return n || 'Sin identificar';
 }
 
 /**
@@ -276,7 +303,7 @@ function fitNombre(nombre, resto) {
 function buildEmailSubject(data, when) {
   const prefijo = 'Reporte de Desarrollo Profesional: ';
   const sufijo = ` • ${formatDateLocal(when)} ${formatTimezoneCancun(when)}`;
-  return `${prefijo}${fitNombre(nombreCompleto(data), prefijo.length + sufijo.length)}${sufijo}`;
+  return `${prefijo}${fitNombre(nombreCorto(data), prefijo.length + sufijo.length)}${sufijo}`;
 }
 
 /** ¿El correo lleva el MP3 de la sesión? Por defecto sí; el pipeline lo confirma. */
@@ -301,16 +328,32 @@ function duracionTexto(d) {
   const mins = Number(data.duracion_minutos);
   if (Number.isFinite(mins) && mins > 0) return formatDuracion(mins * 60);
 
-  return '—';
+  return SIN_DATO;
 }
 
-/** Porcentaje de desempeño global, calculado si no viene ya resuelto. */
-function scorePct(d) {
+/**
+ * Desempeño global tal como se muestra en el correo.
+ *
+ * `Number(undefined) || 0` devolvía 0 y el correo anunciaba "Desempeño General:
+ * 0%" —en rojo— para sesiones que nadie había evaluado. Un 0% acusa a la
+ * persona de haberlo hecho mal; lo cierto es que no hay calificación.
+ *
+ * @returns {string} El porcentaje, o "Pendiente de evaluación"
+ */
+function scorePctTexto(d) {
   const data = d || {};
-  if (data.scoreTotal != null && Number.isFinite(Number(data.scoreTotal))) {
-    return Number(data.scoreTotal);
+
+  if (data.scoreTotal !== null && data.scoreTotal !== undefined
+      && Number.isFinite(Number(data.scoreTotal))) {
+    return `${Number(data.scoreTotal)}%`;
   }
-  return Math.round(((Number(data.score_overall) || 0) / 10) * 100);
+
+  if (data.score_overall !== null && data.score_overall !== undefined
+      && Number.isFinite(Number(data.score_overall))) {
+    return `${Math.round((Number(data.score_overall) / 10) * 100)}%`;
+  }
+
+  return SIN_EVALUACION;
 }
 
 /**
@@ -333,11 +376,14 @@ function detallesSesion(d, when) {
 
   return [
     ['Colaborador', `${nombre}${id}`],
-    ['Departamento', String(data.departamento || '—')],
+    ['Departamento', String(data.departamento || SIN_DATO)],
+    ['Módulo', String(data.modulo || SIN_DATO)],
+    // Fecha y hora SIEMPRE vienen del webhook: son la única excepción con
+    // respaldo garantizado (el instante de proceso, en el huso de Cancún).
     ['Fecha', formatDateLong(when)],
     ['Hora', `${formatTimezoneCancun(when)} (America/Cancun)`],
     ['Duración', duracionTexto(data)],
-    [ETIQUETA_DESEMPENO, `${scorePct(data)}%`]
+    [ETIQUETA_DESEMPENO, scorePctTexto(data)]
   ];
 }
 
@@ -425,6 +471,88 @@ function transcripcionTexto(d) {
 }
 
 /**
+ * Datos que el sistema de evaluación NO entregó para esta sesión.
+ *
+ * Antes cada uno de estos huecos se tapaba con un valor de fábrica —un 8 de
+ * desempeño, nueve minutos y medio de duración, el módulo "Meet & Greet"— y el
+ * correo se leía como un reporte completo. Declararlos es lo que separa un
+ * reporte honesto de uno que parece bueno.
+ *
+ * @param {object} d
+ * @returns {string[]} Etiquetas de lo que falta (vacío si llegó todo)
+ */
+function datosFaltantes(d) {
+  const data = d || {};
+  if (Array.isArray(data.campos_sin_dato)) return data.campos_sin_dato.filter(Boolean);
+
+  // Respaldo para payloads que no pasaron por el mapeo actual.
+  const faltan = [];
+  if (!data.nombre_completo && !data.nombre) faltan.push('Nombre del colaborador');
+  if (!data.empleado_id) faltan.push('Número de empleado');
+  if (!data.departamento) faltan.push('Departamento');
+  if (!data.modulo) faltan.push('Módulo');
+  if (!Number.isFinite(Number(data.duracion_sec))) faltan.push('Duración');
+  if (data.score_overall === null || data.score_overall === undefined) faltan.push('Desempeño general');
+  return faltan;
+}
+
+/** ¿Trae el reporte una evaluación real del desempeño? */
+function hayEvaluacion(d) {
+  const data = d || {};
+  if (typeof data.evaluacion_disponible === 'boolean') return data.evaluacion_disponible;
+  return data.score_overall !== null
+    && data.score_overall !== undefined
+    && Number.isFinite(Number(data.score_overall));
+}
+
+/**
+ * Frase de apertura del correo.
+ *
+ * "Ha concluido satisfactoriamente" es un juicio sobre cómo salió la sesión.
+ * Cuando nadie la evaluó, el correo no está en posición de emitirlo — y menos
+ * en el mismo mensaje donde acaba de declarar que no hay calificación.
+ */
+function fraseApertura(d) {
+  return hayEvaluacion(d)
+    ? 'Su sesión de práctica ha concluido satisfactoriamente. A continuación encontrará el resumen de la sesión.'
+    : 'Su sesión de práctica ha finalizado. A continuación encontrará el registro de la sesión.';
+}
+
+/**
+ * Próximos pasos.
+ *
+ * El texto fijo prometía fortalezas, oportunidades de mejora y un plan de
+ * desarrollo dentro del PDF adjunto. Sin evaluación el PDF no lleva ninguna de
+ * las tres cosas: quien lo abriera buscándolas encontraría un documento vacío
+ * y pensaría que el sistema falló.
+ */
+function fraseProximosPasos(d) {
+  if (hayEvaluacion(d)) {
+    return 'Le invitamos a revisar el reporte adjunto, donde encontrará sus fortalezas, '
+      + 'las oportunidades de mejora identificadas y el plan de desarrollo sugerido. '
+      + 'Si desea programar una nueva sesión de práctica, quedamos a sus órdenes.';
+  }
+  return 'El reporte adjunto contiene el registro completo de la sesión y su transcripción. '
+    + 'La evaluación de competencias y el plan de desarrollo no se incluyen porque el sistema '
+    + 'no registró calificaciones para esta práctica. Si desea programar una nueva sesión, '
+    + 'quedamos a sus órdenes.';
+}
+
+/** El aviso de datos faltantes, en texto plano. Vacío si no falta nada. */
+function avisoDatosTexto(d) {
+  const faltan = datosFaltantes(d);
+  if (!faltan.length) return [];
+
+  return [
+    '',
+    'ℹ️ DATOS NO REGISTRADOS EN ESTA SESIÓN:',
+    ...faltan.map((c) => `• ${c}`),
+    'Estos campos aparecen vacíos porque el sistema de evaluación no los reportó. '
+      + 'No se han sustituido por valores estimados.'
+  ];
+}
+
+/**
  * Cuerpo del correo en texto plano.
  * Es la fuente de verdad: la versión HTML se construye a partir de esta misma
  * estructura para que ambos digan exactamente lo mismo.
@@ -447,19 +575,19 @@ function buildEmailText(data, when, options) {
   return [
     `Estimado ${nombreCompleto(d)},`,
     '',
-    'Su sesión de práctica ha concluido satisfactoriamente. A continuación encontrará el resumen de la sesión.',
+    fraseApertura(d),
     '',
     '📋 DATOS DE LA SESIÓN:',
     ...detallesSesion(d, when).map(([k, v]) => `• ${k}: ${v}`),
+    '',
+    ...avisoDatosTexto(d),
     '',
     '📎 DOCUMENTOS ADJUNTOS:',
     ...adjuntos,
     ...transcripcionTexto(d),
     '',
     '🎯 PRÓXIMOS PASOS:',
-    'Le invitamos a revisar el reporte adjunto, donde encontrará sus fortalezas, '
-      + 'las oportunidades de mejora identificadas y el plan de desarrollo sugerido. '
-      + 'Si desea programar una nueva sesión de práctica, quedamos a sus órdenes.',
+    fraseProximosPasos(d),
     '',
     'Cordialmente,',
     'Victor IA — Programa de Desarrollo Profesional',
@@ -488,6 +616,11 @@ const META_VTC = 8;
 
 /** Color de estado de un score, con los cortes de la meta VTC. */
 function scoreColor(score) {
+  // `Number(null)` es 0, que es finito: sin este descarte, una sesión SIN
+  // evaluar se pintaba en rojo de reprobado. Ausencia de nota no es una nota
+  // baja — va en el dorado neutro de la marca.
+  if (score === null || score === undefined || score === '') return COLOR.gold;
+
   const n = Number(score);
   if (!Number.isFinite(n)) return COLOR.gold;
   if (n >= META_VTC) return COLOR.good;
@@ -567,13 +700,15 @@ function buildEmailHTML(data, when, options) {
     <p style="${para}">Estimado <strong style="color:${COLOR.goldSoft}">${nombre}</strong>,</p>
 
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 28px;background:rgba(16,185,129,.09);border-left:3px solid ${COLOR.good};border-radius:6px">
-      <tr><td style="${FONT};font-size:14px;line-height:1.7;color:#E4E4E4;padding:14px 16px">Su sesión de práctica ha concluido satisfactoriamente. A continuación encontrará el resumen de la sesión.</td></tr>
+      <tr><td style="${FONT};font-size:14px;line-height:1.7;color:#E4E4E4;padding:14px 16px">${escapeHtml(fraseApertura(d))}</td></tr>
     </table>
 
     <p style="${label}">Datos de la sesión</p>
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 30px">
       ${detallesSesion(d, when).map(row).join('')}
     </table>
+
+    ${buildAvisoDatosHTML(d, { font: FONT })}
 
     <p style="${label}">Documentos adjuntos</p>
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 30px">
@@ -583,7 +718,7 @@ function buildEmailHTML(data, when, options) {
     ${buildEmailTranscript(d, { font: FONT, label })}
 
     <p style="${label}">Próximos pasos</p>
-    <p style="${para}">Le invitamos a revisar el reporte adjunto, donde encontrará sus fortalezas, las oportunidades de mejora identificadas y el plan de desarrollo sugerido. Si desea programar una nueva sesión de práctica, quedamos a sus órdenes.</p>
+    <p style="${para}">${escapeHtml(fraseProximosPasos(d))}</p>
     ${buildEmailCtas(d, { font: FONT })}
 
     <div style="border-top:1px solid rgba(229,179,62,.28);margin:28px 0"></div>
@@ -600,6 +735,30 @@ function buildEmailHTML(data, when, options) {
 </table>
 </td></tr></table>
 </body></html>`;
+}
+
+/**
+ * El aviso de datos faltantes, en HTML.
+ *
+ * Va en ámbar y con borde lateral, como una nota al margen: informa sin gritar.
+ * Si la sesión llegó completa, el bloque no existe — un aviso permanente se
+ * vuelve invisible y deja de cumplir su función.
+ */
+function buildAvisoDatosHTML(d, { font }) {
+  const faltan = datosFaltantes(d);
+  if (!faltan.length) return '';
+
+  const items = faltan
+    .map((c) => `<li style="margin:0 0 4px">${escapeHtml(c)}</li>`)
+    .join('');
+
+  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 30px;background:rgba(245,158,11,.09);border-left:3px solid ${COLOR.warn};border-radius:6px">
+      <tr><td style="padding:14px 16px">
+        <p style="${font};font-size:11px;letter-spacing:1.6px;text-transform:uppercase;color:${COLOR.warn};font-weight:700;margin:0 0 8px">Datos no registrados en esta sesión</p>
+        <ul style="${font};font-size:13px;line-height:1.6;color:#E4E4E4;margin:0 0 8px;padding-left:18px">${items}</ul>
+        <p style="${font};font-size:12px;line-height:1.6;color:${COLOR.muted};margin:0">Estos campos aparecen vacíos porque el sistema de evaluación no los reportó. No se han sustituido por valores estimados.</p>
+      </td></tr>
+    </table>`;
 }
 
 /**
@@ -707,6 +866,33 @@ function escapeHtml(str) {
 const EMAIL_MAX_RETRIES = Number(process.env.EMAIL_MAX_RETRIES || 1);
 const EMAIL_ATTEMPT_TIMEOUT_MS = Number(process.env.EMAIL_TIMEOUT_MS || 8000);
 
+/**
+ * Normaliza destinatarios a una lista limpia de direcciones.
+ *
+ * Acepta un string ("a@x.com, b@y.com"), un array, o nada. Devuelve siempre un
+ * array sin vacíos ni duplicados. Es lo que permite pasar `cc` desde cualquier
+ * origen —variable de entorno, formulario, llamada interna— sin que un formato
+ * inesperado tumbe el envío.
+ *
+ * @param {string|string[]|null|undefined} value
+ * @returns {string[]}
+ */
+function normalizeAddressList(value) {
+  if (!value) return [];
+
+  const bruto = Array.isArray(value) ? value : [value];
+  const planos = bruto.flatMap((v) => String(v == null ? '' : v).split(/[,;]/));
+  const limpios = planos.map((s) => s.trim()).filter(Boolean);
+
+  const vistos = new Set();
+  return limpios.filter((addr) => {
+    const key = addr.toLowerCase();
+    if (vistos.has(key)) return false;
+    vistos.add(key);
+    return true;
+  });
+}
+
 /** Corre una promesa con techo de tiempo, limpiando el temporizador siempre. */
 function withTimeout(promise, ms, etiqueta) {
   let timer = null;
@@ -729,7 +915,7 @@ class EmailSender {
    * Enviar email con adjuntos (PDF + MP3)
    */
   async sendWithAttachments(options) {
-    const { to, from, subject, htmlBody, textBody, attachments = [] } = options;
+    const { to, cc, bcc, from, subject, htmlBody, textBody, attachments = [] } = options;
 
     if (!to || !from || !subject || !htmlBody) {
       throw new Error('Missing required email fields: to, from, subject, htmlBody');
@@ -750,7 +936,15 @@ class EmailSender {
       };
     });
 
+    // Copias. Se normalizan a array y se descartan vacíos: Resend rechaza el
+    // envío entero si `cc` llega como `[]`, `''` o con un hueco dentro, y ese
+    // fallo se comía el correo completo, no solo la copia.
+    const ccList = normalizeAddressList(cc);
+    const bccList = normalizeAddressList(bcc);
+
     console.log(`[EMAIL] Preparing email to: ${Array.isArray(to) ? to.join(', ') : to}`);
+    if (ccList.length) console.log(`[EMAIL] CC: ${ccList.join(', ')}`);
+    if (bccList.length) console.log(`[EMAIL] BCC: ${bccList.join(', ')}`);
     console.log(`[EMAIL] Subject: ${subject}`);
     console.log(`[EMAIL] Attachments: ${preparedAttachments.map((a) => a.filename).join(', ') || 'ninguno'}`);
 
@@ -769,6 +963,10 @@ class EmailSender {
           html: htmlBody,
           attachments: preparedAttachments
         };
+        // Solo se envían si tienen contenido: una clave `cc` vacía hace que
+        // Resend rechace la petición.
+        if (ccList.length) payload.cc = ccList;
+        if (bccList.length) payload.bcc = bccList;
         // El texto plano mejora la entregabilidad y da fallback en clientes sin HTML
         if (textBody) payload.text = textBody;
 
@@ -789,6 +987,8 @@ class EmailSender {
           success: true,
           messageId,
           subject,
+          cc: ccList,
+          bcc: bccList,
           attachments: preparedAttachments.map((a) => a.filename),
           timestamp: new Date().toISOString(),
           attempt
@@ -853,13 +1053,27 @@ async function sendEmailWithAttachments(options) {
     }
   }
 
+  // Las copias se DEPURAN, no tumban el envío: si alguien escribió mal una
+  // dirección en REPORT_CC, el reporte tiene que salir igual hacia el
+  // destinatario principal. Se avisa en el log para poder corregirla.
+  const cc = normalizeAddressList(options.cc).filter((addr) => {
+    if (sender.validateEmail(addr)) return true;
+    console.warn(`[EMAIL] CC inválido, se omite: ${addr}`);
+    return false;
+  });
+  const bcc = normalizeAddressList(options.bcc).filter((addr) => {
+    if (sender.validateEmail(addr)) return true;
+    console.warn(`[EMAIL] BCC inválido, se omite: ${addr}`);
+    return false;
+  });
+
   // El remitente puede venir como "Nombre <correo@dominio>" — validamos solo el correo
   const fromAddress = extractAddress(options.from);
   if (!sender.validateEmail(fromAddress)) {
     throw new Error(`Invalid sender email: ${options.from}`);
   }
 
-  return sender.sendWithAttachments(options);
+  return sender.sendWithAttachments({ ...options, cc, bcc });
 }
 
 /** Extrae el correo de un remitente con formato "Nombre <correo@dominio>". */
@@ -906,5 +1120,11 @@ module.exports = {
   formatDateLong,
   formatDateTimeLong,
   formatDuracion,
-  nombreCompleto
+  nombreCompleto,
+  // Exportados para las pruebas de "no inventar datos"
+  normalizeAddressList,
+  datosFaltantes,
+  scorePctTexto,
+  SIN_DATO,
+  SIN_EVALUACION
 };

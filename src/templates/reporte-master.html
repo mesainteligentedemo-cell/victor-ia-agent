@@ -140,6 +140,24 @@ body{
 .cover-meta div{font-size:11.5px;color:var(--muted);line-height:1.4}
 .cover-meta strong{display:block;color:var(--paper);font-size:14px;font-weight:600;margin-top:2px}
 
+/* ─── AVISO DE DATOS NO REGISTRADOS ──────────────────────────
+   Declara los huecos ANTES del análisis. Ámbar y con filete lateral:
+   se distingue del contenido evaluativo sin competir con él. Solo
+   aparece cuando falta algo — un aviso permanente deja de leerse. */
+.aviso-datos{
+  margin:18px 0 0;padding:13px 16px;
+  background:rgba(245,158,11,.08);
+  border-left:3px solid var(--warn);border-radius:0 6px 6px 0;
+  break-inside:avoid;page-break-inside:avoid;
+}
+.aviso-datos h4{
+  margin:0 0 7px;font-size:10.5px;font-weight:700;
+  letter-spacing:1.6px;text-transform:uppercase;color:var(--warn);
+}
+.aviso-datos ul{margin:0 0 7px;padding-left:17px}
+.aviso-datos li{font-size:12px;color:var(--paper);line-height:1.55}
+.aviso-datos p{margin:0;font-size:11px;color:var(--muted);line-height:1.55}
+
 /* ─── CUERPO: ritmo vertical sin bandas muertas ─────────────── */
 .body{padding:var(--gap-section) 0 0}
 
@@ -617,9 +635,20 @@ p, li{orphans:2;widows:2}
       <div>Hora (Cancún)<strong>{{hora_cancun}}</strong></div>
       <div>Módulo<strong>{{modulo}}</strong></div>
       <div>Duración<strong>{{duracion_humana}}</strong></div>
-      <div>Desempeño general<strong>{{score_overall}}/10 · {{scoreTotal}}%</strong></div>
+      <div>Desempeño general<strong>{{#if evaluacion_disponible}}{{score_overall}}/10 · {{scoreTotal}}%{{else}}{{score_total_txt}}{{/if}}</strong></div>
     </div>
   </header>
+
+  {{#if campos_sin_dato}}
+  <!-- Declaración de huecos. Va en la portada, antes que cualquier análisis:
+       quien lea el reporte tiene que saber qué NO se midió ANTES de interpretar
+       lo que sí. Si la sesión llegó completa, el bloque no se imprime. -->
+  <div class="aviso-datos">
+    <h4>Datos no registrados en esta sesión</h4>
+    <ul>{{#each campos_sin_dato}}<li>{{this}}</li>{{/each}}</ul>
+    <p>Estos campos aparecen vacíos porque el sistema de evaluación no los reportó. No se han sustituido por valores estimados.</p>
+  </div>
+  {{/if}}
 
   <div class="body">
 
@@ -647,7 +676,9 @@ p, li{orphans:2;widows:2}
           <div class="row"><dt>Módulo</dt><dd>{{modulo}}</dd></div>
           <div class="row"><dt>Fecha y hora</dt><dd>{{fecha_hora_larga}}</dd></div>
           <div class="row"><dt>Duración</dt><dd>{{duracion_humana}}</dd></div>
+          {{#if familia_nombre}}
           <div class="row"><dt>Escenario practicado</dt><dd>Familia {{familia_nombre}}</dd></div>
+          {{/if}}
           <div class="row"><dt>Folio de la sesión</dt><dd>{{conversationId}}</dd></div>
           <div class="row"><dt>Nivel alcanzado</dt><dd>{{nivel_desempeno}}</dd></div>
         </dl>
@@ -665,6 +696,7 @@ p, li{orphans:2;widows:2}
 
     <div class="hero">
       <div class="ring">
+        {{#if evaluacion_disponible}}
         <svg viewBox="0 0 140 140" role="img" aria-label="Desempeño general {{score_overall}} de 10, equivalente a {{scoreTotal}} por ciento">
           <circle cx="70" cy="70" r="58" fill="none" stroke="rgba(255,255,255,.09)" stroke-width="13"/>
           <circle cx="70" cy="70" r="58" fill="none" stroke="{{ring_color}}" stroke-width="13"
@@ -674,19 +706,31 @@ p, li{orphans:2;widows:2}
           <div class="ring-score">{{score_overall}}<span>/10</span></div>
           <div class="ring-pct">{{scoreTotal}}%</div>
         </div>
+        {{else}}
+        <!-- Sin evaluación el anillo se queda vacío: un arco dibujado es una
+             calificación, y aquí no hay ninguna que representar. -->
+        <svg viewBox="0 0 140 140" role="img" aria-label="Desempeño general pendiente de evaluación">
+          <circle cx="70" cy="70" r="58" fill="none" stroke="rgba(255,255,255,.09)" stroke-width="13"/>
+        </svg>
+        <div class="ring-center">
+          <div class="ring-pct">{{score_total_txt}}</div>
+        </div>
+        {{/if}}
       </div>
       <div class="hero-body">
         <span class="badge {{nivel_clase}}">{{nivel_desempeno}}</span>
         <h3>Desempeño General</h3>
-        <p class="prose">{{{actividad_sesion}}}</p>
+        {{#if actividad_sesion}}<p class="prose">{{{actividad_sesion}}}</p>{{/if}}
       </div>
     </div>
 
     <div class="grid-tight">
       <div class="metric"><div class="metric-label">Duración</div><div class="metric-value sm">{{duracion_humana}}</div></div>
       <div class="metric"><div class="metric-label">Módulo</div><div class="metric-value sm">{{modulo}}</div></div>
-      <div class="metric"><div class="metric-label">Desempeño general</div><div class="metric-value {{score_clase}}">{{scoreTotal}}%</div></div>
+      <div class="metric"><div class="metric-label">Desempeño general</div><div class="metric-value {{#if evaluacion_disponible}}{{score_clase}}{{else}}sm{{/if}}">{{score_total_txt}}</div></div>
+      {{#if evaluacion_disponible}}
       <div class="metric"><div class="metric-label">Margen de crecimiento</div><div class="metric-value gold">{{mejora_potencial}}</div></div>
+      {{/if}}
       {{#if plan}}
       <div class="metric"><div class="metric-label">Competencias consolidadas</div><div class="metric-value">{{plan.competencias_en_estandar}}<span style="font-size:15px;color:var(--muted)">/{{plan.competencias_totales}}</span></div></div>
       <div class="metric"><div class="metric-label">Intervenciones</div><div class="metric-value sm">{{transcript_turnos}} participaciones</div></div>
@@ -703,10 +747,12 @@ p, li{orphans:2;widows:2}
     </div>
     {{/if}}
 
+    {{#if recomendacion_coach}}
     <div class="card">
       <div class="card-title">Recomendación del equipo de desarrollo</div>
       <p class="prose">{{{recomendacion_coach}}}</p>
     </div>
+    {{/if}}
   </section>
 
   <!-- ═══════════════════ 3 · ANALÍTICA VISUAL ════════════════ -->
@@ -784,11 +830,13 @@ p, li{orphans:2;widows:2}
       {{/each}}
     </div>
 
+    {{#if cumplimiento_neuro}}
     <div class="gauge">
       <div class="gauge-label">Aplicación de la metodología</div>
       <div class="gauge-value">{{cumplimiento_neuro}}%</div>
       <div class="gauge-track"><div class="gauge-fill" style="width:{{cumplimiento_neuro}}%"></div></div>
     </div>
+    {{/if}}
   </section>
   {{/if}}
 

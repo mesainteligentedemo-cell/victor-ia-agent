@@ -158,8 +158,10 @@ describe('cuerpo del reporte', () => {
     expect(sucio).not.toContain('<b>X</b>');
   });
 
-  test('sin nombre mapeado no se queda en blanco', () => {
-    expect(buildEmailText({}, CUANDO)).toContain('Estimado Asesor VTC,');
+  test('sin nombre mapeado declara el hueco, no inventa un "Asesor VTC"', () => {
+    const texto = buildEmailText({}, CUANDO);
+    expect(texto).toContain('Estimado Colaborador sin identificar,');
+    expect(texto).not.toContain('Asesor VTC');
   });
 });
 
