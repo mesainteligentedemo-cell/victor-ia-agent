@@ -592,14 +592,10 @@ function buildActionPlan(data = {}, competencias = []) {
         coach_notes: coachNotes
       }
     },
-    // Compatibilidad hacia atrás: el email y las integraciones viejas leen
-    // plan_1/2/3. Se mantienen, ahora derivados del plan expandido.
-    plan_1: diagnostico[0].detalle,
-    plan_2: planMejora.length
-      ? `${planMejora[0].competencia}: ${planMejora[0].dosis_texto}. ${planMejora[0].tecnica}. ${planMejora[0].timeline}.`
-      : `Sin brecha pendiente. Mantener una simulación semanal para sostener el ${r1(score)}/10.`,
-    plan_3: `Validación completa el ${formatDateLocal(fechaValidacion)}. `
-      + `${criterios[0].condicion} → ${criterios[0].resultado}`
+    // PLAN EXPANDIDO 150+ palabras por punto (enriquecido con data real de ElevenLabs)
+    plan_1: buildPlanDiagnostico(diagnostico, comps, score, scoreTotal, objectionsCount, prospectEngagement, interactionQuality),
+    plan_2: buildPlanMejora(planMejora, score, diasEstimados, sessionProgression, pnlTechniquesUsed, callEfficiency),
+    plan_3: buildPlanValidacion(formatDateLocal(fechaValidacion), criterios, hitos, sem, nextStepsAgreed, conversionPotential)
   };
 }
 
@@ -751,6 +747,122 @@ function recomendacionesPersonales(data, sem, foco, score) {
   recs.push('Registrar cada sesión de coaching en el tracker con fecha, duración y competencia trabajada: sin registro no hay curva de aprendizaje que mostrar.');
 
   return recs;
+}
+
+// ════════════════════════════════════════════════════════════
+// GENERADORES DE PUNTOS EXPANDIDOS (150+ palabras cada uno)
+// ════════════════════════════════════════════════════════════
+
+/**
+ * PUNTO 1: Diagnóstico y Seguimiento (para el gerente)
+ * Debe incluir: score actual, interpretación, fortalezas, áreas críticas, contexto de la sesión
+ */
+function buildPlanDiagnostico(diagnostico, comps, score, scoreTotal, objectionsCount, prospectEngagement, interactionQuality) {
+  const fort = comps.slice().sort((a, b) => b.score - a.score).slice(0, 2);
+  const criticas = comps.slice().sort((a, b) => a.score - b.score).slice(0, 2);
+
+  let texto = `**Score Actual e Interpretación:** ${r1(score)}/10 (${scoreTotal}%). `;
+  if (score >= 8) {
+    texto += `El asesor se encuentra dentro del estándar VTC, demostrando ejecución consistente y técnicas bien aplicadas.`;
+  } else if (score >= 7) {
+    texto += `El asesor ha alcanzado una base sólida pero hay competencias específicas que requieren refuerzo antes de autorizar operaciones en piso.`;
+  } else {
+    texto += `El asesor se encuentra por debajo del estándar operativo y requiere coaching intensivo antes de cualquier contacto con familias reales.`;
+  }
+
+  texto += ` **Fortalezas a Capitalizar:** ${fort.map(c => `${c.name} (${r1(c.score)}/10)`).join(', ')}. `;
+  texto += `Estas son la base sólida sobre la que construir: no se tocan en el coaching, se usan como prueba de que el asesor sí puede ejecutar al nivel requerido.`;
+
+  if (criticas.length) {
+    texto += ` **Áreas Críticas a Reforzar:** ${criticas.map(c => `${c.name} (${r1(c.score)}/10)`).join(', ')}. `;
+    texto += `Estas competencias explican la diferencia entre el resultado actual y un 8+/10 global.`;
+  }
+
+  if (objectionsCount !== null || prospectEngagement || interactionQuality) {
+    texto += ` **Contexto de la Sesión:** `;
+    const partes = [];
+    if (objectionsCount !== null) partes.push(`${objectionsCount} objeción${objectionsCount === 1 ? '' : 'es'}`);
+    if (prospectEngagement) partes.push(`Engagement: ${prospectEngagement}`);
+    if (interactionQuality) partes.push(`Calidad de interacción: ${interactionQuality}`);
+    if (partes.length) texto += partes.join('. ') + '.';
+  }
+
+  texto += ` **Siguiente Paso:** Este diagnóstico es el punto de partida para el plan de mejora de los próximos 7 días. Debe ser comunicado al asesor hoy, con énfasis en las fortalezas antes que en las áreas de mejora.`;
+
+  return texto;
+}
+
+/**
+ * PUNTO 2: Plan de Mejora Intensivo (para el gerente)
+ * Debe incluir: técnica, ejercicios, dosis, métrica, timeline
+ */
+function buildPlanMejora(planMejora, score, diasEstimados, sessionProgression, pnlTechniquesUsed, callEfficiency) {
+  if (!planMejora || !planMejora.length) {
+    return `**Sin Brecha Pendiente:** Todas las competencias están en estándar. El asesor está listo para operar. ` +
+           `Plan de mantenimiento: una simulación semanal de 15 minutos sin corrección, solo para sostener el ${r1(score)}/10. ` +
+           `Objetivo: que el asesor desarrolle confianza en piso sin interferencias del coaching.`;
+  }
+
+  const p = planMejora[0];
+  let texto = `**Competencia Crítica a Entrenar:** ${p.competencia} (score actual ${r1(p.score)}/10, meta ${p.meta}/10, brecha de ${p.brecha} puntos). `;
+  texto += `Esta competencia es la que explica la mayoría de la brecha total y tiene la prioridad ${p.prioridad.toLowerCase()}.\\n\\n`;
+
+  texto += `**Técnica de Intervención:** ${p.tecnica}. El asesor debe comprender no solo QUÉ cambiar, sino POR QUÉ funciona esta técnica en el contexto de sus sesiones.\\n\\n`;
+
+  texto += `**Ejercicios Prácticos (Orden de Ejecución):**\\n`;
+  p.ejercicios.forEach((ej, i) => {
+    texto += `${i + 1}. ${ej}\\n`;
+  });
+
+  texto += `\\n**Dosis y Timeline:** ${p.dosis_texto}. `;
+  texto += `Total: ${p.minutos_totales} minutos de coaching efectivo a lo largo de ${diasEstimados} días. `;
+  texto += `Checkpoint el día 3 (meta intermedia: ${p.score + p.brecha / 2}/10), validación completa el día 7 (meta final: ${p.meta}/10 o más).\\n\\n`;
+
+  texto += `**Métrica de Éxito:** ${p.metrica}. `;
+  texto += `Señal observable de que ya está funcionando: ${p.senal_exito.toLowerCase()}.\\n\\n`;
+
+  texto += `**Nota para el Coach:** El asesor puede fracasar temporalmente en los ejercicios y eso es parte del aprendizaje. `;
+  texto += `Lo importante es que la señal de éxito empiece a aparecer de forma espontánea en simulaciones sin corrección.`;
+
+  return texto;
+}
+
+/**
+ * PUNTO 3: Validación y Decisión Final (para el gerente)
+ * Debe incluir: calendario, criterios, decisión, escalado si aplica
+ */
+function buildPlanValidacion(fechaValidacionLocal, criterios, hitos, sem, nextStepsAgreed, conversionPotential) {
+  let texto = `**Calendario de Validación:** Simulación completa e íntegra el ${fechaValidacionLocal} (día 7). `;
+  texto += `Esta sesión debe ser grabada, evaluada por el coach de forma independiente, y comparada métrica por métrica contra esta evaluación inicial.\\n\\n`;
+
+  texto += `**Criterios de Aprobación para Piso de Ventas:**\\n`;
+  criterios.slice(0, 2).forEach((c, i) => {
+    const estado = c.cls === 'ok' ? '✓' : '○';
+    texto += `${estado} ${c.condicion} → ${c.resultado}\\n`;
+  });
+
+  texto += `\\n**Recomendación Actual:** ${sem.label}. ${sem.accion}\\n\\n`;
+
+  if (sem.nivel === 'rojo') {
+    texto += `**Por Qué Rojo:** No autorizar familias reales ahora. El costo de una sesión perdida supera el costo del coaching. `;
+    texto += `Una segunda validación será obligatoria el día 14 si el día 7 no alcanza el estándar.\\n\\n`;
+  } else if (sem.nivel === 'amarillo') {
+    texto += `**Por Qué Amarillo:** El asesor puede recibir familias, pero con un coach presente en la sala hasta cerrar la brecha detectada. `;
+    texto += `El acompañamiento no es castigo, es protección: para el asesor, para el cliente y para el negocio.\\n\\n`;
+  } else {
+    texto += `**Por Qué Verde:** El asesor está en estándar y puede operar sin acompañamiento. Mantener la revisión semanal de rutina como parte del desarrollo continuo.\\n\\n`;
+  }
+
+  texto += `**Próximos Pasos Inmediatos:** Agendar la validación hoy con el coach asignado. `;
+  texto += `Comunicar al asesor su resultado, el foco de entrenamiento, y la fecha de revalidación. `;
+  texto += `Guardar la grabación de esta sesión: será material de referencia para entrenamientos futuros.`;
+
+  if (nextStepsAgreed) {
+    texto += ` `;
+    texto += `Pasos acordados con el prospecto: ${nextStepsAgreed}.`;
+  }
+
+  return texto;
 }
 
 module.exports = {
