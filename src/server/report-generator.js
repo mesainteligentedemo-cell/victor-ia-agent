@@ -282,6 +282,11 @@ class ReportGenerator {
       // `?conv=…&t=…` y el escape por defecto de Handlebars los deforma.
       pop_up_url: this.safeUrl(data.pop_up_url),
       pdf_download_url: this.safeUrl(data.pdf_download_url),
+      // `null` —y no `safeUrl(undefined)`— cuando no hay grabación: safeUrl
+      // devuelve SIEMPRE un SafeString ("#" incluido) y todo objeto es truthy,
+      // así que el {{#if audio_download_url}} del template daba positivo
+      // siempre y pintaba un botón "Descargar la grabación" que iba a "#".
+      audio_download_url: data.audio_download_url ? this.safeUrl(data.audio_download_url) : null,
       retrain_url: this.safeUrl(data.retrain_url),
 
       // Aquí viajaban `agente`, `kb_fidelity` y `kb_topics`, que alimentaban la

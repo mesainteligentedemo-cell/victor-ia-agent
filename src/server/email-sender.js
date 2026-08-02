@@ -392,14 +392,20 @@ function detallesSesion(d, when) {
 // ════════════════════════════════════════════════════════════
 
 /**
- * Cuántas intervenciones caben en el correo.
+ * Cuántas intervenciones caben en el correo. `0` = sin límite (el valor por defecto).
  *
- * Una sesión de treinta minutos son ~260 turnos: pegarlos íntegros deja un
- * correo que Gmail recorta con un "ver mensaje completo" y que nadie despliega.
- * El registro completo viaja siempre en el PDF; aquí van las primeras
- * intervenciones y una línea que dice dónde está el resto.
+ * Aquí había un tope fijo de 40 turnos. La intención era buena —Gmail recorta
+ * los mensajes que pasan de ~102 KB con un "ver mensaje completo"— pero el
+ * efecto era que el correo mostraba una sesión PARCIAL sin que el lector
+ * tuviera forma de saber cuánto le faltaba salvo leyendo la nota al pie. En un
+ * reporte de Recursos Humanos, media conversación es peor que ninguna: el
+ * gerente juzga con lo que ve, y lo que veía eran los primeros minutos.
+ *
+ * Ahora la transcripción viaja ENTERA en el correo y en el PDF. Si algún
+ * despliegue necesita volver a acotarla, `TRANSCRIPT_EMAIL_MAX` lo permite —y
+ * cuando recorta, lo dice en el propio cuerpo del mensaje.
  */
-const TRANSCRIPT_EMAIL_MAX = 40;
+const TRANSCRIPT_EMAIL_MAX = Number(process.env.TRANSCRIPT_EMAIL_MAX || 0);
 
 /**
  * Normaliza la transcripción a bloques listos para imprimir.
@@ -431,10 +437,16 @@ function transcripcionBloques(d) {
     }))
     .filter((t) => t.text);
 
+  // Sin tope configurado, la transcripción va completa: ni un turno menos,
+  // aunque la sesión traiga trescientos.
+  const tope = Number.isFinite(TRANSCRIPT_EMAIL_MAX) && TRANSCRIPT_EMAIL_MAX > 0
+    ? TRANSCRIPT_EMAIL_MAX
+    : bloques.length;
+
   return {
-    bloques: bloques.slice(0, TRANSCRIPT_EMAIL_MAX),
+    bloques: bloques.slice(0, tope),
     total: bloques.length,
-    omitidos: Math.max(0, bloques.length - TRANSCRIPT_EMAIL_MAX)
+    omitidos: Math.max(0, bloques.length - tope)
   };
 }
 
@@ -553,6 +565,28 @@ function avisoDatosTexto(d) {
 }
 
 /**
+ * Los mismos destinos que los botones del HTML, en texto plano.
+ *
+ * Existe por paridad: quien lee el correo en un cliente sin HTML —o con las
+ * imágenes y estilos bloqueados, que es lo normal en los buzones corporativos—
+ * tenía botones invisibles y se quedaba sin acceso al audio y al reporte.
+ *
+ * @returns {string[]} Líneas listas para unir con '\n'; vacío si no hay enlaces
+ */
+function enlacesTexto(d) {
+  const data = d || {};
+  const enlaces = [
+    ['Escuchar la sesión', data.pop_up_url],
+    ['Descargar el reporte (PDF)', data.pdf_download_url],
+    ['Descargar la grabación (MP3)', data.audio_download_url],
+    ['Solicitar nueva práctica', data.retrain_url]
+  ].filter(([, url]) => typeof url === 'string' && /^https?:\/\//i.test(url));
+
+  if (!enlaces.length) return [];
+  return ['🔗 ENLACES:', ...enlaces.map(([texto, url]) => `• ${texto}: ${url}`), ''];
+}
+
+/**
  * Cuerpo del correo en texto plano.
  * Es la fuente de verdad: la versión HTML se construye a partir de esta misma
  * estructura para que ambos digan exactamente lo mismo.
@@ -586,6 +620,7 @@ function buildEmailText(data, when, options) {
     ...adjuntos,
     ...transcripcionTexto(d),
     '',
+    ...enlacesTexto(d),
     '🎯 PRÓXIMOS PASOS:',
     fraseProximosPasos(d),
     '',
@@ -823,6 +858,7 @@ function buildEmailCtas(d, { font }) {
   const acciones = [
     { url: d.pop_up_url, texto: 'Escuchar la sesión', principal: true },
     { url: d.pdf_download_url, texto: 'Descargar el reporte', principal: false },
+    { url: d.audio_download_url, texto: 'Descargar la grabación', principal: false },
     { url: d.retrain_url, texto: 'Solicitar nueva práctica', principal: false }
   ].filter((a) => typeof a.url === 'string' && /^https?:\/\//i.test(a.url));
 

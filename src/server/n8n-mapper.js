@@ -320,7 +320,8 @@ function mapElevenLabsData(webhookBody) {
   // ===== URLS (para CTAs) =====
   // Firmadas: atan el enlace a ESTE conversation_id y caducan.
   // Ver src/server/report-links.js.
-  const { pop_up_url, pdf_download_url, retrain_url } = buildReportLinks(conversationId);
+  const { pop_up_url, pdf_download_url, audio_download_url, retrain_url } =
+    buildReportLinks(conversationId);
 
   // ===== RETORNAR OBJETO COMPLETO =====
   return {
@@ -396,6 +397,7 @@ function mapElevenLabsData(webhookBody) {
     // URLs
     pop_up_url,
     pdf_download_url,
+    audio_download_url,
     retrain_url,
 
     // Contexto adicional de la sesión (nuevos campos de ElevenLabs)

@@ -97,6 +97,16 @@ export default async function handler(req, res) {
 
     if (result && result.success) return res.status(200).json(result);
 
+    // Sesión sin contenido suficiente (muy corta, sin calificaciones del agente
+    // o sin conversación medible). NO es un error de la petición: el webhook se
+    // recibió y se entendió, y simplemente no hay reporte que emitir. Sale 200
+    // para que N8N y ElevenLabs no reintenten en bucle una sesión que jamás va
+    // a mejorar. Ver src/server/session-validation.js.
+    if (result && result.skipped) {
+      console.warn(`[API] Reporte no emitido (${result.motivo}): ${result.message}`);
+      return res.status(200).json(result);
+    }
+
     // 401 cuando falla el HMAC (autenticación), 422 cuando el payload no se
     // pudo procesar. El pipeline marca cuál corresponde.
     const status = Number(result && result.statusCode) || 422;

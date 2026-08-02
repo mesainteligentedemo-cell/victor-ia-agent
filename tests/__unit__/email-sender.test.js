@@ -215,10 +215,17 @@ describe('transcripción dentro del correo', () => {
     expect(buildEmailHTML(BASE, CUANDO)).not.toContain('Transcripción de la sesión');
   });
 
-  test('una sesión larga se recorta y dice dónde está el resto', () => {
+  /**
+   * Aquí se comprobaba lo contrario: que a partir del turno 40 el correo
+   * recortaba. Ese tope hacía que el correo mostrara media conversación, y en
+   * un reporte que lee Recursos Humanos media conversación es peor que ninguna
+   * — el gerente juzga con lo que ve, y lo que veía eran los primeros minutos.
+   * La transcripción va ahora COMPLETA en el correo y en el PDF.
+   */
+  test('una sesión larga viaja completa: ni un turno se recorta', () => {
     const larga = {
       ...BASE,
-      transcription: Array.from({ length: 60 }, (_, i) => ({
+      transcription: Array.from({ length: 140 }, (_, i) => ({
         speaker: i % 2 ? 'Christian Soria' : 'Victor',
         timestamp: `00:${String(i).padStart(2, '0')}`,
         text: `Intervención número ${i}`,
@@ -227,9 +234,15 @@ describe('transcripción dentro del correo', () => {
     };
 
     const texto = buildEmailText(larga, CUANDO);
+    expect(texto).toContain('Intervención número 0');
     expect(texto).toContain('Intervención número 39');
-    expect(texto).not.toContain('Intervención número 40');
-    expect(texto).toContain('Se muestran las primeras 40 de 60 intervenciones');
+    expect(texto).toContain('Intervención número 40');
+    expect(texto).toContain('Intervención número 139');
+    // Sin recorte no hay nada que anunciar
+    expect(texto).not.toContain('Se muestran las primeras');
+
+    const html = buildEmailHTML(larga, CUANDO);
+    expect(html).toContain('Intervención número 139');
   });
 });
 

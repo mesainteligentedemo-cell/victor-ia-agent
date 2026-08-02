@@ -33,6 +33,7 @@ const { sendEmailWithAttachments, buildEmailPackage } = require('./email-sender'
 const ElevenLabsAPI = require('./elevenlabs-api');
 const { buildTranscriptContext, queryRAG, getAgentMeta } = require('./rag-query');
 const { cacheReport } = require('./report-cache');
+const { validateSessionForReport } = require('./session-validation');
 
 /** Las 7 competencias que el reporte puntúa de 0 a 10. */
 const SCORE_FIELDS = [
@@ -260,6 +261,44 @@ async function processCallWebhook(webhookBody, hmacSignature, rawBody) {
         departamento: mappedData.departamento
       }
     });
+
+    // ════════════════════════════════════════════
+    // STEP 5B: ¿HAY SESIÓN QUE REPORTAR?
+    // ════════════════════════════════════════════
+    // La puerta que separa un reporte de un cascarón con el nombre de alguien.
+    // Ver src/server/session-validation.js para el porqué de cada umbral.
+    //
+    // Va DESPUÉS del mapeo (necesita la duración medida) y ANTES de cualquier
+    // artefacto: sin esto, una llamada de catorce segundos consumía render de
+    // Chromium, descarga de audio y un correo a Recursos Humanos.
+    const sesion = validateSessionForReport({
+      duracionSec: mappedData.duracion_sec,
+      dataCollection: collected,
+      transcript
+    });
+
+    if (!sesion.ok) {
+      step(5.5, 'warning', `Reporte NO emitido — ${sesion.error}: ${sesion.message}`, {
+        motivo: sesion.motivo,
+        detalle: sesion.detalle
+      });
+      console.warn(`[STEP 5B] ${sesion.motivo} · ${conversationId} · ${sesion.message}`);
+
+      // 200 y no 4xx a propósito: el webhook se recibió y se entendió. Una
+      // sesión corta no mejora al reintentarla, y un 4xx dejaría a N8N y a
+      // ElevenLabs reintentando en bucle algo que nunca va a cambiar.
+      results.success = false;
+      results.skipped = true;
+      results.statusCode = 200;
+      results.motivo = sesion.motivo;
+      results.error = sesion.error;
+      results.message = sesion.message;
+      results.detalle = sesion.detalle;
+      results.conversationId = conversationId;
+      results.duration = Date.now() - startTime;
+      return results;
+    }
+    step(5.5, 'success', 'Sesión con contenido suficiente para reportar');
 
     // ════════════════════════════════════════════
     // STEP 6: VALIDATE SCORES (0-10)

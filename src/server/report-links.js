@@ -122,6 +122,10 @@ function buildReportLinks(conversationId) {
   return {
     pop_up_url: `${base}/player?conv=${id}${q}`,
     pdf_download_url: `${base}/api/pdf/${id}${qFirst}`,
+    // Descarga directa del MP3, sin pasar por el reproductor. El gerente que
+    // quiere el audio para escucharlo en el coche no necesita abrir una página
+    // con transcripción: necesita el archivo.
+    audio_download_url: `${base}/api/audio/${id}${qFirst}`,
     retrain_url: `${base}/retrain?conv=${id}${q}`,
     link_token: token
   };

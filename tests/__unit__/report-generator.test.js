@@ -79,7 +79,32 @@ describe('safeUrl — los tres CTAs del reporte', () => {
     expect(String(g.safeUrl('ftp://x.test/a'))).toBe('#');
   });
 
-  test('el reporte renderizado deja los tres enlaces usables', async () => {
+  test('el reporte renderizado deja los cuatro enlaces usables', async () => {
+    const html = await gen().generate({
+      nombre: 'Asesor',
+      conversationId: 'abc123',
+      pop_up_url: 'https://x.test/player?conv=abc123&t=1.aa',
+      pdf_download_url: 'https://x.test/api/pdf/abc123?t=1.aa',
+      audio_download_url: 'https://x.test/api/audio/abc123?t=1.aa',
+      retrain_url: 'https://x.test/retrain?conv=abc123&t=1.aa'
+    });
+
+    expect(html).toContain('href="https://x.test/player?conv=abc123&amp;t=1.aa"');
+    expect(html).toContain('href="https://x.test/api/pdf/abc123?t=1.aa"');
+    expect(html).toContain('href="https://x.test/api/audio/abc123?t=1.aa"');
+    expect(html).toContain('href="https://x.test/retrain?conv=abc123&amp;t=1.aa"');
+    // Ningún CTA puede quedarse sin destino ni con el igual deformado
+    expect(html).not.toMatch(/class="cta" href="#"/);
+    expect(html).not.toMatch(/class="cta" href="[^"]*&#x3D;/);
+  });
+
+  /**
+   * safeUrl devuelve un SafeString incluso para "#", y todo objeto es truthy.
+   * Sin tratar la ausencia como `null`, el {{#if audio_download_url}} del
+   * template daba positivo SIEMPRE y el reporte ofrecía "Descargar la
+   * grabación" en sesiones sin audio: el gerente pulsaba y no pasaba nada.
+   */
+  test('sin grabación, el CTA de audio no se pinta (en vez de llevar a "#")', async () => {
     const html = await gen().generate({
       nombre: 'Asesor',
       conversationId: 'abc123',
@@ -88,12 +113,8 @@ describe('safeUrl — los tres CTAs del reporte', () => {
       retrain_url: 'https://x.test/retrain?conv=abc123&t=1.aa'
     });
 
-    expect(html).toContain('href="https://x.test/player?conv=abc123&amp;t=1.aa"');
-    expect(html).toContain('href="https://x.test/api/pdf/abc123?t=1.aa"');
-    expect(html).toContain('href="https://x.test/retrain?conv=abc123&amp;t=1.aa"');
-    // Ningún CTA puede quedarse sin destino ni con el igual deformado
+    expect(html).not.toContain('Descargar la grabación');
     expect(html).not.toMatch(/class="cta" href="#"/);
-    expect(html).not.toMatch(/class="cta" href="[^"]*&#x3D;/);
   });
 });
 
