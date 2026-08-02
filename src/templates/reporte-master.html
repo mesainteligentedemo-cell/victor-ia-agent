@@ -103,6 +103,15 @@ body{
   border-bottom:3px solid var(--gold);
   overflow:hidden;
 }
+
+/* PDF ADAPTATIVO: Una sola página larga sin espacios muertos */
+@page { size: A4 portrait; margin: 0; }
+.sheet { page-break-after: auto; page-break-inside: avoid; }
+.section { page-break-inside: avoid; orphans: 2; widows: 2; }
+.card { page-break-inside: avoid; }
+.chart-card { page-break-inside: avoid; }
+/* Eliminar saltos de página forzados, usar auto-ajuste de altura */
+* { page-break-after: auto; }
 .crest{
   display:inline-block;padding:6px 15px;border:1px solid var(--hair);
   border-radius:999px;background:var(--surface-2);
@@ -181,6 +190,12 @@ body{
 .grid{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(230px,1fr))}
 .grid-tight{display:grid;gap:11px;grid-template-columns:repeat(auto-fit,minmax(132px,1fr))}
 .grid-wide{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(300px,1fr))}
+/* Competencias: 3 en primera fila, 2 en segunda (simétrico) */
+.competencias-grid{display:grid;gap:11px;grid-template-columns:repeat(3,1fr);justify-items:stretch}
+.competencias-grid .metric:nth-child(4),
+.competencias-grid .metric:nth-child(5){grid-column:auto}
+@media(max-width:768px){.competencias-grid{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:480px){.competencias-grid{grid-template-columns:1fr}}
 
 .row{
   display:flex;justify-content:space-between;align-items:baseline;gap:12px;
@@ -826,7 +841,7 @@ p, li{orphans:2;widows:2}
     </div>
     <div class="card card-gold">
       <p class="prose">{{{analisis_pnl}}}</p>
-      <div class="grid-tight" style="margin-top:14px">
+      <div class="competencias-grid" style="margin-top:14px">
         <div class="metric"><div class="metric-label">Rapport</div><div class="metric-value">{{score_rapport}}</div></div>
         <div class="metric"><div class="metric-label">Técnicas PNL</div><div class="metric-value">{{score_pnl}}</div></div>
         <div class="metric"><div class="metric-label">Lectura de sala</div><div class="metric-value">{{score_lectura_sala}}</div></div>

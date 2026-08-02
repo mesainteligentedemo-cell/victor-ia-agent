@@ -454,7 +454,8 @@ function agentContext(modulo) {
 // hace dudar de si eso lo dijo el asesor o lo escribió la máquina.
 
 // ElevenLabs entrega los turnos con role "agent" / "user"
-const AGENT_KEYS = ['victor', 'carlos', 'george', 'jorge', 'agent', 'assistant', 'ai'];
+// Nombres conocidos (español e inglés): Victor, Carlos, Sandra, Carlitos, Jorge, James, Kelly, Tiffany, George
+const AGENT_KEYS = ['victor', 'carlos', 'sandra', 'carlitos', 'jorge', 'james', 'kelly', 'tiffany', 'george', 'agent', 'assistant', 'ai'];
 
 /**
  * Etiquetas SSML que ElevenLabs deja dentro del mensaje del agente.
@@ -601,13 +602,21 @@ function speakerMap(asesorName, familyName) {
     normKey(persona) === asesorKey ? `${persona} (IA)` : persona;
 
   return {
+    // Nombres conocidos del agente (tanto español como inglés)
     victor: agentLabel('Victor'),
     carlos: agentLabel('Carlos'),
-    george: agentLabel('George'),
+    sandra: agentLabel('Sandra'),
+    carlitos: agentLabel('Carlitos'),
     jorge: agentLabel('Jorge'),
+    james: agentLabel('James'),
+    kelly: agentLabel('Kelly'),
+    tiffany: agentLabel('Tiffany'),
+    george: agentLabel('George'),
+    // Mapeos de rol genéricos
     agent: agentLabel('Victor'),
     assistant: agentLabel('Victor'),
     ai: agentLabel('Victor'),
+    // Familia/Cliente
     familia,
     [normKey(familia)]: familia,
     usuario: asesor,
