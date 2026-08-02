@@ -31,9 +31,30 @@ function mapElevenLabsData(webhookBody) {
 
   // ===== DATOS BÁSICOS =====
   const conversationId = v(safe(wh, 'conversation_id', null), 'CONV-' + Date.now());
-  const nombre = v(safe(wh, 'nombre_asesor', null), 'Asesor VTC');
-  const empleado_id = v(safe(wh, 'empleado_id', null), 'VTC-001');
-  const puesto = v(safe(wh, 'puesto', null), 'Asesor');
+  // Identidad del asesor. Llega por DOS caminos y hay que aceptar los dos:
+  //   1. `nombre`/`empleado_id`/`departamento` — lo que el empleado capturó en
+  //      el formulario de /training, ya verificado contra el roster. Manda.
+  //   2. `nombre_asesor`/`user_name`/… — lo que el agente recogió en la charla.
+  // Antes solo se miraba (2) y por eso el PDF salía siempre con los defaults.
+  const primero = (...claves) => {
+    for (const k of claves) {
+      const val = safe(wh, k, null);
+      if (val === null || val === undefined || val === '') continue;
+      const s = String(val).trim();
+      // Variable dinámica sin resolver: es basura, no un dato.
+      if (!s || /^\{\{.*\}\}$/.test(s)) continue;
+      return s;
+    }
+    return null;
+  };
+
+  const nombre = v(primero('nombre', 'nombre_asesor', 'user_name', 'employee_name'), 'Asesor VTC');
+  const empleado_id = v(
+    primero('empleado_id', 'employee_number', 'employee_id', 'numero_empleado'),
+    'VTC-001'
+  );
+  const departamento = v(primero('departamento', 'department', 'depto'), 'Dirección');
+  const puesto = v(primero('puesto', 'role', 'rol', 'position'), 'Asesor');
   const idioma = v(safe(wh, 'idioma', 'Español'), 'Español');
   const modulo = v(safe(wh, 'modulo', null), 'Meet & Greet');
   const familia_nombre = v(safe(wh, 'familia_nombre', null), 'López');
@@ -204,6 +225,7 @@ function mapElevenLabsData(webhookBody) {
     conversationId,
     nombre,
     empleado_id,
+    departamento,
     puesto,
     idioma,
     modulo,

@@ -40,13 +40,38 @@ function resolveLocalChrome() {
   return undefined;
 }
 
-/** Escapa texto que se inyecta en las plantillas de header/footer de Chromium. */
-function escapeAttr(value) {
-  return String(value == null ? '' : value)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
-}
+/**
+ * Geometría del PDF de una sola página.
+ *
+ * El reporte se emite como UN lienzo continuo a la medida del contenido, no
+ * como un A4 paginado: sin cortes a media tarjeta, sin encabezado repetido en
+ * cada hoja y sin la banda blanca que quedaba al final de cada página.
+ *
+ * PAGE_WIDTH_PX coincide con el `max-width:860px` de `.sheet` — así el lienzo
+ * abraza el diseño y no sobra margen a los lados.
+ *
+ * MAX_PAGE_HEIGHT_PX es el techo DURO del formato PDF: una página no puede
+ * pasar de 200 pulgadas (14400 pt), que a 96 dpi son 19200 px. Nos quedamos
+ * justo por debajo.
+ *
+ * Cuando el contenido pasa de ahí no se pagina de inmediato: primero se reduce
+ * la escala del lienzo. Con `scale = s`, Chromium maqueta a `width / s` px CSS,
+ * así que pidiendo `width = 860 * s` el diseño se compone EXACTAMENTE igual (860
+ * px de ancho lógico) y solo cambia el tamaño físico de la hoja. Es decir: el
+ * documento sigue siendo una sola tira vertical, nada se recorta ni se
+ * re-maqueta, y el texto sigue siendo vectorial (se lee perfecto al hacer zoom).
+ *
+ * MIN_SCALE es la frontera de lo razonable: por debajo, la hoja quedaría tan
+ * pequeña que imprimirla sería inútil, y entonces sí conviene paginar en A4
+ * (siempre sin header ni footer repetidos). Con 0.4 entra en UNA sola página
+ * una sesión de ~45 minutos con la transcripción completa (~500 turnos), que
+ * está muy por encima de cualquier sesión real de entrenamiento.
+ */
+const PAGE_WIDTH_PX = 860;
+const MAX_PAGE_HEIGHT_PX = 19000;
+const MIN_SCALE = 0.4;
+/** Alto mínimo: evita un lienzo absurdo si el layout aún no asentó. */
+const MIN_PAGE_HEIGHT_PX = 800;
 
 /**
  * Presupuesto de tiempo del render.
@@ -384,6 +409,11 @@ class PDFGenerator {
       console.log('[PDF] Creating new page...');
       page = await browser.newPage();
 
+      // El viewport marca el ancho con el que Chromium calcula el layout. Si no
+      // coincide con el ancho del PDF, la altura medida no sirve: el contenido
+      // se re-maqueta al imprimir y el lienzo queda corto o sobrado.
+      await page.setViewport({ width: PAGE_WIDTH_PX, height: 1200, deviceScaleFactor: 1 });
+
       // El reporte es autocontenido (CSS inline + gráficos SVG). El único
       // recurso externo son las Google Fonts, y son opcionales: hay pila de
       // fallback en el CSS. Por eso NO esperamos 'networkidle2' — si la red
@@ -394,23 +424,60 @@ class PDFGenerator {
       });
 
       // Damos a las fuentes web una ventana corta y seguimos pase lo que pase.
+      // Se mide DESPUÉS: con la fuente definitiva cargada, el alto cambia.
       await this.waitForFonts(page, FONTS_TIMEOUT_MS);
 
-      // PDF options
+      const alturaContenido = await this.measureContentHeight(page);
+
+      // Escala necesaria para que TODO el documento quepa en una sola hoja.
+      // 1 mientras el contenido no roce el techo del formato.
+      const escala =
+        alturaContenido > 0
+          ? Math.min(1, MAX_PAGE_HEIGHT_PX / alturaContenido)
+          : 0;
+      const cabeEnUnaPagina = escala >= MIN_SCALE;
+
+      // Sin header ni footer de Chromium en NINGÚN modo: el "VTC Elite
+      // Training" de arriba y el "Página X de Y" de abajo se repetían en cada
+      // hoja y obligaban a reservar 16mm de margen muerto arriba y abajo. El
+      // único pie que queda es el <footer> del propio documento, que aparece
+      // una sola vez y al final.
       const pdfOptions = {
-        format: 'A4',
-        margin: {
-          top: '16mm',
-          right: '0mm',
-          bottom: '16mm',
-          left: '0mm'
-        },
         printBackground: true,
-        displayHeaderFooter: true,
-        headerTemplate: this.getHeaderTemplate(metadata),
-        footerTemplate: this.getFooterTemplate(metadata),
+        displayHeaderFooter: false,
+        margin: { top: '0mm', right: '0mm', bottom: '0mm', left: '0mm' },
+        preferCSSPageSize: false,
         timeout: PDF_RENDER_TIMEOUT_MS
       };
+
+      if (cabeEnUnaPagina) {
+        // Una sola página vertical, exactamente del alto del contenido.
+        // Ancho y alto van multiplicados por la escala para que el ancho lógico
+        // de maquetación siga siendo PAGE_WIDTH_PX (Chromium divide por scale).
+        const anchoHoja = Math.round(PAGE_WIDTH_PX * escala);
+        const altoHoja = Math.ceil(alturaContenido * escala);
+        pdfOptions.width = `${anchoHoja}px`;
+        pdfOptions.height = `${altoHoja}px`;
+        if (escala < 1) pdfOptions.scale = escala;
+        // Blindaje: si por redondeo se colara una segunda página de 1px, se
+        // descarta. La altura ya está medida sobre el contenido completo.
+        pdfOptions.pageRanges = '1';
+        console.log(
+          `[PDF] Página única: ${anchoHoja}x${altoHoja}px ` +
+          `(${(altoHoja / 96).toFixed(1)} in · escala ${escala.toFixed(2)} · ` +
+          `contenido ${alturaContenido}px)`
+        );
+      } else {
+        // Respaldo: ni reduciendo la escala a un mínimo legible cabe todo en una
+        // hoja. Se pagina en A4, pero sin margen muerto y sin header/footer
+        // repetidos — que era el problema real de fondo.
+        pdfOptions.format = 'A4';
+        console.warn(
+          `[PDF] Contenido de ${alturaContenido}px exigiría escala ` +
+          `${escala.toFixed(2)} (mínimo ${MIN_SCALE}) — se pagina en A4 ` +
+          `(sin header/footer)`
+        );
+      }
 
       console.log('[PDF] Generating PDF...');
       const pdfBuffer = Buffer.from(await page.pdf(pdfOptions));
@@ -446,33 +513,55 @@ class PDFGenerator {
   }
 
   /**
-   * Template del header
+   * Mide el alto REAL del contenido para cortar el lienzo a su medida.
+   *
+   * No basta con `body.scrollHeight`: los márgenes del último hijo colapsan
+   * fuera del flujo y `scrollHeight` los ignora, así que el PDF salía cortado
+   * por abajo. Se toma el máximo entre varias medidas y se cierra con el borde
+   * inferior del último elemento visible.
+   *
+   * Devuelve 0 si la medición falla — el llamador cae al modo paginado.
+   *
+   * @param {import('puppeteer-core').Page} page
+   * @returns {Promise<number>} Alto en píxeles CSS, ya redondeado
    */
-  getHeaderTemplate(metadata) {
-    return `
-      <div style="font-size:8px;width:100%;padding:0 16mm;color:#B8B8B8;
-                  font-family:'Segoe UI',Helvetica,Arial,sans-serif;
-                  display:flex;justify-content:space-between;align-items:center;">
-        <span style="letter-spacing:1.5px;text-transform:uppercase;color:#E5B33E;">VTC Elite Training</span>
-        <span>${escapeAttr(metadata.nombre || 'Entrenamiento')} · ${escapeAttr(metadata.modulo || '')}</span>
-      </div>
-    `;
-  }
+  async measureContentHeight(page) {
+    try {
+      const alto = await page.evaluate(() => {
+        const b = document.body;
+        const h = document.documentElement;
+        if (!b || !h) return 0;
 
-  /**
-   * Template del footer
-   */
-  getFooterTemplate(metadata) {
-    const fecha = escapeAttr(metadata.fecha_sesion || new Date().toLocaleDateString('es-MX'));
-    const hora = escapeAttr(metadata.hora_cancun || '');
-    return `
-      <div style="font-size:8px;width:100%;padding:0 16mm;color:#B8B8B8;
-                  font-family:'Segoe UI',Helvetica,Arial,sans-serif;
-                  display:flex;justify-content:space-between;align-items:center;">
-        <span>${fecha}${hora ? ' · ' + hora : ''} · victor-ia.xyz</span>
-        <span>Página <span class="pageNumber"></span> de <span class="totalPages"></span></span>
-      </div>
-    `;
+        let maximo = Math.max(
+          b.scrollHeight, b.offsetHeight,
+          h.clientHeight, h.scrollHeight, h.offsetHeight
+        );
+
+        // El borde inferior real del último elemento con caja propia. Atrapa
+        // los márgenes colapsados que scrollHeight no ve.
+        const hijos = document.querySelectorAll('body *');
+        for (let i = hijos.length - 1; i >= 0 && i > hijos.length - 60; i--) {
+          const r = hijos[i].getBoundingClientRect();
+          if (r.height === 0 && r.width === 0) continue;
+          const fondo = r.bottom + window.scrollY;
+          if (fondo > maximo) maximo = fondo;
+          break;
+        }
+        return Math.ceil(maximo);
+      });
+
+      const n = Number(alto);
+      if (!Number.isFinite(n) || n < MIN_PAGE_HEIGHT_PX) {
+        console.warn(`[PDF] Alto medido no usable (${alto}) — se pagina en A4`);
+        return 0;
+      }
+      // +2px de colchón: el redondeo del layout puede dejar la última hairline
+      // justo en el borde y Chromium abriría una segunda página por ella.
+      return n + 2;
+    } catch (error) {
+      console.warn(`[PDF] No se pudo medir el contenido: ${describeError(error)}`);
+      return 0;
+    }
   }
 
   /**

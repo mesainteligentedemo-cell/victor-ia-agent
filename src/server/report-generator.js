@@ -115,6 +115,9 @@ class ReportGenerator {
       // ── Identidad ──────────────────────────────────────────
       nombre: this.v(data.nombre, 'Asesor VTC'),
       empleado_id: this.v(data.empleado_id, 'VTC-001'),
+      // Capturado por el empleado en el formulario de /training y verificado
+      // contra el roster antes de abrir la sesión.
+      departamento: this.v(data.departamento, 'Dirección'),
       puesto: this.v(data.puesto, 'Asesor'),
       modulo: this.v(data.modulo, 'Meet & Greet'),
       familia_nombre: this.v(data.familia_nombre, 'Familia simulada'),

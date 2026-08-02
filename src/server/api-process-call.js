@@ -217,11 +217,17 @@ async function processCallWebhook(webhookBody, hmacSignature, rawBody) {
     const nestedPayload = webhookBody.data || webhookBody.body || {};
     // ElevenLabs guarda los campos del agente en analysis.data_collection_results
     const collected = extractDataCollection(conversation);
+    // …y los datos del FORMULARIO (nombre · ID de empleado · departamento) en
+    // conversation_initiation_client_data.dynamic_variables. Van después de
+    // `collected` a propósito: el formulario está verificado contra el roster,
+    // así que su identidad manda sobre lo que el agente creyó entender de oído.
+    const identidad = extractInitiationVariables(conversation, webhookBody);
 
     const mappedData = mapElevenLabsData({
       ...webhookBody,
       ...nestedPayload,
       ...collected,
+      ...identidad,
       conversation_id: conversationId,
       transcript: transcript,
       transcript_turns: transcriptTurns,
@@ -231,7 +237,13 @@ async function processCallWebhook(webhookBody, hmacSignature, rawBody) {
       audio_url: conversation.audio_url
     });
     step(5, 'success', `${Object.keys(mappedData).length} campos mapeados`, {
-      campos_del_agente: Object.keys(collected).length
+      campos_del_agente: Object.keys(collected).length,
+      campos_del_formulario: Object.keys(identidad).length,
+      identidad: {
+        nombre: mappedData.nombre,
+        empleado_id: mappedData.empleado_id,
+        departamento: mappedData.departamento
+      }
     });
 
     // ════════════════════════════════════════════
@@ -846,6 +858,85 @@ function extractDataCollection(conversation) {
   }
 
   console.log(`[MAP] data_collection_results: ${Object.keys(out).length} campos extraídos`);
+  return out;
+}
+
+/**
+ * Extrae los datos que el USUARIO capturó en el formulario de
+ * www.victor-ia.com.mx/training (nombre · ID de empleado · departamento).
+ *
+ * El frontend los inyecta al abrir la sesión como `dynamicVariables`, y
+ * ElevenLabs los devuelve en el post-call dentro de
+ * `conversation_initiation_client_data.dynamic_variables`.
+ *
+ * Sin esto el PDF salía siempre con los defaults ("Asesor VTC" / "VTC-001"):
+ * el mapeador solo miraba `analysis.data_collection_results`, que es lo que el
+ * AGENTE dedujo de la charla, no lo que el empleado escribió y quedó verificado
+ * contra el roster.
+ *
+ * Se aceptan las dos convenciones de nombre (ES/EN) porque el widget manda
+ * ambas y distintas versiones del agente han usado una u otra.
+ *
+ * @param {object} conversation Detalle de la conversación de ElevenLabs
+ * @param {object} webhookBody  Cuerpo crudo del webhook (respaldo)
+ * @returns {object} Solo las claves con valor real (nunca vacías)
+ */
+function extractInitiationVariables(conversation, webhookBody = {}) {
+  const out = {};
+
+  const fuentes = [
+    conversation &&
+      conversation.conversation_initiation_client_data &&
+      conversation.conversation_initiation_client_data.dynamic_variables,
+    conversation && conversation.dynamic_variables,
+    webhookBody &&
+      webhookBody.conversation_initiation_client_data &&
+      webhookBody.conversation_initiation_client_data.dynamic_variables,
+    webhookBody &&
+      webhookBody.data &&
+      webhookBody.data.conversation_initiation_client_data &&
+      webhookBody.data.conversation_initiation_client_data.dynamic_variables,
+    webhookBody && webhookBody.dynamic_variables
+  ];
+
+  // Alias → campo canónico del reporte. El primero que traiga valor gana.
+  const alias = {
+    nombre: ['nombre_asesor', 'user_name', 'nombre', 'employee_name'],
+    empleado_id: ['empleado_id', 'employee_number', 'employee_id', 'numero_empleado'],
+    departamento: ['departamento', 'department', 'depto'],
+    puesto: ['puesto', 'role', 'rol', 'position']
+  };
+
+  const limpio = (x) => {
+    if (x === null || x === undefined) return '';
+    const s = String(x).trim();
+    // Una variable dinámica sin resolver llega literal ("{{user_name}}") y
+    // pintarla en el PDF es peor que el default.
+    if (!s || /^\{\{.*\}\}$/.test(s) || s.toLowerCase() === 'undefined' || s.toLowerCase() === 'null') {
+      return '';
+    }
+    return s;
+  };
+
+  for (const [campo, claves] of Object.entries(alias)) {
+    for (const fuente of fuentes) {
+      if (!fuente || typeof fuente !== 'object') continue;
+      let encontrado = '';
+      for (const clave of claves) {
+        encontrado = limpio(fuente[clave]);
+        if (encontrado) break;
+      }
+      if (encontrado) {
+        out[campo] = encontrado;
+        break;
+      }
+    }
+  }
+
+  console.log(
+    `[MAP] dynamic_variables del formulario: ${Object.keys(out).length} campos ` +
+    `(${Object.keys(out).join(', ') || 'ninguno'})`
+  );
   return out;
 }
 

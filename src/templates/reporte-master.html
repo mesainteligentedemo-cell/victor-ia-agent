@@ -104,15 +104,14 @@ body{
   overflow:hidden;
 }
 
-/* PDF ADAPTATIVO: Una sola página larga sin espacios muertos */
-@page { size: A4 portrait; margin: 0; }
-.sheet { page-break-after: auto; }
+/* PDF DE UNA SOLA PÁGINA LARGA
+   Ni una sola regla de paginación en toda la hoja de estilos: `@page`,
+   `page-break-*` y `break-*` desaparecieron a propósito. El PDF se genera con
+   una página a la medida exacta del contenido (ver src/server/pdf-generator.js),
+   así que no hay cortes que evitar ni huecos que rellenar — declarar cualquier
+   `break-inside:avoid` aquí solo volvería a empujar bloques y a abrir bandas
+   muertas si Chromium cayera al modo multipágina de respaldo. */
 .section { orphans: 2; widows: 2; }
-.card { page-break-inside: auto; }
-.chart-card { page-break-inside: auto; }
-/* No forzar page-break-inside en secciones — permite usar el espacio completo */
-.hero, .neuro-item, .semaforo { page-break-inside: auto; }
-* { page-break-after: auto; }
 .crest{
   display:inline-block;padding:6px 15px;border:1px solid var(--hair);
   border-radius:999px;background:var(--surface-2);
@@ -546,33 +545,23 @@ body{
 .footer-mark{font-family:'Playfair Display',Georgia,serif;font-size:14px;color:var(--gold);letter-spacing:2px}
 .footer p{font-size:10px;color:var(--muted);margin-top:6px;line-height:1.65}
 
-/* ─── PAGINACIÓN PARA IMPRESIÓN/PDF ─────────────────────────── */
-/* Sin saltos forzados: el documento fluye y termina donde termina el
-   contenido. `break-after` desapareció por completo — era lo que dejaba media
-   página en blanco cuando una sección no cabía entera.
-
-   Qué se protege y qué no:
-   · ATÓMICO lo pequeño e indivisible — una métrica, un gráfico, una burbuja,
-     una fila de hito. Partirlos los vuelve ilegibles.
-   · DIVISIBLE lo grande — una tarjeta con doce puntos o el bloque de una
-     competencia. Declararlos atómicos empujaba 400px al inicio de la página
-     siguiente y dejaba el hueco atrás. Dentro, cada punto sí es atómico. */
-.hero, .step, .neuro-item, .metric, .chart-card, .turn,
-.diag, .criterio, .semaforo, .gauge, .callout, .hito, .mon, .comp-top{
-  page-break-inside:avoid;break-inside:avoid;
-}
-.card, .comp, .section, .chat, .body, .stack, .tick-list{
-  page-break-inside:auto;break-inside:auto;
-}
-/* La unidad mínima de una lista es el punto, no la lista entera */
-li{page-break-inside:avoid;break-inside:avoid}
-/* Un encabezado no arrastra salto; orphans/widows evita que quede solo */
-.section-head, .block-head{page-break-after:auto;break-after:auto}
+/* ─── DOCUMENTO CONTINUO ────────────────────────────────────── */
+/* Aquí vivía el bloque de paginación (page-break-inside, break-after, @page).
+   Se eliminó entero: el PDF ya no se pagina en A4, se emite como UNA página a
+   la medida del contenido. Cada `break-inside:avoid` que quedara empujaría un
+   bloque hacia abajo y volvería a abrir la banda blanca que se quería matar.
+   Lo único que se conserva es orphans/widows, que no crea saltos: solo evita
+   que una línea suelta quede huérfana si el PDF cayera al modo de respaldo. */
 p, li{orphans:2;widows:2}
 
-/* Margen 0 a propósito: Puppeteer ya aplica 16mm arriba/abajo para el header y
-   el footer. Declararlo también aquí lo duplicaba a 32mm y agregaba páginas. */
-@page{size:A4;margin:0}
+/* El último bloque no lleva margen inferior: era el hueco final del PDF. */
+.body > .section:last-child{margin-bottom:0}
+.footer{margin-bottom:0}
+.sheet > *:last-child{margin-bottom:0}
+/* Un condicional de Handlebars que no se cumple deja el contenedor vacío;
+   sin esto se imprimía como una banda de aire con su padding intacto. */
+.section:empty, .card:empty, .grid:empty, .stack:empty, .chat:empty,
+.body:empty, .cover-meta:empty{display:none}
 
 @media print{
   body{background:var(--bg)}
@@ -605,6 +594,9 @@ p, li{orphans:2;widows:2}
     <h1>Reporte de Capacitación<em>{{nombre}}</em></h1>
     <p class="lede">{{{resumen}}}</p>
     <div class="cover-meta">
+      <div>Asesor<strong>{{nombre}}</strong></div>
+      <div>ID de empleado<strong>{{empleado_id}}</strong></div>
+      <div>Departamento<strong>{{departamento}}</strong></div>
       <div>Fecha de sesión<strong>{{fecha_sesion}}</strong></div>
       <div>Hora (Cancún)<strong>{{hora_cancun}}</strong></div>
       <div>Módulo<strong>{{modulo}}</strong></div>
@@ -628,6 +620,7 @@ p, li{orphans:2;widows:2}
         <dl>
           <div class="row"><dt>Nombre</dt><dd>{{nombre}}</dd></div>
           <div class="row"><dt>ID de empleado</dt><dd>{{empleado_id}}</dd></div>
+          <div class="row"><dt>Departamento</dt><dd>{{departamento}}</dd></div>
           <div class="row"><dt>Puesto</dt><dd>{{puesto}}</dd></div>
           <div class="row"><dt>Idioma de la sesión</dt><dd>{{idioma}}</dd></div>
         </dl>
